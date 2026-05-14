@@ -1,0 +1,31 @@
+kind = "web"
+previewPath = "/"
+title = "AgentOps Command Center"
+version = "1.0.0"
+id = "artifacts/agentops"
+router = "path"
+
+[[integratedSkills]]
+name = "react-vite"
+version = "1.0.0"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 20962
+
+[services.development]
+run = "pnpm --filter @workspace/agentops run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/agentops", "run", "build" ]
+publicDir = "artifacts/agentops/dist/public"
+serve = "static"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "20962"
+BASE_PATH = "/"

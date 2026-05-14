@@ -3,20 +3,26 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: AgentOps Command Center API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
-    description: Health operations
+  - name: dashboard
+  - name: requests
+  - name: workflows
+  - name: approvals
+  - name: agents
+  - name: knowledge
+  - name: tool-calls
+  - name: companies
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,13 +30,823 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /dashboard/metrics:
+    get:
+      operationId: getDashboardMetrics
+      tags: [dashboard]
+      summary: Aggregate metrics for the command center dashboard
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardMetrics"
+
+  /companies:
+    get:
+      operationId: listCompanies
+      tags: [companies]
+      summary: List portfolio companies
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/PortfolioCompany"
+    post:
+      operationId: createCompany
+      tags: [companies]
+      summary: Create a portfolio company
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PortfolioCompanyInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PortfolioCompany"
+
+  /requests:
+    get:
+      operationId: listRequests
+      tags: [requests]
+      summary: List operational requests
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/OperationalRequest"
+    post:
+      operationId: createRequest
+      tags: [requests]
+      summary: Create an operational request and a workflow run
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OperationalRequestInput"
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RequestCreated"
+
+  /requests/{id}:
+    get:
+      operationId: getRequest
+      tags: [requests]
+      summary: Get an operational request by id
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OperationalRequest"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workflows:
+    get:
+      operationId: listWorkflows
+      tags: [workflows]
+      summary: List workflow runs (most recent first)
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/WorkflowRunSummary"
+
+  /workflows/{id}:
+    get:
+      operationId: getWorkflow
+      tags: [workflows]
+      summary: Get a workflow run with full detail
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRunDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workflows/{id}/run:
+    post:
+      operationId: runWorkflow
+      tags: [workflows]
+      summary: Execute the agent pipeline for a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkflowRunDetail"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workflows/{id}/steps:
+    get:
+      operationId: listWorkflowSteps
+      tags: [workflows]
+      summary: List agent steps for a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentStep"
+
+  /workflows/{id}/tool-calls:
+    get:
+      operationId: listWorkflowToolCalls
+      tags: [workflows]
+      summary: List tool calls for a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ToolCall"
+
+  /workflows/{id}/activity:
+    get:
+      operationId: listWorkflowActivity
+      tags: [workflows]
+      summary: List activity log entries for a workflow run
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ActivityLog"
+
+  /approvals:
+    get:
+      operationId: listApprovals
+      tags: [approvals]
+      summary: List approval requests
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            $ref: "#/components/schemas/ApprovalStatus"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ApprovalCard"
+
+  /approvals/{id}/approve:
+    post:
+      operationId: approveApproval
+      tags: [approvals]
+      summary: Approve an approval request and finalize the workflow
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalCard"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /approvals/{id}/reject:
+    post:
+      operationId: rejectApproval
+      tags: [approvals]
+      summary: Reject an approval request
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalCard"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /approvals/{id}/request-revision:
+    post:
+      operationId: requestApprovalRevision
+      tags: [approvals]
+      summary: Send the approval back for revision
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ApprovalDecisionInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApprovalCard"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /agents:
+    get:
+      operationId: listAgents
+      tags: [agents]
+      summary: List agents in the directory
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentDirectoryEntry"
+
+  /knowledge:
+    get:
+      operationId: listKnowledge
+      tags: [knowledge]
+      summary: List knowledge base documents
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/KnowledgeDocument"
+
+  /tool-calls:
+    get:
+      operationId: listToolCalls
+      tags: [tool-calls]
+      summary: List all tool calls across the platform
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ToolCallEntry"
+
+  /system/mode:
+    get:
+      operationId: getSystemMode
+      tags: [dashboard]
+      summary: Returns whether the system is in demo or live LLM mode
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SystemMode"
+
 components:
+  responses:
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
         status:
           type: string
-      required:
-        - status
 
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+
+    SystemMode:
+      type: object
+      required: [mode, hasApiKey]
+      properties:
+        mode:
+          type: string
+          enum: [demo, live]
+        hasApiKey:
+          type: boolean
+
+    WorkflowStatus:
+      type: string
+      enum:
+        - submitted
+        - triaged
+        - legal_review
+        - finance_review
+        - communications_draft
+        - approval_pending
+        - approved
+        - rejected
+        - finalized
+        - failed
+
+    AgentStepStatus:
+      type: string
+      enum: [pending, running, completed, failed]
+
+    ApprovalStatus:
+      type: string
+      enum: [pending, approved, rejected, revision_requested]
+
+    Priority:
+      type: string
+      enum: [low, medium, high, urgent]
+
+    RiskLevel:
+      type: string
+      enum: [low, medium, high, critical]
+
+    AgentStatus:
+      type: string
+      enum: [active, idle, offline]
+
+    ToolCallStatus:
+      type: string
+      enum: [success, failed, running]
+
+    PortfolioCompany:
+      type: object
+      required: [id, name, slug, industry, description, createdAt]
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        slug: { type: string }
+        industry: { type: string }
+        description: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    PortfolioCompanyInput:
+      type: object
+      required: [name, slug, industry]
+      properties:
+        name: { type: string, minLength: 1 }
+        slug: { type: string, minLength: 1 }
+        industry: { type: string, minLength: 1 }
+        description: { type: string }
+
+    OperationalRequest:
+      type: object
+      required:
+        - id
+        - portfolioCompanyId
+        - title
+        - description
+        - department
+        - priority
+        - requestedBy
+        - createdAt
+      properties:
+        id: { type: integer }
+        portfolioCompanyId: { type: integer }
+        portfolioCompanyName: { type: ["string", "null"] }
+        title: { type: string }
+        description: { type: string }
+        department: { type: string }
+        priority:
+          $ref: "#/components/schemas/Priority"
+        requestedBy: { type: string }
+        createdAt: { type: string, format: date-time }
+        workflowRunId: { type: ["integer", "null"] }
+
+    OperationalRequestInput:
+      type: object
+      required:
+        - portfolioCompanyId
+        - title
+        - description
+        - department
+        - priority
+        - requestedBy
+      properties:
+        portfolioCompanyId: { type: integer }
+        title: { type: string, minLength: 1 }
+        description: { type: string, minLength: 1 }
+        department: { type: string, minLength: 1 }
+        priority:
+          $ref: "#/components/schemas/Priority"
+        requestedBy: { type: string, minLength: 1 }
+
+    RequestCreated:
+      type: object
+      required: [request, workflowRunId]
+      properties:
+        request:
+          $ref: "#/components/schemas/OperationalRequest"
+        workflowRunId:
+          type: integer
+
+    WorkflowRunSummary:
+      type: object
+      required:
+        - id
+        - requestId
+        - title
+        - status
+        - currentStage
+        - riskLevel
+        - estimatedCostCents
+        - portfolioCompanyName
+        - department
+        - priority
+        - createdAt
+      properties:
+        id: { type: integer }
+        requestId: { type: integer }
+        title: { type: string }
+        status:
+          $ref: "#/components/schemas/WorkflowStatus"
+        currentStage: { type: string }
+        riskLevel:
+          $ref: "#/components/schemas/RiskLevel"
+        estimatedCostCents: { type: integer }
+        portfolioCompanyName: { type: string }
+        department: { type: string }
+        priority:
+          $ref: "#/components/schemas/Priority"
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    WorkflowRunDetail:
+      type: object
+      required:
+        - id
+        - request
+        - status
+        - currentStage
+        - riskLevel
+        - estimatedCostCents
+        - nextActions
+        - steps
+        - toolCalls
+        - activity
+        - createdAt
+      properties:
+        id: { type: integer }
+        request:
+          $ref: "#/components/schemas/OperationalRequest"
+        status:
+          $ref: "#/components/schemas/WorkflowStatus"
+        currentStage: { type: string }
+        riskLevel:
+          $ref: "#/components/schemas/RiskLevel"
+        estimatedCostCents: { type: integer }
+        finalRecommendation: { type: ["string", "null"] }
+        nextActions:
+          type: array
+          items: { type: string }
+        summary: { type: ["string", "null"] }
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+        steps:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentStep"
+        toolCalls:
+          type: array
+          items:
+            $ref: "#/components/schemas/ToolCall"
+        activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityLog"
+        approval:
+          oneOf:
+            - $ref: "#/components/schemas/ApprovalCard"
+            - type: "null"
+
+    AgentStep:
+      type: object
+      required:
+        - id
+        - workflowRunId
+        - agentId
+        - agentSlug
+        - agentName
+        - stepIndex
+        - name
+        - status
+        - input
+        - output
+        - toolsUsed
+        - createdAt
+      properties:
+        id: { type: integer }
+        workflowRunId: { type: integer }
+        agentId: { type: integer }
+        agentSlug: { type: string }
+        agentName: { type: string }
+        stepIndex: { type: integer }
+        name: { type: string }
+        status:
+          $ref: "#/components/schemas/AgentStepStatus"
+        reasoningSummary: { type: ["string", "null"] }
+        input:
+          type: object
+          additionalProperties: true
+        output:
+          type: object
+          additionalProperties: true
+        toolsUsed:
+          type: array
+          items: { type: string }
+        confidence: { type: ["string", "null"] }
+        riskScore: { type: ["string", "null"] }
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    ToolCall:
+      type: object
+      required:
+        - id
+        - workflowRunId
+        - toolName
+        - status
+        - input
+        - output
+        - outputSummary
+        - durationMs
+        - createdAt
+      properties:
+        id: { type: integer }
+        workflowRunId: { type: integer }
+        agentStepId: { type: ["integer", "null"] }
+        toolName: { type: string }
+        status:
+          $ref: "#/components/schemas/ToolCallStatus"
+        input:
+          type: object
+          additionalProperties: true
+        output:
+          type: object
+          additionalProperties: true
+        outputSummary: { type: string }
+        durationMs: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    ToolCallEntry:
+      allOf:
+        - $ref: "#/components/schemas/ToolCall"
+        - type: object
+          required: [workflowTitle]
+          properties:
+            workflowTitle: { type: string }
+            agentName: { type: ["string", "null"] }
+
+    ActivityLog:
+      type: object
+      required:
+        - id
+        - actor
+        - actorType
+        - action
+        - message
+        - metadata
+        - createdAt
+      properties:
+        id: { type: integer }
+        workflowRunId: { type: ["integer", "null"] }
+        actor: { type: string }
+        actorType: { type: string }
+        action: { type: string }
+        message: { type: string }
+        metadata:
+          type: object
+          additionalProperties: true
+        createdAt: { type: string, format: date-time }
+
+    ApprovalCard:
+      type: object
+      required:
+        - id
+        - workflowRunId
+        - workflowTitle
+        - portfolioCompanyName
+        - status
+        - riskLevel
+        - summary
+        - recommendation
+        - createdAt
+      properties:
+        id: { type: integer }
+        workflowRunId: { type: integer }
+        workflowTitle: { type: string }
+        portfolioCompanyName: { type: string }
+        status:
+          $ref: "#/components/schemas/ApprovalStatus"
+        riskLevel:
+          $ref: "#/components/schemas/RiskLevel"
+        summary: { type: string }
+        recommendation: { type: string }
+        decidedBy: { type: ["string", "null"] }
+        decisionNote: { type: ["string", "null"] }
+        decidedAt: { type: ["string", "null"], format: date-time }
+        createdAt: { type: string, format: date-time }
+
+    ApprovalDecisionInput:
+      type: object
+      properties:
+        decidedBy: { type: string }
+        note: { type: string }
+
+    AgentDirectoryEntry:
+      type: object
+      required:
+        - id
+        - slug
+        - name
+        - role
+        - description
+        - capabilities
+        - tools
+        - status
+        - recentActionCount
+      properties:
+        id: { type: integer }
+        slug: { type: string }
+        name: { type: string }
+        role: { type: string }
+        description: { type: string }
+        capabilities:
+          type: array
+          items: { type: string }
+        tools:
+          type: array
+          items: { type: string }
+        status:
+          $ref: "#/components/schemas/AgentStatus"
+        recentActionCount: { type: integer }
+        lastActiveAt: { type: ["string", "null"], format: date-time }
+
+    KnowledgeDocument:
+      type: object
+      required: [id, title, category, summary, content, createdAt, updatedAt]
+      properties:
+        id: { type: integer }
+        title: { type: string }
+        category: { type: string }
+        summary: { type: string }
+        content: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    DashboardMetrics:
+      type: object
+      required:
+        - activeWorkflows
+        - pendingApprovals
+        - agentActionsToday
+        - complianceRisksFlagged
+        - estimatedCostImpactCents
+        - completedWorkflows
+        - totalWorkflows
+        - statusBreakdown
+        - recentActivity
+        - agentHealth
+      properties:
+        activeWorkflows: { type: integer }
+        pendingApprovals: { type: integer }
+        agentActionsToday: { type: integer }
+        complianceRisksFlagged: { type: integer }
+        estimatedCostImpactCents: { type: integer }
+        completedWorkflows: { type: integer }
+        totalWorkflows: { type: integer }
+        statusBreakdown:
+          type: array
+          items:
+            $ref: "#/components/schemas/StatusCount"
+        recentActivity:
+          type: array
+          items:
+            $ref: "#/components/schemas/ActivityLog"
+        agentHealth:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentDirectoryEntry"
+
+    StatusCount:
+      type: object
+      required: [status, count]
+      properties:
+        status:
+          $ref: "#/components/schemas/WorkflowStatus"
+        count: { type: integer }
