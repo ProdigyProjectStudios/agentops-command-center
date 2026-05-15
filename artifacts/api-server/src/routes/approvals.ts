@@ -15,6 +15,7 @@ import {
 import { engine } from "../orchestration/engine";
 import { serializeApproval } from "../lib/serializers";
 import { parseIdParam } from "../lib/route-helpers";
+import { composeAuditEntry } from "../lib/audit";
 
 const router: IRouter = Router();
 
@@ -107,13 +108,29 @@ async function decide(
     })
     .where(eq(workflowRunsTable.id, updated.workflowRunId));
 
+  const operatorLabel = body.decidedBy ?? "operator";
+  const auditEntry = composeAuditEntry({
+    action: "stage_transition",
+    message: `Stage advanced approval_pending → ${newWorkflowStatus}. Operator ${operatorLabel} ${actionLabel.replace("_", " ")} the workflow${body.note ? ` (note: ${body.note})` : ""}.`,
+    actor: operatorLabel,
+    actorType: "operator",
+    from: "approval_pending",
+    to: newWorkflowStatus,
+    change: `approvalRequest.status: pending → ${newApprovalStatus}`,
+    workflowRunId: updated.workflowRunId,
+    metadata: {
+      approvalRequestId: updated.id,
+      decisionLabel: actionLabel,
+      ...(body.note ? { note: body.note } : {}),
+    },
+  });
   await db.insert(activityLogsTable).values({
     workflowRunId: updated.workflowRunId,
-    actor: body.decidedBy ?? "operator",
+    actor: operatorLabel,
     actorType: "user",
-    action: actionLabel,
-    message: `Operator ${actionLabel.replace("_", " ")} the workflow.`,
-    metadata: body.note ? { note: body.note } : {},
+    action: auditEntry.action,
+    message: auditEntry.message,
+    metadata: auditEntry.metadata ?? {},
   });
 
   if (newApprovalStatus === "approved" || newApprovalStatus === "rejected") {
