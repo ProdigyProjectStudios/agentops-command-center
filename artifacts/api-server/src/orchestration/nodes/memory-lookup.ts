@@ -3,7 +3,7 @@ import { fingerprintRequest, memoryLookupDemo } from "../demo-outputs";
 import { memoryLookupSchema } from "../schemas";
 import { BaseAgent } from "../../lib/agents/base-agent";
 import { composeAuditEntry } from "../../lib/audit";
-import { keywordSearcher } from "../../lib/memory/keyword-search";
+import { searchMemory } from "../../lib/memory/keyword-search";
 
 const memoryAgent = new BaseAgent({
   slug: "memory-keeper",
@@ -57,7 +57,7 @@ export const memoryLookupNode: NodeDefinition = {
 
     // Real keyword search; results written into the shared WorkflowState so
     // downstream nodes (legal/finance/synthesis) can cite them.
-    const memoryResult = await keywordSearcher.search(
+    const memoryResult = await searchMemory(
       `${ctx.request.title} ${ctx.request.description}`,
       { limit: 5 },
     );

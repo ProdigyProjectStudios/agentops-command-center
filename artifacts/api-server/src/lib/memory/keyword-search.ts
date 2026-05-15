@@ -81,6 +81,18 @@ function emptyResult(
   };
 }
 
+/**
+ * Canonical retrieval seam. Node code should call `searchMemory(query, opts)`
+ * — it currently delegates to the keyword searcher, but a future swap to a
+ * vector / hybrid retriever happens here without touching node code.
+ */
+export function searchMemory(
+  query: string,
+  opts?: { limit?: number },
+): Promise<MemorySearchResult> {
+  return keywordSearcher.search(query, opts);
+}
+
 export const keywordSearcher: KeywordSearcher = {
   async search(query, opts) {
     const limit = opts?.limit ?? 5;
