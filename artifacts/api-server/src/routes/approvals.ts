@@ -14,6 +14,7 @@ import {
 } from "@workspace/api-zod";
 import { engine } from "../orchestration/engine";
 import { serializeApproval } from "../lib/serializers";
+import { parseIdParam } from "../lib/route-helpers";
 
 const router: IRouter = Router();
 
@@ -122,10 +123,8 @@ async function decide(
 }
 
 router.post("/approvals/:id/approve", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid approval id" });
     return;
   }
@@ -144,10 +143,8 @@ router.post("/approvals/:id/approve", async (req, res): Promise<void> => {
 });
 
 router.post("/approvals/:id/reject", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid approval id" });
     return;
   }
@@ -168,10 +165,8 @@ router.post("/approvals/:id/reject", async (req, res): Promise<void> => {
 router.post(
   "/approvals/:id/request-revision",
   async (req, res): Promise<void> => {
-    const id = Number(
-      Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-    );
-    if (!Number.isFinite(id)) {
+    const id = parseIdParam(req);
+    if (id == null) {
       res.status(400).json({ error: "Invalid approval id" });
       return;
     }

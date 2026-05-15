@@ -24,14 +24,9 @@ export async function generateAgentOutput(
   if (getLlmMode() === "demo") {
     return invocation.demoFallback;
   }
-
-  try {
-    return invocation.demoFallback;
-  } catch (err) {
-    logger.warn(
-      { err, agentSlug: invocation.agentSlug },
-      "LLM call failed, falling back to demo output",
-    );
-    return invocation.demoFallback;
-  }
+  logger.info(
+    { agentSlug: invocation.agentSlug },
+    "Live LLM provider not yet wired (Task #5); using demo output for this invocation",
+  );
+  return invocation.demoFallback;
 }

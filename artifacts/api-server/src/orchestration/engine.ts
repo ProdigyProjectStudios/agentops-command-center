@@ -140,6 +140,21 @@ export class WorkflowEngine {
       return;
     }
 
+    // Clear any artifacts from a prior failed/aborted attempt so the timeline
+    // stays deterministic and stepIndex never collides on rerun.
+    await db
+      .delete(toolCallsTable)
+      .where(eq(toolCallsTable.workflowRunId, workflowRunId));
+    await db
+      .delete(agentStepsTable)
+      .where(eq(agentStepsTable.workflowRunId, workflowRunId));
+    await db
+      .delete(activityLogsTable)
+      .where(eq(activityLogsTable.workflowRunId, workflowRunId));
+    await db
+      .delete(approvalRequestsTable)
+      .where(eq(approvalRequestsTable.workflowRunId, workflowRunId));
+
     const startedAt = new Date();
     [workflowRun] = await db
       .update(workflowRunsTable)

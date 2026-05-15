@@ -20,6 +20,7 @@ import {
   serializeToolCall,
   serializeWorkflowSummary,
 } from "../lib/serializers";
+import { parseIdParam } from "../lib/route-helpers";
 
 const router: IRouter = Router();
 
@@ -119,10 +120,8 @@ router.get("/workflows", async (_req, res): Promise<void> => {
 });
 
 router.get("/workflows/:id", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid workflow id" });
     return;
   }
@@ -135,10 +134,8 @@ router.get("/workflows/:id", async (req, res): Promise<void> => {
 });
 
 router.post("/workflows/:id/run", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid workflow id" });
     return;
   }
@@ -156,10 +153,8 @@ router.post("/workflows/:id/run", async (req, res): Promise<void> => {
 });
 
 router.get("/workflows/:id/steps", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid workflow id" });
     return;
   }
@@ -173,10 +168,8 @@ router.get("/workflows/:id/steps", async (req, res): Promise<void> => {
 });
 
 router.get("/workflows/:id/tool-calls", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid workflow id" });
     return;
   }
@@ -189,10 +182,8 @@ router.get("/workflows/:id/tool-calls", async (req, res): Promise<void> => {
 });
 
 router.get("/workflows/:id/activity", async (req, res): Promise<void> => {
-  const id = Number(
-    Array.isArray(req.params["id"]) ? req.params["id"][0] : req.params["id"],
-  );
-  if (!Number.isFinite(id)) {
+  const id = parseIdParam(req);
+  if (id == null) {
     res.status(400).json({ error: "Invalid workflow id" });
     return;
   }
