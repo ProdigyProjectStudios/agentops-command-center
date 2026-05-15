@@ -1,7 +1,7 @@
 import type { ZodTypeAny } from "zod";
 import { generateAgentOutput, type AgentInvocation } from "../llm";
 import type { AgentOutput, ToolCallRequest, WorkflowState } from "./types";
-import { parseConfidence } from "./types";
+import { agentOutputSchema, parseConfidence } from "./types";
 
 export interface AgentEnvelope {
   summary: string;
@@ -59,7 +59,7 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
     };
     const details = (await generateAgentOutput(invocation)) as TDetails;
     const env = this.cfg.buildEnvelope(details, state);
-    return {
+    const candidate: AgentOutput = {
       summary: env.summary,
       findings: env.findings,
       risks: env.risks,
@@ -68,6 +68,9 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
       confidence: parseConfidence(env.confidence),
       details,
     };
+    // Enforce the AgentOutput contract at the BaseAgent boundary so every
+    // persisted agent_steps.output row is guaranteed-valid by construction.
+    return agentOutputSchema.parse(candidate);
   }
 }
 
