@@ -381,6 +381,30 @@ function VectorMemory() {
         signature can be backed by a vector index — Memory upgrades become an
         adapter swap, not a rewrite.
       </p>
+      <Card className="p-4 bg-card/50 border-card-border">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5 inline-flex h-6 items-center rounded-md bg-emerald-500/15 px-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+            Phase 1C · shipped
+          </div>
+          <div className="text-sm text-muted-foreground leading-relaxed">
+            <code className="text-foreground">pgvector</code> 0.8.0 is enabled
+            on the project Postgres and{" "}
+            <code className="text-foreground">memory_chunks</code> now has a
+            nullable <code className="text-foreground">embedding vector(1536)</code>{" "}
+            column sized for <code className="text-foreground">text-embedding-3-small</code>.
+            The Python worker exposes{" "}
+            <code className="text-foreground">POST /api/worker/memory/embed-spike</code>{" "}
+            and{" "}
+            <code className="text-foreground">POST /api/worker/memory/search-spike</code>{" "}
+            for embed + cosine-similarity retrieval, with an automatic keyword
+            fallback when no embeddings exist or the vector path errors. In
+            demo mode a deterministic SHA-256-seeded pseudo-embedding is used
+            so search behavior is reproducible without an API key. The Node
+            engine still uses keyword search today; this is a foundation, not
+            a swap-in.
+          </div>
+        </div>
+      </Card>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <UpgradeCard
           title="pgvector"

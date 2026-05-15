@@ -26,10 +26,12 @@ uv run --project artifacts/agent-worker python artifacts/agent-worker/app.py
 The worker binds to `0.0.0.0` on the port set by `WORKER_PORT`
 (defaults to `8000`). Its only two endpoints are:
 
-| Method | Path                | Purpose                                      |
-|--------|---------------------|----------------------------------------------|
-| GET    | `/worker/health`    | Liveness + Python/LangGraph availability     |
-| POST   | `/worker/run-spike` | Run the four-node demo graph and return JSON |
+| Method | Path                          | Purpose                                              |
+|--------|-------------------------------|------------------------------------------------------|
+| GET    | `/worker/health`              | Liveness + Python/LangGraph availability             |
+| POST   | `/worker/run-spike`           | Run the four-node demo graph and return JSON         |
+| POST   | `/worker/memory/embed-spike`  | Embed text (live or demo) and store in `memory_chunks` |
+| POST   | `/worker/memory/search-spike` | Cosine search over `memory_chunks.embedding`, with keyword fallback |
 
 ### `/worker/run-spike` request shape
 
@@ -61,10 +63,12 @@ The worker binds to `0.0.0.0` on the port set by `WORKER_PORT`
 The Express server in `artifacts/api-server` exposes two passthrough
 routes that proxy to this worker:
 
-| Method | Path                       | Forwards to                |
-|--------|----------------------------|----------------------------|
-| GET    | `/api/worker/health`       | `GET  /worker/health`      |
-| POST   | `/api/worker/run-spike`    | `POST /worker/run-spike`   |
+| Method | Path                              | Forwards to                          |
+|--------|-----------------------------------|--------------------------------------|
+| GET    | `/api/worker/health`              | `GET  /worker/health`                |
+| POST   | `/api/worker/run-spike`           | `POST /worker/run-spike`             |
+| POST   | `/api/worker/memory/embed-spike`  | `POST /worker/memory/embed-spike`    |
+| POST   | `/api/worker/memory/search-spike` | `POST /worker/memory/search-spike`   |
 
 Express reads the worker base URL from `WORKER_BASE_URL` (defaults to
 `http://127.0.0.1:8000`). See `artifacts/api-server/src/routes/worker.ts`.
@@ -104,10 +108,15 @@ This spike is intentionally minimal. The path from here to production:
 
 1. **Phase 1B (this spike) — DONE.** Prove the runtime, prove the call
    path, prove the graph machinery.
-2. **Phase 1C — vector memory.** Enable `pgvector` (already available
-   on this Postgres at version 0.8.0), add an `embedding vector(1536)`
-   column on `memory_chunks`, give the worker an embeddings ingest job
-   and a hybrid keyword + cosine retrieval tool.
+2. **Phase 1C — vector memory — DONE.** `pgvector` 0.8.0 is enabled,
+   `memory_chunks.embedding vector(1536)` is in the Drizzle schema, and
+   the worker has both an embedding service (live OpenAI
+   `text-embedding-3-small` or deterministic demo fallback) and a
+   memory store with cosine similarity + keyword fallback. The two
+   spike endpoints above prove the path; the production migration
+   replaces the spike with a real ingest job over the existing
+   knowledge documents and a `searchMemory(query, k)` adapter that
+   prefers vector hits.
 3. **Production graph migration.** Replace the four spike nodes with
    the real eight-node graph already implemented in TypeScript
    (`ops_triage → memory_retrieval → legal_review → finance_review →

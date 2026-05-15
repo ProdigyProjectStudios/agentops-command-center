@@ -1,0 +1,84 @@
+Execute Phase 1C only.
+
+Goal:
+Add the vector-memory foundation to AgentOps Command Center without destabilizing the existing app.
+
+Do not redesign the UI.
+Do not replace the existing keyword memory search yet.
+Do not migrate the full production graph yet.
+
+Tasks:
+
+1. Enable pgvector
+Run:
+CREATE EXTENSION IF NOT EXISTS vector;
+
+Verify that the extension is installed.
+
+2. Add vector-ready memory schema
+Add an embedding column to memory_chunks using pgvector.
+Use vector(1536) for OpenAI text-embedding-3-small compatibility.
+
+If Drizzle does not natively support the vector column cleanly, use a safe custom SQL migration or documented workaround while keeping the rest of the schema intact.
+
+3. Add embedding service in the Python worker
+Create a small embedding module that:
+- uses OPENAI_API_KEY if present
+- supports text-embedding-3-small
+- returns deterministic/mock embedding output in demo mode if no key exists
+- never breaks the app if embeddings fail
+
+4. Add a vector memory spike endpoint
+In the Python worker, add:
+
+POST /worker/memory/embed-spike
+
+Input:
+{
+  "text": "Contractor onboarding requires W-9, certificate of insurance, signed agreement, and approval before project start."
+}
+
+Output:
+{
+  "status": "ok",
+  "mode": "live" or "demo",
+  "dimensions": 1536,
+  "stored": true
+}
+
+5. Add a search spike endpoint
+Add:
+
+POST /worker/memory/search-spike
+
+Input:
+{
+  "query": "What documents are needed to onboard a roofing contractor in Texas?"
+}
+
+Output:
+{
+  "status": "ok",
+  "mode": "vector" or "keyword_fallback",
+  "results": [...]
+}
+
+6. Keep keyword fallback
+If vector search fails for any reason, fallback to the existing keyword memory search strategy.
+
+7. Document the memory architecture
+Update README and /architecture copy to explain:
+- current keyword memory layer
+- pgvector-enabled memory foundation
+- embeddings upgrade path
+- why pgvector is enough for Phase 1
+- future options: Pinecone, Weaviate, Supabase vector, hybrid retrieval, reranking
+
+Acceptance criteria:
+- pgvector extension enabled successfully
+- memory_chunks can store vector embeddings
+- Python worker can generate or mock embeddings
+- vector memory spike endpoint works
+- search spike endpoint works or falls back cleanly
+- existing AgentOps app still works
+- existing tests still pass

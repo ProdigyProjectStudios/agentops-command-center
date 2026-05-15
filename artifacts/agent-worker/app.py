@@ -20,6 +20,15 @@ from typing import Any, TypedDict
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from embedding import embed_text, EMBEDDING_DIMENSIONS
+from memory_store import (
+    ensure_spike_document,
+    store_chunk,
+    vector_search,
+    keyword_search,
+    hit_to_dict,
+)
+
 try:
     from langgraph.graph import StateGraph, START, END
 
@@ -214,6 +223,116 @@ def run_spike(req: SpikeRequest) -> SpikeResponse:
             approvalRequired=bool(final_state.get("approvalRequired", False)),
             finalSummary=final_state.get("finalSummary", ""),
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 1C: vector memory spike endpoints
+# ---------------------------------------------------------------------------
+
+
+class EmbedSpikeRequest(BaseModel):
+    text: str = Field(..., min_length=1, max_length=8000)
+
+
+class EmbedSpikeResponse(BaseModel):
+    status: str
+    mode: str
+    dimensions: int
+    stored: bool
+    chunkId: int | None = None
+    documentId: int | None = None
+    reason: str | None = None
+
+
+class SearchSpikeRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=2000)
+    limit: int = Field(5, ge=1, le=20)
+
+
+class SearchSpikeResponse(BaseModel):
+    status: str
+    mode: str  # "vector" | "keyword_fallback" | "empty"
+    results: list[dict[str, Any]]
+    embeddingMode: str | None = None
+    reason: str | None = None
+
+
+@app.post("/worker/memory/embed-spike", response_model=EmbedSpikeResponse)
+def embed_spike(req: EmbedSpikeRequest) -> EmbedSpikeResponse:
+    emb = embed_text(req.text)
+    stored = False
+    chunk_id: int | None = None
+    document_id: int | None = None
+    store_reason: str | None = emb.reason
+    try:
+        document_id = ensure_spike_document()
+        chunk_id = store_chunk(document_id, req.text, emb.vector)
+        stored = True
+    except Exception as exc:  # surfaced in response, never raises to client
+        store_reason = (store_reason + "; " if store_reason else "") + (
+            f"store_failed: {type(exc).__name__}"
+        )
+    return EmbedSpikeResponse(
+        status="ok",
+        mode=emb.mode,
+        dimensions=emb.dimensions,
+        stored=stored,
+        chunkId=chunk_id,
+        documentId=document_id,
+        reason=store_reason,
+    )
+
+
+@app.post("/worker/memory/search-spike", response_model=SearchSpikeResponse)
+def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
+    emb = embed_text(req.query)
+    # Try vector path first.
+    try:
+        hits = vector_search(emb.vector, limit=req.limit)
+    except Exception as exc:
+        # DB or pgvector failure → keyword fallback.
+        try:
+            kw = keyword_search(req.query, limit=req.limit)
+            return SearchSpikeResponse(
+                status="ok",
+                mode="keyword_fallback",
+                results=[hit_to_dict(h) for h in kw],
+                embeddingMode=emb.mode,
+                reason=f"vector_failed: {type(exc).__name__}",
+            )
+        except Exception as kw_exc:
+            return SearchSpikeResponse(
+                status="ok",
+                mode="empty",
+                results=[],
+                embeddingMode=emb.mode,
+                reason=f"vector_failed: {type(exc).__name__}; keyword_failed: {type(kw_exc).__name__}",
+            )
+    if hits:
+        return SearchSpikeResponse(
+            status="ok",
+            mode="vector",
+            results=[hit_to_dict(h) for h in hits],
+            embeddingMode=emb.mode,
+        )
+    # Vector returned 0 rows (no embeddings yet) → keyword fallback.
+    try:
+        kw = keyword_search(req.query, limit=req.limit)
+    except Exception as kw_exc:
+        return SearchSpikeResponse(
+            status="ok",
+            mode="empty",
+            results=[],
+            embeddingMode=emb.mode,
+            reason=f"keyword_failed: {type(kw_exc).__name__}",
+        )
+    return SearchSpikeResponse(
+        status="ok",
+        mode="keyword_fallback" if kw else "empty",
+        results=[hit_to_dict(h) for h in kw],
+        embeddingMode=emb.mode,
+        reason="no_vector_rows",
     )
 
 

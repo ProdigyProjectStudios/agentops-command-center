@@ -72,4 +72,38 @@ router.post("/worker/run-spike", async (req, res) => {
   }
 });
 
+router.post("/worker/memory/embed-spike", async (req, res) => {
+  try {
+    const result = await callWorker("/worker/memory/embed-spike", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req.body ?? {}),
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    logger.warn(
+      { err, workerBaseUrl: WORKER_BASE_URL },
+      "Worker memory embed-spike proxy failed",
+    );
+    res.status(502).json(PROXY_ERROR_BODY);
+  }
+});
+
+router.post("/worker/memory/search-spike", async (req, res) => {
+  try {
+    const result = await callWorker("/worker/memory/search-spike", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(req.body ?? {}),
+    });
+    res.status(result.status).json(result.body);
+  } catch (err) {
+    logger.warn(
+      { err, workerBaseUrl: WORKER_BASE_URL },
+      "Worker memory search-spike proxy failed",
+    );
+    res.status(502).json(PROXY_ERROR_BODY);
+  }
+});
+
 export default router;

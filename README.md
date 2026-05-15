@@ -216,6 +216,18 @@ same workflow state, approval, memory, and audit-log architecture.
 > `GET /api/worker/health` and `POST /api/worker/run-spike`. This proves the
 > Replit environment can host the production architecture below — the existing
 > TypeScript orchestrator is unchanged.
+>
+> **Phase 1C vector memory foundation — shipped.** `pgvector` (v0.8.0) is
+> enabled on the project Postgres, `memory_chunks` has a nullable
+> `embedding vector(1536)` column sized for OpenAI `text-embedding-3-small`,
+> and the Python worker exposes two new endpoints (proxied at
+> `POST /api/worker/memory/embed-spike` and
+> `POST /api/worker/memory/search-spike`) that embed text, store the vector,
+> and run cosine-similarity search with an automatic keyword fallback when no
+> embeddings exist or the vector path fails. In demo mode (no `OPENAI_API_KEY`)
+> a deterministic SHA-256-seeded pseudo-embedding is used so the search
+> behavior is reproducible without an API key. The Node engine still uses the
+> existing keyword search; the vector path is a foundation, not a swap-in.
 
 ```mermaid
 flowchart LR
