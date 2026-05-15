@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 
 const STORAGE_KEY = "agentops:sidebar-collapsed";
-const NARROW_QUERY = "(max-width: 1279px)";
+const NARROW_QUERY = "(max-width: 1023px)";
 
 function readStored(): boolean {
   if (typeof window === "undefined") return false;
@@ -15,7 +15,7 @@ function readStored(): boolean {
 /**
  * Sidebar collapsed state with responsive auto-collapse.
  *
- * - On viewports narrower than 1280px the sidebar is forced collapsed
+ * - On viewports narrower than 1024px the sidebar is forced collapsed
  *   regardless of the stored preference (and toggling is a no-op).
  * - On wider viewports the user's stored preference applies (default: open).
  * - Manual toggles only persist when the user is on a wide viewport, so a
