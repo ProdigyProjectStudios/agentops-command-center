@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, financeReviewDemo } from "../demo-outputs";
+import { financeReviewSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const financeReviewNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const financeReviewNode: NodeDefinition = {
         "You are the Finance Analyst agent. Verify spend fits budget, model forecast and ROI.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: financeReviewSchema,
     });
     const budgetCheck = output["budgetCheck"] as { passes: boolean; utilizationPct: number };
     return {

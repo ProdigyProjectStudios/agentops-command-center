@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, legalReviewDemo } from "../demo-outputs";
+import { legalReviewSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const legalReviewNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const legalReviewNode: NodeDefinition = {
         "You are the Legal Counsel agent. Run compliance checks, flag legal risk, and recommend a posture.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: legalReviewSchema,
     });
     const checks = (output["complianceChecks"] as Array<{ status: string }>) ?? [];
     const flagged = checks.filter((c) => c.status !== "pass").length;

@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { communicationsDemo, fingerprintRequest } from "../demo-outputs";
+import { communicationsSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const communicationsDraftNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const communicationsDraftNode: NodeDefinition = {
         "You are the Communications agent. Draft polished internal and external messaging.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: communicationsSchema,
     });
     return {
       output,

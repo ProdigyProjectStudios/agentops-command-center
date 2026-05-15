@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ZodTypeAny } from "zod";
 import { logger } from "./logger";
 
 export type LlmMode = "demo" | "live";
@@ -51,6 +52,13 @@ export interface AgentInvocation {
   systemPrompt: string;
   userPrompt: string;
   demoFallback: Record<string, unknown>;
+  /**
+   * Zod schema describing the full expected output shape. The model response
+   * is validated against `schema.deepPartial()` so partial responses are
+   * accepted (and any missing keys are filled in via deep-merge from the
+   * demo fallback). Validation failures fall back to the demo output.
+   */
+  schema?: ZodTypeAny;
 }
 
 export async function generateAgentOutput(
@@ -104,14 +112,38 @@ ${schemaHint}`;
     const parsed = JSON.parse(raw) as unknown;
     if (!isPlainObject(parsed)) {
       logger.warn(
-        { agentSlug: invocation.agentSlug, model: MODEL },
+        { agentSlug: invocation.agentSlug, model: MODEL, raw },
         "LLM live call fell back to demo: response was not a JSON object",
       );
       return invocation.demoFallback;
     }
+    if (invocation.schema) {
+      const partial = toDeepPartial(invocation.schema);
+      const result = partial.safeParse(parsed);
+      if (!result.success) {
+        logger.warn(
+          {
+            agentSlug: invocation.agentSlug,
+            model: MODEL,
+            raw,
+            issues: result.error.issues,
+          },
+          "LLM live call fell back to demo: response failed Zod validation",
+        );
+        return invocation.demoFallback;
+      }
+      logger.debug(
+        { agentSlug: invocation.agentSlug, model: MODEL },
+        "LLM live call succeeded",
+      );
+      return deepMerge(
+        invocation.demoFallback,
+        result.data as Record<string, unknown>,
+      );
+    }
     if (!matchesShape(parsed, invocation.demoFallback)) {
       logger.warn(
-        { agentSlug: invocation.agentSlug, model: MODEL },
+        { agentSlug: invocation.agentSlug, model: MODEL, raw },
         "LLM live call fell back to demo: response did not match expected shape",
       );
       return invocation.demoFallback;
@@ -130,6 +162,23 @@ ${schemaHint}`;
   } finally {
     clearTimeout(timeout);
   }
+}
+
+/**
+ * Convert a schema into one that accepts partial responses. We accept any
+ * subset of keys at any depth (zod's `.deepPartial()` for objects); arrays
+ * and primitive schemas are passed through unchanged. The validated result
+ * is then deep-merged onto the demo fallback so missing keys fall back
+ * rather than disappear.
+ */
+function toDeepPartial(schema: ZodTypeAny): ZodTypeAny {
+  const maybeDeepPartial = (
+    schema as unknown as { deepPartial?: () => ZodTypeAny }
+  ).deepPartial;
+  if (typeof maybeDeepPartial === "function") {
+    return maybeDeepPartial.call(schema);
+  }
+  return schema;
 }
 
 function isPlainObject(v: unknown): v is Record<string, unknown> {

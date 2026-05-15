@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, opsTriageDemo } from "../demo-outputs";
+import { opsTriageSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const opsTriageNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const opsTriageNode: NodeDefinition = {
         "You are the Ops Conductor agent. Triage the request, decide which downstream agents to route to, and estimate cost.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: opsTriageSchema,
     });
     return {
       output,

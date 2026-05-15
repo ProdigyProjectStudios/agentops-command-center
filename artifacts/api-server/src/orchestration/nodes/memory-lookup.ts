@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, memoryLookupDemo } from "../demo-outputs";
+import { memoryLookupSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const memoryLookupNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const memoryLookupNode: NodeDefinition = {
         "You are the Memory Keeper. Retrieve relevant policies and prior decisions from the knowledge base.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: memoryLookupSchema,
     });
     const cited = (output["citedDocuments"] as Array<{ title: string }>) ?? [];
     return {

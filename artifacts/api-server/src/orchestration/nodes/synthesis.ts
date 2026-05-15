@@ -1,5 +1,6 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, synthesisDemo } from "../demo-outputs";
+import { synthesisSchema } from "../schemas";
 import { generateAgentOutput } from "../../lib/llm";
 
 export const synthesisNode: NodeDefinition = {
@@ -16,6 +17,7 @@ export const synthesisNode: NodeDefinition = {
         "Synthesize all downstream agent outputs into a final risk posture and recommendation.",
       userPrompt: `${request.title}\n\n${request.description}`,
       demoFallback,
+      schema: synthesisSchema,
     });
     return {
       output,
