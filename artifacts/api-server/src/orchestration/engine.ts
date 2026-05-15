@@ -14,6 +14,7 @@ import {
 import { logger } from "../lib/logger";
 import { getLlmMode } from "../lib/llm";
 import { FINALIZE_NODE, PIPELINE } from "./edges";
+import { synthesisNode } from "./nodes/synthesis";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
 import type { NodeContext, NodeDefinition, NodeResult } from "./types";
 
@@ -183,6 +184,7 @@ export class WorkflowEngine {
     const priorOutputs = new Map<string, Record<string, unknown>>();
 
     let lastResult: NodeResult | undefined;
+    let synthesisResult: NodeResult | undefined;
     const liveMode = getLlmMode() === "live";
     try {
       for (let i = 0; i < PIPELINE.length; i++) {
@@ -202,6 +204,9 @@ export class WorkflowEngine {
         priorSteps.set(node.agentSlug + ":" + i, step);
         priorOutputs.set(node.agentSlug + ":" + i, result.output);
         lastResult = result;
+        if (node === synthesisNode) {
+          synthesisResult = result;
+        }
 
         const updates: Partial<typeof workflowRunsTable.$inferInsert> = {
           status: node.pendingStatus as typeof workflowRun.status,
@@ -235,12 +240,14 @@ export class WorkflowEngine {
 
     const fp = fingerprintRequest(request);
     const demoSynthesis = synthesisDemo(request, fp);
-    // Prefer the live synthesis step's output (last node in PIPELINE) when
-    // present, falling back to the deterministic demo synthesis.
+    // Prefer the synthesis step's output (captured by node identity, not by
+    // pipeline position — the pipeline ends with createApprovalNode, not
+    // synthesis), falling back to the deterministic demo synthesis.
     const liveSynthesis =
-      lastResult?.output && typeof lastResult.output === "object"
-        ? (lastResult.output as Record<string, unknown>)
+      synthesisResult?.output && typeof synthesisResult.output === "object"
+        ? (synthesisResult.output as Record<string, unknown>)
         : null;
+    void lastResult;
     const synthesis = liveSynthesis ?? demoSynthesis;
     const summary =
       typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0
@@ -272,8 +279,6 @@ export class WorkflowEngine {
       summary,
       recommendation,
     });
-
-    void lastResult;
   }
 
   async finalize(workflowRunId: number): Promise<void> {
