@@ -204,9 +204,30 @@ export default function WorkflowDetailPage() {
     return s;
   }, [workflow]);
   const [expanded, setExpanded] = useState<Set<NodeKey>>(() => new Set());
+  // Auto-expand newly-active nodes as the run progresses, but preserve any
+  // panels the user has manually collapsed/opened. On mobile, newly-active
+  // nodes replace whatever was open; on desktop they're additive.
+  const [seenAuto, setSeenAuto] = useState<Set<NodeKey>>(() => new Set());
   useEffect(() => {
-    setExpanded(isMobile ? new Set([...defaultExpanded].slice(-1)) : defaultExpanded);
-  }, [defaultExpanded, isMobile]);
+    setExpanded((prev) => {
+      const next = isMobile ? new Set<NodeKey>() : new Set(prev);
+      let changed = isMobile;
+      for (const key of defaultExpanded) {
+        if (!seenAuto.has(key)) {
+          if (isMobile) next.clear();
+          next.add(key);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+    setSeenAuto((prev) => {
+      if ([...defaultExpanded].every((k) => prev.has(k))) return prev;
+      const next = new Set(prev);
+      for (const k of defaultExpanded) next.add(k);
+      return next;
+    });
+  }, [defaultExpanded, isMobile, seenAuto]);
   const toggleNode = useCallback(
     (key: NodeKey) => {
       setExpanded((prev) => {

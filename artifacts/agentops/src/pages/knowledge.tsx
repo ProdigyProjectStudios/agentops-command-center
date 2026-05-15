@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { BookOpen, FileText, Search, Sparkles } from "lucide-react";
 import { PageTransition } from "@/components/PageTransition";
@@ -12,10 +12,44 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatRelative } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
+// Read `?doc=<id>` from the URL so deep-links from elsewhere (e.g. the
+// Retrieved Memory section on a workflow detail page) auto-select the document.
+function useDocQueryParam(): number | null {
+  const [docId, setDocId] = useState<number | null>(() => {
+    if (typeof window === "undefined") return null;
+    const v = new URLSearchParams(window.location.search).get("doc");
+    const n = v ? Number(v) : NaN;
+    return Number.isFinite(n) ? n : null;
+  });
+  useEffect(() => {
+    const onChange = () => {
+      const v = new URLSearchParams(window.location.search).get("doc");
+      const n = v ? Number(v) : NaN;
+      setDocId(Number.isFinite(n) ? n : null);
+    };
+    window.addEventListener("popstate", onChange);
+    return () => window.removeEventListener("popstate", onChange);
+  }, []);
+  return docId;
+}
+
 export default function KnowledgePage() {
   const { data, isLoading } = useListKnowledge();
   const [query, setQuery] = useState("");
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const initialDocId = useDocQueryParam();
+  const [selectedId, setSelectedId] = useState<number | null>(initialDocId);
+  // When the URL `?doc=` lands after data loads, auto-select and scroll to it.
+  useEffect(() => {
+    if (initialDocId == null || !data) return;
+    if ((data ?? []).some((d) => d.id === initialDocId)) {
+      setSelectedId(initialDocId);
+      requestAnimationFrame(() => {
+        document
+          .querySelector(`[data-testid="doc-card-${initialDocId}"]`)
+          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+      });
+    }
+  }, [initialDocId, data]);
 
   const filtered = useMemo(() => {
     const docs = data ?? [];
