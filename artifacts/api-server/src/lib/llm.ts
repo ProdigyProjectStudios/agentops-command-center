@@ -34,6 +34,9 @@ function getClient(): OpenAI | null {
 
 const MODEL = process.env["LLM_MODEL"] ?? "gpt-4o-mini";
 const MAX_TOKENS = 2048;
+const REQUEST_TIMEOUT_MS = Number(
+  process.env["LLM_REQUEST_TIMEOUT_MS"] ?? "20000",
+);
 
 if (!process.env["LLM_MODEL"] && liveCredentials()) {
   logger.warn(
@@ -75,16 +78,21 @@ one of "low" | "medium" | "high" | "critical"). Do not wrap your response in mar
 EXAMPLE SHAPE:
 ${schemaHint}`;
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
-    const completion = await openai.chat.completions.create({
-      model: MODEL,
-      max_completion_tokens: MAX_TOKENS,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: invocation.userPrompt },
-      ],
-    });
+    const completion = await openai.chat.completions.create(
+      {
+        model: MODEL,
+        max_completion_tokens: MAX_TOKENS,
+        response_format: { type: "json_object" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: invocation.userPrompt },
+        ],
+      },
+      { signal: controller.signal },
+    );
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
       logger.warn(
@@ -116,9 +124,11 @@ ${schemaHint}`;
   } catch (err) {
     logger.warn(
       { err, agentSlug: invocation.agentSlug, model: MODEL },
-      "LLM live call fell back to demo: API or parse error",
+      "LLM live call fell back to demo: API, timeout, or parse error",
     );
     return invocation.demoFallback;
+  } finally {
+    clearTimeout(timeout);
   }
 }
 
