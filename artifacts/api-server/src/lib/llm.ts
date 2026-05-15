@@ -91,12 +91,26 @@ ${schemaHint}`;
       );
       return invocation.demoFallback;
     }
-    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isPlainObject(parsed)) {
+      logger.warn(
+        { agentSlug: invocation.agentSlug, model: MODEL },
+        "LLM live call fell back to demo: response was not a JSON object",
+      );
+      return invocation.demoFallback;
+    }
+    if (!matchesShape(parsed, invocation.demoFallback)) {
+      logger.warn(
+        { agentSlug: invocation.agentSlug, model: MODEL },
+        "LLM live call fell back to demo: response did not match expected shape",
+      );
+      return invocation.demoFallback;
+    }
     logger.debug(
       { agentSlug: invocation.agentSlug, model: MODEL },
       "LLM live call succeeded",
     );
-    return { ...invocation.demoFallback, ...parsed };
+    return deepMerge(invocation.demoFallback, parsed);
   } catch (err) {
     logger.warn(
       { err, agentSlug: invocation.agentSlug, model: MODEL },
@@ -104,4 +118,57 @@ ${schemaHint}`;
     );
     return invocation.demoFallback;
   }
+}
+
+function isPlainObject(v: unknown): v is Record<string, unknown> {
+  return typeof v === "object" && v !== null && !Array.isArray(v);
+}
+
+/**
+ * Lightweight runtime shape check: every top-level key in `expected` must be
+ * present in `actual`, and (for primitive/array values) the JS typeof must
+ * match. Nested objects only need to exist as objects — their inner shape is
+ * not enforced, but missing inner keys will be backfilled by deepMerge.
+ */
+function matchesShape(
+  actual: Record<string, unknown>,
+  expected: Record<string, unknown>,
+): boolean {
+  for (const key of Object.keys(expected)) {
+    if (!(key in actual)) return false;
+    const want = expected[key];
+    const got = actual[key];
+    if (want === null || got === null) continue;
+    if (Array.isArray(want)) {
+      if (!Array.isArray(got)) return false;
+      continue;
+    }
+    if (isPlainObject(want)) {
+      if (!isPlainObject(got)) return false;
+      continue;
+    }
+    if (typeof want !== typeof got) return false;
+  }
+  return true;
+}
+
+/**
+ * Recursively merge `override` over `base`. For nested objects, missing keys
+ * in `override` fall back to `base` so a partial LLM response never zeroes
+ * out demo values.
+ */
+function deepMerge(
+  base: Record<string, unknown>,
+  override: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    const baseValue = base[key];
+    if (isPlainObject(baseValue) && isPlainObject(value)) {
+      out[key] = deepMerge(baseValue, value);
+    } else {
+      out[key] = value;
+    }
+  }
+  return out;
 }
