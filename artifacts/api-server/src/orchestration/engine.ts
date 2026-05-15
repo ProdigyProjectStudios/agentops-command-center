@@ -278,11 +278,17 @@ export class WorkflowEngine {
     };
     await executeNode(FINALIZE_NODE, ctx, stepIndex);
 
+    // Preserve `rejected` as the durable terminal status so the operator
+    // decision is visible in the UI. Only an approved decision graduates the
+    // run to `finalized`.
+    const terminalStatus =
+      workflowRun.status === "approved" ? "finalized" : "rejected";
+
     await db
       .update(workflowRunsTable)
       .set({
-        status: "finalized",
-        currentStage: "finalized",
+        status: terminalStatus,
+        currentStage: terminalStatus,
         completedAt: new Date(),
       })
       .where(eq(workflowRunsTable.id, workflowRunId));
