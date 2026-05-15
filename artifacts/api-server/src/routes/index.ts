@@ -9,6 +9,7 @@ import knowledgeRouter from "./knowledge";
 import toolCallsRouter from "./tool-calls";
 import dashboardRouter from "./dashboard";
 import systemRouter from "./system";
+import workerRouter from "./worker";
 
 const router: IRouter = Router();
 
@@ -22,5 +23,6 @@ router.use(agentsRouter);
 router.use(knowledgeRouter);
 router.use(toolCallsRouter);
 router.use(systemRouter);
+router.use(workerRouter);
 
 export default router;

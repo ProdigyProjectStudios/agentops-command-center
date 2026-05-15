@@ -208,6 +208,15 @@ visualization and product validation. In production, the orchestration layer
 can be swapped or extended with **Python / LangGraph** while preserving the
 same workflow state, approval, memory, and audit-log architecture.
 
+> **Phase 1B capability spike — shipped.** A minimal Python/FastAPI/LangGraph
+> worker lives at [`artifacts/agent-worker/`](artifacts/agent-worker/README.md)
+> and runs alongside the Node API and React UI. It exposes
+> `GET /worker/health` and `POST /worker/run-spike` (a four-node demo
+> StateGraph), and the Express server proxies them at
+> `GET /api/worker/health` and `POST /api/worker/run-spike`. This proves the
+> Replit environment can host the production architecture below — the existing
+> TypeScript orchestrator is unchanged.
+
 ```mermaid
 flowchart LR
   UI["React + Vite UI<br/>(unchanged)"] --> EDGE["Express edge API<br/>auth · validation · queue"]
