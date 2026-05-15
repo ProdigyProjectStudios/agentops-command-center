@@ -200,6 +200,33 @@ export default function OverviewPage() {
           </div>
         </section>
 
+        {/* Modular by design */}
+        <section className="space-y-4">
+          <SectionEyebrow>Modular by design</SectionEyebrow>
+          <h2 className="text-2xl font-semibold tracking-tight">
+            Built to swap orchestration runtimes.
+          </h2>
+          <Card className="p-6 bg-gradient-to-br from-primary/10 via-card to-chart-2/10 border-primary/30">
+            <p className="text-sm sm:text-base leading-relaxed text-foreground/90 italic">
+              AgentOps is intentionally designed as a modular agent
+              orchestration platform. The current demo uses a TypeScript
+              LangGraph-style state machine for rapid visualization and product
+              validation. In production, the orchestration layer can be swapped
+              or extended with Python/LangGraph while preserving the same
+              workflow state, approval, memory, and audit-log architecture.
+            </p>
+          </Card>
+          <div className="pt-1">
+            <Link href="/architecture">
+              <Button variant="outline" size="sm" data-testid="overview-cta-architecture" asChild>
+                <span className="cursor-pointer">
+                  See the technical architecture <ArrowRight className="size-4" />
+                </span>
+              </Button>
+            </Link>
+          </div>
+        </section>
+
         {/* Stack */}
         <section className="space-y-4">
           <SectionEyebrow>The stack</SectionEyebrow>

@@ -10,6 +10,7 @@ import {
   Wrench,
   Settings,
   Sparkles,
+  Network,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -41,6 +42,7 @@ const NAV: NavItem[] = [
   { href: "/tool-calls", label: "Tool Calls", icon: Wrench, testId: "nav-tool-calls" },
   { href: "/settings", label: "Settings", icon: Settings, testId: "nav-settings" },
   { href: "/overview", label: "Why AgentOps", icon: Sparkles, testId: "nav-overview" },
+  { href: "/architecture", label: "Architecture", icon: Network, testId: "nav-architecture" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {

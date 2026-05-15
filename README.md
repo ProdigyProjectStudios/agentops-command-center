@@ -200,6 +200,118 @@ pnpm --filter @workspace/api-server run seed         # reseed sample data
 
 ---
 
+## Production extension path: Python / LangGraph worker
+
+AgentOps is intentionally designed as a modular agent orchestration platform.
+The current demo uses a TypeScript LangGraph-style state machine for rapid
+visualization and product validation. In production, the orchestration layer
+can be swapped or extended with **Python / LangGraph** while preserving the
+same workflow state, approval, memory, and audit-log architecture.
+
+```mermaid
+flowchart LR
+  UI["React + Vite UI<br/>(unchanged)"] --> EDGE["Express edge API<br/>auth · validation · queue"]
+  EDGE --> WORKER["Python FastAPI + LangGraph worker<br/>agent graph · tool runtime"]
+  EDGE --> DB[("PostgreSQL<br/>workflows · agent_steps · approvals · audit")]
+  WORKER --> DB
+  WORKER --> VEC[("Vector store<br/>pgvector · Pinecone · Weaviate")]
+  WORKER --> ADAPT["Integration adapters<br/>CRM · ERP · Finance · HR · Email · Slack · Docs"]
+```
+
+The worker reads and writes the same Drizzle-defined tables as the demo
+orchestrator — the UI, the API contract, and the database schema do **not**
+change. Run dispatch happens via a job queue (Postgres `LISTEN/NOTIFY`, Redis,
+SQS) so the edge API stays responsive during long agent runs.
+
+### What stays the same
+
+| Layer                 | Demo (today)                        | Production extension                                |
+| --------------------- | ----------------------------------- | --------------------------------------------------- |
+| UI                    | React + Vite                        | React + Vite (unchanged)                            |
+| API contract          | OpenAPI / Zod / React Query         | OpenAPI / Zod / React Query (unchanged)             |
+| Database              | PostgreSQL + Drizzle                | PostgreSQL + Drizzle (unchanged)                    |
+| Workflow state        | `workflow_runs` + `agent_steps`     | identical schema, same envelopes                    |
+| Audit ledger          | `tool_calls` + `activity_logs`      | identical schema                                    |
+| Approval gate         | `approval_requests` + UI card       | identical                                           |
+| Orchestrator runtime  | TypeScript state machine (Express)  | **Python FastAPI + LangGraph worker**               |
+| Tools                 | Typed adapters in TS                | Typed adapters in Python (LangChain / LiteLLM)      |
+| Memory                | Keyword search over `memory_chunks` | **Vector retrieval** (pgvector / Pinecone / Weaviate) |
+
+### Agent graph nodes
+
+`Ops Conductor → Memory → Legal → Finance → Marketing/Comms → Synthesis →
+Approval (human gate) → Finalization`. Synthesis is the canonical source of the
+final brief; approval pauses the graph; finalization is where downstream
+adapter effects actually fire.
+
+### Vector memory upgrade
+
+The demo's `lib/memory/keyword-search.ts` exposes a single
+`searchMemory(query, k)` contract. In production it's an adapter swap:
+
+- **pgvector** — add a vector column to `memory_chunks`, reuse the existing
+  Postgres connection. Lowest ops overhead, ideal first step.
+- **Pinecone** — managed ANN index with namespaces; natural fit for
+  multi-tenant deployments.
+- **Weaviate** — hybrid search (dense + BM25), built-in re-rankers,
+  GraphQL surface.
+
+### Integration adapter layer
+
+Tools the agents call are typed adapters with a stable interface
+(`execute(input) → output`) and centralised credential injection. Every
+invocation lands in the `tool_calls` table — same row whether the adapter is a
+sandbox stub or a production system of record. Reference adapters: CRM
+(Salesforce, HubSpot), ERP (NetSuite, SAP), Finance (Stripe, QuickBooks,
+Mercury), HR (Workday, Rippling, BambooHR), Email (SendGrid, Postmark, M365),
+Chat (Slack, Teams), Document storage (Drive, SharePoint, S3).
+
+### Human-in-the-loop approval model
+
+Approval is a node, not a callback. Synthesis writes a typed brief into
+workflow state; the engine creates an `approval_requests` row and pauses the
+graph. The UI surfaces brief / evidence / risks / recommendation; an operator
+decides; the engine resumes from finalize with the decision attached to state.
+Configurable thresholds (spend, risk level, agent confidence) escalate
+automatically; multi-party approvals (legal + finance) are first-class;
+out-of-band channels (Slack, email) can post decisions back to the workflow.
+
+### Audit log & tool-call traceability
+
+Three append-only ledgers carry the full audit story:
+
+- `agent_steps` — one row per agent run, typed `AgentOutput` envelope,
+  confidence, risk score, fallback metadata, timing.
+- `tool_calls` — one row per external invocation, linked to the agent_step
+  that issued it; captures input / output / status / duration.
+- `activity_logs` — one row per state transition or operator action, with
+  actor, action verb, message, and structured metadata.
+
+Together they let an operator (or a regulator) reconstruct exactly what each
+agent saw, chose, and did — and which human approved it.
+
+### Security
+
+- **RBAC** — role-scoped access for operators, approvers, auditors, admins;
+  enforced server-side with the UI mirroring the same matrix.
+- **Tenant isolation** — every workflow, document, and adapter credential is
+  scoped to a `portfolio_company_id`, with row-level security in Postgres
+  enforcing the boundary even on raw SQL.
+- **Approval thresholds** — configurable rules on spend, risk level, and
+  agent confidence escalate to higher tiers and require multiple approvers
+  for sensitive bands.
+- **Sensitive action gating** — adapters declare blast radius; high-impact
+  calls (wire transfer, contract sign, PII export) require an approval token
+  issued only after a human decision.
+- **Credential isolation** — adapter credentials live in a secrets manager
+  (Replit Secrets, Vault, AWS Secrets Manager) and are injected per-call. The
+  agent runtime never sees raw API keys.
+
+A live, navigable version of this section ships in the app at
+[`/architecture`](./artifacts/agentops/src/pages/architecture.tsx).
+
+---
+
 ## Future extensions
 
 - Real vector retrieval (pgvector) behind the Memory agent's keyword fallback

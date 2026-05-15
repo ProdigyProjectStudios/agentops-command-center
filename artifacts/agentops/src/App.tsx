@@ -13,6 +13,7 @@ import KnowledgePage from "@/pages/knowledge";
 import ToolCallsPage from "@/pages/tool-calls";
 import SettingsPage from "@/pages/settings";
 import OverviewPage from "@/pages/overview";
+import ArchitecturePage from "@/pages/architecture";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
@@ -38,6 +39,7 @@ function Router() {
       <Route path="/tool-calls" component={ToolCallsPage} />
       <Route path="/settings" component={SettingsPage} />
       <Route path="/overview" component={OverviewPage} />
+      <Route path="/architecture" component={ArchitecturePage} />
       <Route component={NotFound} />
     </Switch>
   );
