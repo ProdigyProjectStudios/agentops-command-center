@@ -30,11 +30,13 @@ const synthesisAgent = new BaseAgent({
         ...((details["keyEvidence"] as string[]) ?? []),
         ...upstreamFindings.slice(0, 4),
       ],
-      risks: [
-        ...((details["blockingIssues"] as string[]) ?? []),
-        ...upstreamRisks,
-        ...state.riskFlags,
-      ],
+      risks: Array.from(
+        new Set([
+          ...((details["blockingIssues"] as string[]) ?? []),
+          ...upstreamRisks,
+          ...state.riskFlags,
+        ]),
+      ),
       recommendedActions: (details["nextActions"] as string[]) ?? [],
       confidence:
         parseFloat((details["confidence"] as string) ?? "0.9") || 0.9,
