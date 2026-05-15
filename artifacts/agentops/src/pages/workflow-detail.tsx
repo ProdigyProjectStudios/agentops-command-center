@@ -300,7 +300,6 @@ export default function WorkflowDetailPage() {
   const stepsByName = new Map(workflow.steps.map((s) => [s.name, s]));
   const nodeStateByKey = new Map<NodeKey, { step?: AgentStep; status: NodeStatus }>();
   let sawFailure = false;
-  let sawRunning = false;
   for (const node of PIPELINE_NODES) {
     const step = node.matches.map((m) => stepsByName.get(m)).find(Boolean);
     let status: NodeStatus;
@@ -309,10 +308,8 @@ export default function WorkflowDetailPage() {
     else if (step.status === "failed") {
       status = "failed";
       sawFailure = true;
-    } else if (step.status === "running") {
-      status = "running";
-      sawRunning = true;
-    } else status = "pending";
+    } else if (step.status === "running") status = "running";
+    else status = "pending";
     nodeStateByKey.set(node.key, { step, status });
   }
   // Mark all post-failure nodes as skipped.
@@ -333,7 +330,7 @@ export default function WorkflowDetailPage() {
 
   const memoryHits = aggregateMemory(workflow.toolCalls);
 
-  const isFinalized = workflow.status === "finalized" || workflow.status === "approved";
+  const isFinalized = workflow.status === "finalized";
 
   return (
     <PageTransition>
