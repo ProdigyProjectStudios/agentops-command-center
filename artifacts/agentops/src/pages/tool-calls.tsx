@@ -28,6 +28,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import { formatTimestamp } from "@/lib/format";
 import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
@@ -148,10 +149,20 @@ export default function ToolCallsPage() {
         </div>
 
         {isLoading && (
-          <div className="p-5 space-y-2">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-10 w-full" />
+          <div className="p-5">
+            <LoadingState
+              icon={Wrench}
+              title="Loading tool calls"
+              description="Fetching every external API call the agents have issued…"
+              variant="bare"
+              testId="loading-tool-calls"
+            >
+              <div className="space-y-2">
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            </LoadingState>
           </div>
         )}
 

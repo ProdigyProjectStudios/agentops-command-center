@@ -37,6 +37,7 @@ import {
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import { PAGE } from "@/lib/copy";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -87,10 +88,17 @@ export default function ApprovalsPage() {
       </Tabs>
 
       {isLoading && (
-        <div className="space-y-3">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-40 w-full" />
-        </div>
+        <LoadingState
+          icon={Inbox}
+          title="Loading the approval queue"
+          description="Pulling everything the agents have escalated to a human…"
+          testId="loading-approvals"
+        >
+          <div className="space-y-3 mt-2">
+            <Skeleton className="h-32 w-full" />
+            <Skeleton className="h-32 w-full" />
+          </div>
+        </LoadingState>
       )}
 
       {error && (

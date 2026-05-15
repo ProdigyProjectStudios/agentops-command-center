@@ -22,6 +22,7 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { formatRelative } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -89,11 +90,18 @@ export default function AgentsPage() {
       )}
 
       {isLoading && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          <Skeleton className="h-56 w-full" />
-          <Skeleton className="h-56 w-full" />
-          <Skeleton className="h-56 w-full" />
-        </div>
+        <LoadingState
+          icon={Bot}
+          title="Loading the agent crew"
+          description="Pulling specialists, tools, and live status…"
+          testId="loading-agents"
+        >
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-2">
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-56 w-full" />
+            <Skeleton className="h-56 w-full" />
+          </div>
+        </LoadingState>
       )}
 
       <motion.div

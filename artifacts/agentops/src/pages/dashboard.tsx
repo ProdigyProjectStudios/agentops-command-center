@@ -35,6 +35,7 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import { PAGE, PRODUCT } from "@/lib/copy";
 
 const PILLARS: Array<{ icon: typeof Bot; label: string }> = [
@@ -53,7 +54,11 @@ export default function DashboardPage() {
     error: metricsError,
     refetch: refetchMetrics,
   } = useGetDashboardMetrics();
-  const { data: workflows, error: workflowsError } = useListWorkflows();
+  const {
+    data: workflows,
+    error: workflowsError,
+    refetch: refetchWorkflows,
+  } = useListWorkflows();
 
   const recentWorkflows = (workflows ?? []).slice(0, 6);
 
@@ -123,7 +128,10 @@ export default function DashboardPage() {
               ? ((metricsError ?? workflowsError) as Error).message
               : "The dashboard API didn't respond."
           }
-          onRetry={() => refetchMetrics()}
+          onRetry={() => {
+            void refetchMetrics();
+            void refetchWorkflows();
+          }}
           testId="error-dashboard"
         />
       )}
@@ -253,11 +261,19 @@ export default function DashboardPage() {
           </div>
           <div className="space-y-2">
             {recentWorkflows.length === 0 && !workflows && (
-              <>
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
-                <Skeleton className="h-14 w-full" />
-              </>
+              <LoadingState
+                icon={Workflow}
+                title="Loading recent workflows"
+                description="Fetching the latest agent runs…"
+                variant="bare"
+                testId="loading-recent-workflows"
+              >
+                <div className="space-y-2">
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                  <Skeleton className="h-14 w-full" />
+                </div>
+              </LoadingState>
             )}
             {workflows && recentWorkflows.length === 0 && (
               <EmptyState
@@ -306,6 +322,16 @@ export default function DashboardPage() {
         <Card className="p-6 bg-card border-card-border">
           <h3 className="font-semibold text-sm mb-4">Recent Activity</h3>
           <div className="space-y-3">
+            {!metrics && (
+              <LoadingState
+                icon={Activity}
+                title="Loading activity feed"
+                variant="bare"
+                testId="loading-activity"
+              >
+                <Skeleton className="h-32 w-full" />
+              </LoadingState>
+            )}
             {(metrics?.recentActivity ?? []).slice(0, 8).map((a) => (
               <div key={a.id} className="flex gap-3" data-testid={`activity-${a.id}`}>
                 <div className="flex flex-col items-center pt-1">
@@ -366,7 +392,17 @@ export default function DashboardPage() {
               </div>
             </div>
           ))}
-          {!metrics && <Skeleton className="h-24 w-full" />}
+          {!metrics && (
+            <LoadingState
+              icon={Bot}
+              title="Loading agent crew"
+              variant="bare"
+              testId="loading-agent-health"
+              className="col-span-full"
+            >
+              <Skeleton className="h-24 w-full" />
+            </LoadingState>
+          )}
         </div>
       </Card>
     </div>
@@ -405,7 +441,9 @@ function MetricCard({
       </div>
       <div className="mt-3 text-2xl font-semibold tabular-nums" data-testid={`${testId}-value`}>
         {loading ? (
-          <Skeleton className="h-7 w-20" />
+          <span className="inline-flex items-center gap-2 text-muted-foreground">
+            <Skeleton className="h-7 w-20" />
+          </span>
         ) : value !== undefined ? (
           value
         ) : (

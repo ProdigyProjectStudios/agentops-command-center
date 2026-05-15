@@ -41,6 +41,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { LoadingState } from "@/components/LoadingState";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -285,9 +286,17 @@ export default function WorkflowDetailPage() {
     return (
       <PageTransition>
         <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-[1400px] mx-auto">
-          <Skeleton className="h-8 w-72 mb-4" />
-          <Skeleton className="h-32 w-full mb-6" />
-          <Skeleton className="h-96 w-full" />
+          <LoadingState
+            icon={GitBranch}
+            title="Loading workflow run"
+            description="Reconstructing the agent timeline, tool calls, and audit trail…"
+            testId="loading-workflow-detail"
+          >
+            <div className="space-y-3 mt-2">
+              <Skeleton className="h-32 w-full" />
+              <Skeleton className="h-96 w-full" />
+            </div>
+          </LoadingState>
         </div>
       </PageTransition>
     );

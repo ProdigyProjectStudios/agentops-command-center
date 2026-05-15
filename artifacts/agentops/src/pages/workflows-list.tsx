@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import {
   formatRelative,
   formatCurrencyCents,
@@ -51,10 +52,20 @@ export default function WorkflowsListPage() {
           <div className="col-span-1 text-right">Created</div>
         </div>
         {isLoading && (
-          <div className="p-5 space-y-2">
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
-            <Skeleton className="h-12 w-full" />
+          <div className="p-5">
+            <LoadingState
+              icon={ListChecks}
+              title="Loading workflows"
+              description="Fetching every operational request the crew has triaged…"
+              variant="bare"
+              testId="loading-workflows"
+            >
+              <div className="space-y-2">
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+                <Skeleton className="h-12 w-full" />
+              </div>
+            </LoadingState>
           </div>
         )}
         {(data ?? []).map((w, idx) => (

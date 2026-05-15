@@ -12,6 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatRelative } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
 import { ErrorState } from "@/components/ErrorState";
+import { LoadingState } from "@/components/LoadingState";
 import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
@@ -104,11 +105,19 @@ export default function KnowledgePage() {
           </div>
 
           {isLoading && (
-            <div className="space-y-2">
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-              <Skeleton className="h-20 w-full" />
-            </div>
+            <LoadingState
+              icon={BookOpen}
+              title="Loading knowledge base"
+              description="Pulling SOPs and policy docs the agents ground in…"
+              variant="bare"
+              testId="loading-knowledge"
+            >
+              <div className="space-y-2">
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+                <Skeleton className="h-20 w-full" />
+              </div>
+            </LoadingState>
           )}
 
           <div className="space-y-2">
