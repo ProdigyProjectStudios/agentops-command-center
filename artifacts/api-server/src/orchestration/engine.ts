@@ -234,12 +234,25 @@ export class WorkflowEngine {
     }
 
     const fp = fingerprintRequest(request);
-    const synthesis = synthesisDemo(request, fp);
-    const summary = (synthesis["summary"] as string) ?? "";
+    const demoSynthesis = synthesisDemo(request, fp);
+    // Prefer the live synthesis step's output (last node in PIPELINE) when
+    // present, falling back to the deterministic demo synthesis.
+    const liveSynthesis =
+      lastResult?.output && typeof lastResult.output === "object"
+        ? (lastResult.output as Record<string, unknown>)
+        : null;
+    const synthesis = liveSynthesis ?? demoSynthesis;
+    const summary =
+      typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0
+        ? (synthesis["summary"] as string)
+        : ((demoSynthesis["summary"] as string) ?? "");
     const recommendation =
       synthesis["recommendedDecision"] === "approve"
         ? `Recommend approve: ${summary}`
         : `Recommend reject based on synthesis findings.`;
+    const nextActions = Array.isArray(synthesis["nextActions"])
+      ? (synthesis["nextActions"] as string[])
+      : ((demoSynthesis["nextActions"] as string[]) ?? []);
 
     await db
       .update(workflowRunsTable)
@@ -248,7 +261,7 @@ export class WorkflowEngine {
         currentStage: "approval_pending",
         summary,
         finalRecommendation: recommendation,
-        nextActions: (synthesis["nextActions"] as string[]) ?? [],
+        nextActions,
       })
       .where(eq(workflowRunsTable.id, workflowRunId));
 

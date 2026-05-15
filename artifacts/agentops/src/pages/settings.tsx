@@ -282,7 +282,7 @@ function SystemTab() {
             </div>
             <p className="text-sm text-muted-foreground">
               {isDemo
-                ? "Agents return curated, scripted reasoning so the demo is repeatable. To switch to live LLM mode, add an OPENAI_API_KEY environment secret and restart the API server."
+                ? "Agents return curated, scripted reasoning so the demo is repeatable. To switch to live LLM mode, either provision the Replit OpenAI integration (sets AI_INTEGRATIONS_OPENAI_BASE_URL + AI_INTEGRATIONS_OPENAI_API_KEY) or add an OPENAI_API_KEY secret, then restart the API server."
                 : "Agents call the live LLM provider for reasoning. Costs and latency are real."}
             </p>
           </>
@@ -302,14 +302,14 @@ function SystemTab() {
               <>
                 <CheckCircle2 className="size-4 text-emerald-300" />
                 <span className="text-sm" data-testid="text-api-key-status">
-                  OpenAI API key detected
+                  LLM credentials detected (Replit integration or OPENAI_API_KEY)
                 </span>
               </>
             ) : (
               <>
                 <span className="size-2 rounded-full bg-rose-400" />
                 <span className="text-sm text-muted-foreground" data-testid="text-api-key-status">
-                  No OpenAI API key configured (demo mode active)
+                  No LLM credentials configured (demo mode active)
                 </span>
               </>
             )}
