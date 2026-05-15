@@ -137,21 +137,22 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Lightweight runtime shape check. Recursively validates that every key in
- * `expected` is present in `actual` with a compatible type:
+ * Lightweight runtime shape check. For every key the model DID return we
+ * verify the type is compatible with the demo fallback:
  *   - primitives must match `typeof`
  *   - arrays must be arrays (element types are not enforced — LLM outputs
  *     legitimately produce variable array contents)
  *   - nested plain objects are validated recursively
- * Missing inner keys still benefit from `deepMerge` backfilling demo values,
- * but a structural mismatch (wrong type at any level) triggers full fallback.
+ * Missing keys are tolerated and will be backfilled from `demoFallback` via
+ * `deepMerge`, so partial-but-valid responses keep their LLM contribution
+ * instead of being discarded wholesale.
  */
 function matchesShape(
   actual: Record<string, unknown>,
   expected: Record<string, unknown>,
 ): boolean {
-  for (const key of Object.keys(expected)) {
-    if (!(key in actual)) return false;
+  for (const key of Object.keys(actual)) {
+    if (!(key in expected)) continue;
     const want = expected[key];
     const got = actual[key];
     if (want === null || got === null) continue;
