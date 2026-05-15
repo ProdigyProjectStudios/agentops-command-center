@@ -230,14 +230,20 @@ export class WorkflowEngine {
     if (!loaded) throw new Error(`Workflow run ${workflowRunId} not found`);
     let { workflowRun, request, portfolioCompany } = loaded;
 
-    // Eligibility: brand-new submissions OR retried failed runs only.
-    if (
-      workflowRun.status !== "submitted" &&
-      workflowRun.status !== "failed"
-    ) {
+    // Eligibility: any non-terminal pipeline status. Terminal statuses
+    // (approval_pending, approved, rejected, finalized) are handled by the
+    // approval/finalize paths; only `failed` re-enters here, alongside any
+    // mid-pipeline status that crashed before reaching approval_pending.
+    const TERMINAL_FOR_RUN: ReadonlySet<string> = new Set([
+      "approval_pending",
+      "approved",
+      "rejected",
+      "finalized",
+    ]);
+    if (TERMINAL_FOR_RUN.has(workflowRun.status)) {
       logger.info(
         { workflowRunId, status: workflowRun.status },
-        "Workflow already past submitted; skipping rerun",
+        "Workflow already at/past approval gate; run() is a no-op",
       );
       return;
     }

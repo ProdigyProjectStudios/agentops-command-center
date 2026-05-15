@@ -191,6 +191,7 @@ export const keywordSearcher: KeywordSearcher = {
             documentId: h.documentId,
             title: h.title,
             category: h.category,
+            snippet: h.snippet,
             score: h.score,
           })),
         },
