@@ -86,8 +86,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             );
           })}
         </nav>
-        <div className="px-5 py-3 border-t border-sidebar-border text-[11px] text-muted-foreground">
-          v0.1 · Portfolio Demo
+        <div className="px-5 py-3 border-t border-sidebar-border text-[11px] text-muted-foreground space-y-1">
+          <Link
+            href="/overview"
+            className="block hover:text-sidebar-foreground transition-colors"
+            data-testid="footer-link-overview"
+          >
+            About this project →
+          </Link>
+          <div>v0.1 · Portfolio Demo</div>
         </div>
       </aside>
 
