@@ -64,11 +64,12 @@ export default function WorkflowDetailPage() {
 
   const [polling, setPolling] = useState(false);
   const queryKey = getGetWorkflowQueryKey(id);
-  const { data: workflow, isLoading } = useGetWorkflow(id, {
+  const { data: workflow, isLoading, error } = useGetWorkflow(id, {
     query: {
       queryKey,
       refetchInterval: polling ? 1200 : false,
       enabled: Number.isFinite(id),
+      retry: false,
     },
   });
 
@@ -106,6 +107,33 @@ export default function WorkflowDetailPage() {
       },
     },
   });
+
+  if (!Number.isFinite(id) || error) {
+    return (
+      <div className="px-8 py-12 max-w-2xl mx-auto">
+        <Card className="p-8 bg-card border-card-border text-center" data-testid="workflow-error">
+          <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-4">
+            <AlertTriangle className="size-6" />
+          </div>
+          <h2 className="text-lg font-semibold mb-1">Workflow not found</h2>
+          <p className="text-sm text-muted-foreground mb-5">
+            {!Number.isFinite(id)
+              ? "That workflow ID isn't valid."
+              : error instanceof Error
+                ? error.message
+                : "We couldn't load this workflow run."}
+          </p>
+          <Link href="/workflows" data-testid="link-back-workflows">
+            <Button variant="outline" asChild>
+              <span className="cursor-pointer">
+                <ArrowLeft className="size-3" /> Back to workflows
+              </span>
+            </Button>
+          </Link>
+        </Card>
+      </div>
+    );
+  }
 
   if (isLoading || !workflow) {
     return (
