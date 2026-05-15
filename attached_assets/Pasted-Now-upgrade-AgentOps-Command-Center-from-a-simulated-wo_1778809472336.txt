@@ -1,0 +1,76 @@
+Now upgrade AgentOps Command Center from a simulated workflow demo into a stronger portfolio-grade multi-agent architecture.
+
+Focus only on backend orchestration, workflow traceability, and real agent structure.
+
+Tasks:
+
+1. Add or improve LangGraph integration if possible.
+If LangGraph installs cleanly, implement the workflow using actual graph nodes:
+- ops_triage_node
+- memory_retrieval_node
+- legal_review_node
+- finance_review_node
+- communications_node
+- approval_node
+- finalize_node
+
+If LangGraph cannot run cleanly in this Replit environment, keep the current orchestrator but rename and structure it clearly as a LangGraph-compatible state graph with nodes, edges, state object, and resumable execution.
+
+2. Add a shared workflow state object.
+The workflow state should include:
+- request details
+- portfolio company
+- current stage
+- agent outputs
+- retrieved memory context
+- tool call results
+- risk flags
+- approval status
+- final summary
+- next actions
+
+3. Add proper structured agent outputs.
+Each agent should return JSON like:
+{
+  "summary": "",
+  "findings": [],
+  "risks": [],
+  "recommended_actions": [],
+  "tool_calls_requested": [],
+  "confidence": 0.0
+}
+
+4. Add a stronger LLM abstraction.
+Create:
+- llm_provider.py
+- base_agent.py
+- agent prompts for Ops, Legal, Finance, Marketing
+- deterministic fallback mode if no API key exists
+
+5. Add memory retrieval layer.
+For now, use simple keyword search against seeded KnowledgeDocument and MemoryChunk records.
+Structure it so pgvector can be added later.
+Every memory retrieval should create a ToolCall log.
+
+6. Improve the Workflow Run Detail frontend.
+Add:
+- visual graph/timeline of the agent workflow
+- expandable JSON/details panels
+- agent output tabs
+- “Retrieved Memory” section
+- “Tool Calls” section
+- “Approval Decision” section
+- “Final Executive Brief” section
+
+7. Add stronger audit trail language.
+Every action should feel enterprise-grade:
+- who/what initiated it
+- which agent performed it
+- what tool was used
+- what changed
+- timestamp
+- workflow status transition
+
+Do not redesign the whole app.
+Do not add unrelated features.
+Make the agent orchestration feel real, traceable, and high-ticket-client ready.
