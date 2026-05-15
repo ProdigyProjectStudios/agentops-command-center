@@ -91,16 +91,21 @@ export const memoryLookupNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "memory_retrieved",
-          `Memory Keeper retrieved ${memoryResult.hits.length} knowledge document(s) (keywords: ${memoryResult.tokens.slice(0, 4).join(", ") || "none"}) and wrote them to shared workflow state.`,
-          {
+        composeAuditEntry({
+          action: "memory_retrieved",
+          message: `Memory Keeper retrieved ${memoryResult.hits.length} knowledge document(s) (keywords: ${memoryResult.tokens.slice(0, 4).join(", ") || "none"}) and wrote them to shared workflow state.`,
+          actor: "memory-keeper",
+          actorType: "agent",
+          agentSlug: "memory-keeper",
+          from: "triaged",
+          to: "triaged",
+          change: `state.retrievedMemory: 0 → ${memoryResult.hits.length} item(s)`,
+          metadata: {
             tokens: memoryResult.tokens,
             documentIds: memoryResult.hits.map((h) => h.documentId),
             citedCount: memoryResult.hits.length,
           },
-          { agentSlug: "memory-keeper" },
-        ),
+        }),
       ],
     };
   },

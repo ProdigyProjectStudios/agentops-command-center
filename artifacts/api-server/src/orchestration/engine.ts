@@ -288,14 +288,21 @@ export class WorkflowEngine {
       .where(eq(workflowRunsTable.id, workflowRunId))
       .returning();
 
-    const startActivity = composeAuditEntry(
-      isResume ? "workflow_resumed" : "workflow_started",
-      isResume
+    const startActivity = composeAuditEntry({
+      action: isResume ? "workflow_resumed" : "workflow_started",
+      message: isResume
         ? `Workflow resumed from prior attempt — ${completedKeys.size} step(s) already completed.`
-        : "Workflow run started.",
-      { resumedSteps: Array.from(completedKeys) },
-      { workflowRunId },
-    );
+        : "Workflow run started — pipeline kicked off from submitted state.",
+      actor: "system",
+      actorType: "system",
+      from: isResume ? (workflowRun?.currentStage ?? "submitted") : "submitted",
+      to: "triaged",
+      change: isResume
+        ? `currentStage: ${workflowRun?.currentStage ?? "submitted"} → triaged (resume)`
+        : "status: submitted → triaged",
+      workflowRunId,
+      metadata: { resumedSteps: Array.from(completedKeys) },
+    });
     await db.insert(activityLogsTable).values({
       workflowRunId,
       actor: "system",
@@ -393,12 +400,17 @@ export class WorkflowEngine {
           completedAt: new Date(),
         })
         .where(eq(workflowRunsTable.id, workflowRunId));
-      const failedActivity = composeAuditEntry(
-        "workflow_failed",
-        `Pipeline failed at stage ${workflowRun?.currentStage ?? "unknown"}: ${String(err)}`,
-        { lastStage: workflowRun?.currentStage },
-        { workflowRunId },
-      );
+      const failedActivity = composeAuditEntry({
+        action: "workflow_failed",
+        message: `Pipeline failed at stage ${workflowRun?.currentStage ?? "unknown"}: ${String(err)}`,
+        actor: "system",
+        actorType: "system",
+        from: workflowRun?.currentStage ?? "unknown",
+        to: "failed",
+        change: `status: ${workflowRun?.currentStage ?? "unknown"} → failed`,
+        workflowRunId,
+        metadata: { lastStage: workflowRun?.currentStage },
+      });
       await db.insert(activityLogsTable).values({
         workflowRunId,
         actor: "system",
