@@ -7,6 +7,8 @@ import { useListWorkflows } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import {
   formatRelative,
   formatCurrencyCents,
@@ -15,20 +17,29 @@ import {
   riskBadge,
   priorityBadge,
 } from "@/lib/format";
+import { PAGE } from "@/lib/copy";
 
 export default function WorkflowsListPage() {
-  const { data, isLoading } = useListWorkflows();
+  const { data, isLoading, error, refetch } = useListWorkflows();
 
   return (
     <PageTransition>
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Workflows</h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          All operational requests routed through the agent pipeline.
-        </p>
+        <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
+          {PAGE.workflows.title}
+        </h2>
+        <p className="text-muted-foreground mt-1 text-sm">{PAGE.workflows.subtitle}</p>
       </div>
 
+      {error ? (
+        <ErrorState
+          title="Couldn't load workflows"
+          description={error instanceof Error ? error.message : "The workflows API didn't respond."}
+          onRetry={() => refetch()}
+          testId="error-workflows"
+        />
+      ) : (
       <Card className="bg-card border-card-border overflow-hidden">
         <div className="grid grid-cols-12 gap-4 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
           <div className="col-span-5">Request</div>
@@ -89,24 +100,24 @@ export default function WorkflowsListPage() {
           </motion.div>
         ))}
         {data && data.length === 0 && (
-          <div className="p-12 text-center" data-testid="empty-workflows">
-            <div className="inline-flex size-12 rounded-full bg-primary/10 text-primary items-center justify-center mb-4">
-              <ListChecks className="size-6" />
-            </div>
-            <h3 className="text-base font-semibold mb-1">No workflows yet</h3>
-            <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
-              Submit your first operational request and watch the agent pipeline triage,
-              review, and recommend in real time.
-            </p>
-            <Button asChild>
-              <Link href="/requests/new">
-                <PlusCircle className="size-4" />
-                New Request
-              </Link>
-            </Button>
-          </div>
+          <EmptyState
+            icon={ListChecks}
+            title="No workflows yet"
+            description="File the first operational request and the agent crew will spin up a run in seconds."
+            action={
+              <Button asChild>
+                <Link href="/requests/new">
+                  <PlusCircle className="size-4" />
+                  New Request
+                </Link>
+              </Button>
+            }
+            variant="bare"
+            testId="empty-workflows"
+          />
         )}
       </Card>
+      )}
     </div>
     </PageTransition>
   );

@@ -21,6 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { PAGE } from "@/lib/copy";
 
 const DEMO_PRESET = {
   title: "Approve $48K roofing contractor for Acme HQ",
@@ -92,11 +93,9 @@ export default function NewRequestPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-            New Operational Request
+            {PAGE.newRequest.title}
           </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            File a request for the multi-agent ops crew to triage, analyze, and route for approval.
-          </p>
+          <p className="text-muted-foreground mt-1 text-sm">{PAGE.newRequest.subtitle}</p>
         </div>
         <Button
           variant="outline"

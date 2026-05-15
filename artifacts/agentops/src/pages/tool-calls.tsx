@@ -26,7 +26,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
 import { formatTimestamp } from "@/lib/format";
+import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 type SortKey = "createdAt" | "toolName" | "durationMs" | "status";
@@ -43,7 +46,7 @@ function statusClass(s: ToolCallStatus): string {
 }
 
 export default function ToolCallsPage() {
-  const { data, isLoading } = useListToolCalls();
+  const { data, isLoading, error, refetch } = useListToolCalls();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | ToolCallStatus>("all");
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
@@ -92,12 +95,19 @@ export default function ToolCallsPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-          Tool Call History
+          {PAGE.toolCalls.title}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Forensic log of every external API call agents have made, across every workflow.
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{PAGE.toolCalls.subtitle}</p>
       </div>
+
+      {error && (
+        <ErrorState
+          title="Couldn't load tool calls"
+          description={error instanceof Error ? error.message : "The tool calls API didn't respond."}
+          onRetry={() => refetch()}
+          testId="error-tool-calls"
+        />
+      )}
 
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[240px]">
@@ -146,15 +156,14 @@ export default function ToolCallsPage() {
         )}
 
         {!isLoading && rows.length === 0 && (
-          <div className="p-12 text-center" data-testid="empty-tool-calls">
-            <div className="inline-flex size-12 rounded-full bg-primary/10 text-primary items-center justify-center mb-3">
-              <Wrench className="size-6" />
-            </div>
-            <p className="text-sm font-medium mb-1">No tool calls match</p>
-            <p className="text-xs text-muted-foreground">
-              Try clearing the search or switching the status filter.
-            </p>
-          </div>
+          <EmptyState
+            icon={Wrench}
+            title="No tool calls match"
+            description="Try clearing the search or switching the status filter."
+            variant="bare"
+            tone="muted"
+            testId="empty-tool-calls"
+          />
         )}
 
         {rows.map((tc, idx) => (

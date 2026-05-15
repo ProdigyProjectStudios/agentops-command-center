@@ -35,6 +35,9 @@ import {
   TabsTrigger,
 } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
+import { PAGE } from "@/lib/copy";
 import { useToast } from "@/hooks/use-toast";
 import {
   approvalStatusBadge,
@@ -59,7 +62,7 @@ const FILTERS: { value: FilterValue; label: string }[] = [
 export default function ApprovalsPage() {
   const [filter, setFilter] = useState<FilterValue>("pending");
   const params = filter === "all" ? undefined : { status: filter };
-  const { data, isLoading } = useListApprovals(params, {
+  const { data, isLoading, error, refetch } = useListApprovals(params, {
     query: { queryKey: getListApprovalsQueryKey(params) },
   });
 
@@ -68,11 +71,9 @@ export default function ApprovalsPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-          Approval Queue
+          {PAGE.approvals.title}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Every decision the agents have escalated to a human, in one place.
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{PAGE.approvals.subtitle}</p>
       </div>
 
       <Tabs value={filter} onValueChange={(v) => setFilter(v as FilterValue)}>
@@ -92,16 +93,22 @@ export default function ApprovalsPage() {
         </div>
       )}
 
-      {!isLoading && data && data.length === 0 && (
-        <Card className="p-12 text-center bg-card border-card-border border-dashed">
-          <div className="inline-flex size-12 rounded-full bg-primary/10 text-primary items-center justify-center mb-3">
-            <Inbox className="size-6" />
-          </div>
-          <h3 className="font-semibold mb-1">Inbox zero</h3>
-          <p className="text-sm text-muted-foreground">
-            No approvals match this filter. The agents have nothing waiting on you right now.
-          </p>
-        </Card>
+      {error && (
+        <ErrorState
+          title="Couldn't load approvals"
+          description={error instanceof Error ? error.message : "The approvals API didn't respond."}
+          onRetry={() => refetch()}
+          testId="error-approvals"
+        />
+      )}
+
+      {!error && !isLoading && data && data.length === 0 && (
+        <EmptyState
+          icon={Inbox}
+          title="Inbox zero"
+          description="No approvals match this filter. The agents have nothing waiting on you right now."
+          testId="empty-approvals"
+        />
       )}
 
       <div className="space-y-4">

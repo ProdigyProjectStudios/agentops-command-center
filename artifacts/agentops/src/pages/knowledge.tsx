@@ -10,6 +10,9 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatRelative } from "@/lib/format";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
+import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 // Read `?doc=<id>` from the URL so deep-links from elsewhere (e.g. the
@@ -34,7 +37,7 @@ function useDocQueryParam(): number | null {
 }
 
 export default function KnowledgePage() {
-  const { data, isLoading } = useListKnowledge();
+  const { data, isLoading, error, refetch } = useListKnowledge();
   const [query, setQuery] = useState("");
   const initialDocId = useDocQueryParam();
   const [selectedId, setSelectedId] = useState<number | null>(initialDocId);
@@ -72,13 +75,21 @@ export default function KnowledgePage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-          Knowledge Base
+          {PAGE.knowledge.title}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          Policy documents and SOPs the agents retrieve from when reasoning over a request.
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{PAGE.knowledge.subtitle}</p>
       </div>
 
+      {error && (
+        <ErrorState
+          title="Couldn't load the knowledge base"
+          description={error instanceof Error ? error.message : "The knowledge API didn't respond."}
+          onRetry={() => refetch()}
+          testId="error-knowledge"
+        />
+      )}
+
+      {!error && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-1 space-y-4">
           <div className="relative">
@@ -132,15 +143,17 @@ export default function KnowledgePage() {
               </motion.button>
             ))}
             {!isLoading && filtered.length === 0 && (
-              <Card className="p-8 text-center bg-card border-card-border border-dashed" data-testid="empty-knowledge">
-                <div className="inline-flex size-10 rounded-full bg-primary/10 text-primary items-center justify-center mb-2">
-                  <Search className="size-5" />
-                </div>
-                <p className="text-sm font-medium mb-0.5">No matches</p>
-                <p className="text-xs text-muted-foreground">
-                  Nothing in the knowledge base matches "{query}".
-                </p>
-              </Card>
+              <EmptyState
+                icon={Search}
+                title="No matches"
+                description={
+                  query
+                    ? `Nothing in the knowledge base matches "${query}".`
+                    : "The knowledge base is empty."
+                }
+                tone="muted"
+                testId="empty-knowledge"
+              />
             )}
           </div>
         </div>
@@ -149,15 +162,17 @@ export default function KnowledgePage() {
           {selected ? (
             <DocumentView doc={selected} query={query} />
           ) : (
-            <Card className="p-12 text-center bg-card border-card-border border-dashed">
-              <BookOpen className="size-8 text-muted-foreground mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">
-                Pick a document to see its contents and a simulated retrieval preview.
-              </p>
-            </Card>
+            <EmptyState
+              icon={BookOpen}
+              title="Pick a document"
+              description="Choose a document on the left to see its contents and a simulated retrieval preview."
+              tone="muted"
+              testId="empty-knowledge-detail"
+            />
           )}
         </div>
       </div>
+      )}
     </div>
     </PageTransition>
   );

@@ -34,7 +34,8 @@ import {
   workflowStatusLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
-import { PRODUCT } from "@/lib/copy";
+import { ErrorState } from "@/components/ErrorState";
+import { PAGE, PRODUCT } from "@/lib/copy";
 
 const PILLARS: Array<{ icon: typeof Bot; label: string }> = [
   { icon: Bot, label: "Multi-agent triage" },
@@ -46,8 +47,13 @@ const PILLARS: Array<{ icon: typeof Bot; label: string }> = [
 ];
 
 export default function DashboardPage() {
-  const { data: metrics, isLoading } = useGetDashboardMetrics();
-  const { data: workflows } = useListWorkflows();
+  const {
+    data: metrics,
+    isLoading,
+    error: metricsError,
+    refetch: refetchMetrics,
+  } = useGetDashboardMetrics();
+  const { data: workflows, error: workflowsError } = useListWorkflows();
 
   const recentWorkflows = (workflows ?? []).slice(0, 6);
 
@@ -68,11 +74,10 @@ export default function DashboardPage() {
               {PRODUCT.tagline}
             </div>
             <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight" data-testid="text-page-title">
-              Operations Command Center
+              {PAGE.dashboard.title}
             </h2>
             <p className="text-muted-foreground mt-2 text-sm sm:text-base leading-relaxed">
-              A live cockpit for every operational request crossing your portfolio —
-              triaged, reviewed, and routed by a coordinated agent crew.
+              {PAGE.dashboard.subtitle}
             </p>
             <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
               {PILLARS.map((p) => {
@@ -109,6 +114,19 @@ export default function DashboardPage() {
           </div>
         </div>
       </motion.section>
+
+      {(metricsError || workflowsError) && (
+        <ErrorState
+          title="Couldn't load the dashboard"
+          description={
+            (metricsError ?? workflowsError) instanceof Error
+              ? ((metricsError ?? workflowsError) as Error).message
+              : "The dashboard API didn't respond."
+          }
+          onRetry={() => refetchMetrics()}
+          testId="error-dashboard"
+        />
+      )}
 
       {/* KPI strip */}
       <motion.div

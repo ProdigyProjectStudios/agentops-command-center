@@ -20,6 +20,9 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { formatRelative } from "@/lib/format";
+import { EmptyState } from "@/components/EmptyState";
+import { ErrorState } from "@/components/ErrorState";
+import { PAGE } from "@/lib/copy";
 import { cn } from "@/lib/utils";
 
 const AGENT_ICONS: Record<string, typeof Bot> = {
@@ -49,7 +52,7 @@ function statusBadgeClass(status: DerivedStatus): string {
 }
 
 export default function AgentsPage() {
-  const { data, isLoading } = useListAgents();
+  const { data, isLoading, error, refetch } = useListAgents();
   const { data: workflows } = useListWorkflows();
   const anyRunning = (workflows ?? []).some((w) => !TERMINAL_STATUSES.has(w.status));
 
@@ -62,12 +65,28 @@ export default function AgentsPage() {
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-          Agent Directory
+          {PAGE.agents.title}
         </h2>
-        <p className="text-muted-foreground mt-1 text-sm">
-          The multi-agent crew that powers AgentOps. Each one specializes, all share memory.
-        </p>
+        <p className="text-muted-foreground mt-1 text-sm">{PAGE.agents.subtitle}</p>
       </div>
+
+      {error && (
+        <ErrorState
+          title="Couldn't load the agent directory"
+          description={error instanceof Error ? error.message : "The agents API didn't respond."}
+          onRetry={() => refetch()}
+          testId="error-agents"
+        />
+      )}
+
+      {!error && !isLoading && data && data.length === 0 && (
+        <EmptyState
+          icon={Bot}
+          title="No agents registered"
+          description="Run the seed script to populate the default agent crew."
+          testId="empty-agents"
+        />
+      )}
 
       {isLoading && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
