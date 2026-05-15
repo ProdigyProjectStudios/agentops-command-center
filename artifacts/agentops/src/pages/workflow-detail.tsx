@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { PageTransition } from "@/components/PageTransition";
 import {
   ArrowLeft,
@@ -57,11 +59,8 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-// -----------------------------------------------------------------------------
-// Pipeline graph definition — the seven user-visible nodes from Task #16.
-// Synthesis is intentionally hidden from the graph; its output is rolled into
-// the Final Executive Brief at the bottom of the page.
-// -----------------------------------------------------------------------------
+// Pipeline graph: seven user-visible nodes. Synthesis is hidden and rolled
+// into the Final Executive Brief.
 type NodeKey =
   | "ops_triage"
   | "memory_retrieval"
@@ -91,9 +90,7 @@ const PIPELINE_NODES: Array<{
 // The synthesis node is the canonical source for the final executive brief.
 const SYNTHESIS_STEP_NAME = "Risk Synthesis";
 
-// -----------------------------------------------------------------------------
 // AgentOutput envelope (mirror of the backend type) — only the fields we read.
-// -----------------------------------------------------------------------------
 interface AgentOutputEnvelope {
   summary?: string;
   findings?: string[];
@@ -120,10 +117,8 @@ function asEnvelope(output: unknown): AgentOutputEnvelope {
   };
 }
 
-// -----------------------------------------------------------------------------
-// Retrieved-memory aggregation: read every memory_search tool call and dedupe
+// Memory aggregation: read every memory_search tool call and dedupe
 // by documentId, keeping the highest-scored hit (matches engine semantics).
-// -----------------------------------------------------------------------------
 interface MemoryHit {
   documentId: number;
   title: string;
@@ -145,9 +140,6 @@ function aggregateMemory(toolCalls: ToolCall[]): MemoryHit[] {
   return Array.from(byId.values()).sort((a, b) => b.score - a.score);
 }
 
-// -----------------------------------------------------------------------------
-// Page
-// -----------------------------------------------------------------------------
 export default function WorkflowDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
@@ -193,6 +185,54 @@ export default function WorkflowDetailPage() {
       },
     },
   });
+
+  // Responsive accordion behavior: single-open on small screens, multi-open on
+  // wide screens. By default, expand any node that has produced output.
+  // Hooks must run unconditionally, so we compute defaults from `workflow`
+  // (which is undefined during loading) and tolerate that.
+  const isMobile = useIsMobile();
+  const defaultExpanded = useMemo<Set<NodeKey>>(() => {
+    const s = new Set<NodeKey>();
+    if (!workflow) return s;
+    const stepsByName = new Map(workflow.steps.map((st) => [st.name, st]));
+    for (const node of PIPELINE_NODES) {
+      const step = node.matches.map((m) => stepsByName.get(m)).find(Boolean);
+      if (step && (step.status === "completed" || step.status === "failed" || step.status === "running")) {
+        s.add(node.key);
+      }
+    }
+    return s;
+  }, [workflow]);
+  const [expanded, setExpanded] = useState<Set<NodeKey>>(() => new Set());
+  useEffect(() => {
+    setExpanded(isMobile ? new Set([...defaultExpanded].slice(-1)) : defaultExpanded);
+  }, [defaultExpanded, isMobile]);
+  const toggleNode = useCallback(
+    (key: NodeKey) => {
+      setExpanded((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) {
+          next.delete(key);
+        } else {
+          if (isMobile) next.clear();
+          next.add(key);
+        }
+        return next;
+      });
+    },
+    [isMobile],
+  );
+  const expandNode = useCallback(
+    (key: NodeKey) => {
+      setExpanded((prev) => {
+        if (prev.has(key)) return prev;
+        const next = isMobile ? new Set<NodeKey>() : new Set(prev);
+        next.add(key);
+        return next;
+      });
+    },
+    [isMobile],
+  );
 
   if (!Number.isFinite(id) || error) {
     return (
@@ -273,7 +313,6 @@ export default function WorkflowDetailPage() {
       if (past && cur.status === "pending") cur.status = "skipped";
     }
   }
-  void sawRunning;
 
   const synthesisStep = stepsByName.get(SYNTHESIS_STEP_NAME);
   const synthesisEnvelope = synthesisStep ? asEnvelope(synthesisStep.output) : null;
@@ -350,7 +389,7 @@ export default function WorkflowDetailPage() {
               </Button>
             )}
           </div>
-          <GraphTimeline nodes={PIPELINE_NODES} state={nodeStateByKey} />
+          <GraphTimeline nodes={PIPELINE_NODES} state={nodeStateByKey} onSelect={expandNode} />
         </Card>
 
         {/* Two-column layout */}
@@ -375,7 +414,6 @@ export default function WorkflowDetailPage() {
               <AnimatePresence initial={false}>
                 {PIPELINE_NODES.map((node, idx) => {
                   const entry = nodeStateByKey.get(node.key)!;
-                  if (!entry.step) return null;
                   return (
                     <motion.div
                       key={node.key}
@@ -387,7 +425,10 @@ export default function WorkflowDetailPage() {
                       <AgentPanel
                         node={node}
                         step={entry.step}
+                        status={entry.status}
                         toolCalls={workflow.toolCalls}
+                        expanded={expanded.has(node.key)}
+                        onToggle={() => toggleNode(node.key)}
                       />
                     </motion.div>
                   );
@@ -454,9 +495,7 @@ export default function WorkflowDetailPage() {
   );
 }
 
-// =============================================================================
 // Graph timeline
-// =============================================================================
 type NodeStatus = "pending" | "running" | "completed" | "failed" | "skipped";
 
 function nodeColor(status: NodeStatus) {
@@ -497,13 +536,18 @@ function nodeColor(status: NodeStatus) {
 function GraphTimeline({
   nodes,
   state,
+  onSelect,
 }: {
   nodes: typeof PIPELINE_NODES;
   state: Map<NodeKey, { step?: AgentStep; status: NodeStatus }>;
+  onSelect: (key: NodeKey) => void;
 }) {
   function scrollToNode(key: NodeKey) {
-    const el = document.getElementById(`agent-${key}`);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    onSelect(key);
+    requestAnimationFrame(() => {
+      const el = document.getElementById(`agent-${key}`);
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
   }
   return (
     <div className="flex items-stretch gap-0 overflow-x-auto pb-1">
@@ -517,8 +561,7 @@ function GraphTimeline({
         return (
           <div key={node.key} className="flex items-center min-w-0 flex-1">
             <motion.button
-              onClick={() => entry.step && scrollToNode(node.key)}
-              disabled={!entry.step}
+              onClick={() => scrollToNode(node.key)}
               data-testid={`graph-node-${node.key}`}
               data-status={entry.status}
               initial={false}
@@ -529,9 +572,8 @@ function GraphTimeline({
                   : { duration: 0.25 }
               }
               className={cn(
-                "flex flex-col items-center gap-1.5 px-2 py-2 rounded-lg border transition-colors min-w-0 flex-1",
+                "flex flex-col items-center gap-1.5 px-2 py-2 rounded-lg border transition-colors min-w-0 flex-1 cursor-pointer hover-elevate",
                 c.ring,
-                entry.step ? "cursor-pointer hover-elevate" : "cursor-default",
               )}
             >
               <div className="flex items-center gap-1.5 min-w-0">
@@ -563,61 +605,79 @@ function GraphTimeline({
   );
 }
 
-// =============================================================================
 // Agent detail panel with tabs over the AgentOutput envelope
-// =============================================================================
 function AgentPanel({
   node,
   step,
+  status,
   toolCalls,
+  expanded,
+  onToggle,
 }: {
   node: (typeof PIPELINE_NODES)[number];
-  step: AgentStep;
+  step?: AgentStep;
+  status: NodeStatus;
   toolCalls: ToolCall[];
+  expanded: boolean;
+  onToggle: () => void;
 }) {
-  const env = asEnvelope(step.output);
-  const stepToolCalls = toolCalls.filter((tc) => tc.agentStepId === step.id);
-  const completed = step.status === "completed";
-  const failed = step.status === "failed";
-  const running = step.status === "running";
+  const env = step ? asEnvelope(step.output) : {};
+  const stepToolCalls = step ? toolCalls.filter((tc) => tc.agentStepId === step.id) : [];
+  const hasOutput = step && (status === "completed" || status === "failed");
+  const NodeIcon = node.icon;
 
   return (
     <Card
       className={cn(
         "bg-card border-card-border overflow-hidden transition-colors",
-        running && "border-sky-500/40",
-        failed && "border-rose-500/40",
+        status === "running" && "border-sky-500/40",
+        status === "failed" && "border-rose-500/40",
+        status === "skipped" && "opacity-60",
       )}
       data-testid={`agent-panel-${node.key}`}
+      data-status={status}
     >
-      <div className="p-4 flex items-start gap-3 border-b border-card-border">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={expanded}
+        aria-controls={`agent-body-${node.key}`}
+        className="w-full p-4 flex items-start gap-3 text-left hover-elevate"
+        data-testid={`agent-header-${node.key}`}
+      >
         <div
           className={cn(
             "size-9 rounded-md flex items-center justify-center shrink-0",
-            completed && "bg-emerald-500/15 text-emerald-300",
-            running && "bg-sky-500/15 text-sky-300",
-            failed && "bg-rose-500/15 text-rose-300",
-            step.status === "pending" && "bg-muted text-muted-foreground",
+            status === "completed" && "bg-emerald-500/15 text-emerald-300",
+            status === "running" && "bg-sky-500/15 text-sky-300",
+            status === "failed" && "bg-rose-500/15 text-rose-300",
+            (status === "pending" || status === "skipped") && "bg-muted text-muted-foreground",
           )}
         >
-          {running ? (
+          {status === "running" ? (
             <Loader2 className="size-4 animate-spin" />
-          ) : failed ? (
+          ) : status === "failed" ? (
             <XCircle className="size-4" />
-          ) : completed ? (
+          ) : status === "completed" ? (
             <CheckCircle2 className="size-4" />
           ) : (
-            <Bot className="size-4" />
+            <NodeIcon className="size-4" />
           )}
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground tabular-nums">#{step.stepIndex + 1}</span>
+            {step && (
+              <span className="text-xs text-muted-foreground tabular-nums">#{step.stepIndex + 1}</span>
+            )}
             <span className="text-sm font-medium" data-testid={`agent-name-${node.key}`}>
-              {step.agentName}
+              {step?.agentName ?? node.label}
             </span>
-            <StatusBadge className={stepStatusBadge(step.status)}>{step.status}</StatusBadge>
-            {step.confidence != null && (
+            <StatusBadge
+              className={stepStatusBadge(step?.status ?? (status === "skipped" ? "pending" : status))}
+            >
+              {step?.status ?? status}
+            </StatusBadge>
+            {step?.confidence != null && (
               <span className="text-[11px] text-muted-foreground">
                 conf {Math.round(Number(step.confidence) * 100)}%
               </span>
@@ -631,68 +691,86 @@ function AgentPanel({
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">{node.label}</div>
         </div>
-        <div className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-          {step.completedAt
-            ? formatRelative(step.completedAt)
-            : step.startedAt
-              ? formatRelative(step.startedAt)
-              : "—"}
-        </div>
-      </div>
-
-      {completed || failed ? (
-        <Tabs defaultValue="summary" className="w-full">
-          <TabsList className="w-full justify-start rounded-none border-b border-card-border bg-card/40 px-4 h-auto py-1.5 gap-0.5 overflow-x-auto">
-            <TabsTrigger value="summary" className="text-xs" data-testid={`tab-summary-${node.key}`}>Summary</TabsTrigger>
-            <TabsTrigger value="findings" className="text-xs">
-              Findings{env.findings && env.findings.length > 0 ? ` (${env.findings.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="risks" className="text-xs">
-              Risks{env.risks && env.risks.length > 0 ? ` (${env.risks.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="actions" className="text-xs">
-              Actions{env.recommendedActions && env.recommendedActions.length > 0 ? ` (${env.recommendedActions.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="tools" className="text-xs">
-              Tool Calls{stepToolCalls.length > 0 ? ` (${stepToolCalls.length})` : ""}
-            </TabsTrigger>
-            <TabsTrigger value="raw" className="text-xs">Raw JSON</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="summary" className="px-4 py-4 m-0">
-            <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`summary-${node.key}`}>
-              {env.summary || step.reasoningSummary || "No summary produced."}
-            </p>
-          </TabsContent>
-
-          <TabsContent value="findings" className="px-4 py-4 m-0">
-            <BulletList items={env.findings ?? []} icon={FileText} testIdPrefix={`finding-${node.key}`} emptyText="No findings." />
-          </TabsContent>
-
-          <TabsContent value="risks" className="px-4 py-4 m-0">
-            <BulletList items={env.risks ?? []} icon={AlertTriangle} testIdPrefix={`risk-${node.key}`} emptyText="No risks flagged." iconClass="text-amber-300" />
-          </TabsContent>
-
-          <TabsContent value="actions" className="px-4 py-4 m-0">
-            <BulletList items={env.recommendedActions ?? []} icon={Target} testIdPrefix={`action-${node.key}`} emptyText="No recommended actions." iconClass="text-primary" />
-          </TabsContent>
-
-          <TabsContent value="tools" className="px-4 py-4 m-0 space-y-2">
-            {stepToolCalls.length === 0 && (
-              <p className="text-xs text-muted-foreground">No tool calls recorded for this agent.</p>
+        <div className="flex items-center gap-2 shrink-0">
+          {step && (
+            <span className="text-[11px] text-muted-foreground tabular-nums">
+              {step.completedAt
+                ? formatRelative(step.completedAt)
+                : step.startedAt
+                  ? formatRelative(step.startedAt)
+                  : "—"}
+            </span>
+          )}
+          <ChevronDown
+            className={cn(
+              "size-4 text-muted-foreground transition-transform",
+              expanded && "rotate-180",
             )}
-            {stepToolCalls.map((tc) => (
-              <ToolCallRow key={tc.id} tc={tc} compact />
-            ))}
-          </TabsContent>
+          />
+        </div>
+      </button>
 
-          <TabsContent value="raw" className="px-4 py-4 m-0">
-            <RawJsonBlock value={step.output} testId={`raw-${node.key}`} />
-          </TabsContent>
-        </Tabs>
-      ) : (
-        <div className="px-4 py-6 text-xs text-muted-foreground" data-testid={`agent-pending-${node.key}`}>
-          {running ? "Agent is working…" : "Waiting for upstream agents."}
+      {expanded && (
+        <div id={`agent-body-${node.key}`} className="border-t border-card-border">
+          {hasOutput ? (
+            <Tabs defaultValue="summary" className="w-full">
+              <TabsList className="w-full justify-start rounded-none border-b border-card-border bg-card/40 px-4 h-auto py-1.5 gap-0.5 overflow-x-auto">
+                <TabsTrigger value="summary" className="text-xs" data-testid={`tab-summary-${node.key}`}>Summary</TabsTrigger>
+                <TabsTrigger value="findings" className="text-xs">
+                  Findings{env.findings && env.findings.length > 0 ? ` (${env.findings.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="risks" className="text-xs">
+                  Risks{env.risks && env.risks.length > 0 ? ` (${env.risks.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="actions" className="text-xs">
+                  Actions{env.recommendedActions && env.recommendedActions.length > 0 ? ` (${env.recommendedActions.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="tools" className="text-xs">
+                  Tool Calls{stepToolCalls.length > 0 ? ` (${stepToolCalls.length})` : ""}
+                </TabsTrigger>
+                <TabsTrigger value="raw" className="text-xs">Raw JSON</TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="summary" className="px-4 py-4 m-0">
+                <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`summary-${node.key}`}>
+                  {env.summary || step!.reasoningSummary || "No summary produced."}
+                </p>
+              </TabsContent>
+
+              <TabsContent value="findings" className="px-4 py-4 m-0">
+                <BulletList items={env.findings ?? []} icon={FileText} testIdPrefix={`finding-${node.key}`} emptyText="No findings." />
+              </TabsContent>
+
+              <TabsContent value="risks" className="px-4 py-4 m-0">
+                <BulletList items={env.risks ?? []} icon={AlertTriangle} testIdPrefix={`risk-${node.key}`} emptyText="No risks flagged." iconClass="text-amber-300" />
+              </TabsContent>
+
+              <TabsContent value="actions" className="px-4 py-4 m-0">
+                <BulletList items={env.recommendedActions ?? []} icon={Target} testIdPrefix={`action-${node.key}`} emptyText="No recommended actions." iconClass="text-primary" />
+              </TabsContent>
+
+              <TabsContent value="tools" className="px-4 py-4 m-0 space-y-2">
+                {stepToolCalls.length === 0 && (
+                  <p className="text-xs text-muted-foreground">No tool calls recorded for this agent.</p>
+                )}
+                {stepToolCalls.map((tc) => (
+                  <ToolCallRow key={tc.id} tc={tc} compact />
+                ))}
+              </TabsContent>
+
+              <TabsContent value="raw" className="px-4 py-4 m-0">
+                <RawJsonBlock value={step!.output} testId={`raw-${node.key}`} />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            <div className="px-4 py-6 text-xs text-muted-foreground" data-testid={`agent-pending-${node.key}`}>
+              {status === "running"
+                ? "Agent is working…"
+                : status === "skipped"
+                  ? "Skipped due to upstream failure."
+                  : "Waiting for upstream agents."}
+            </div>
+          )}
         </div>
       )}
     </Card>
@@ -727,26 +805,96 @@ function BulletList({
   );
 }
 
-function RawJsonBlock({ value, testId }: { value: unknown; testId?: string }) {
+// Lightweight JSON syntax highlighter (no external dep). Tokenises strings,
+// numbers, booleans/null, and keys, then renders them with semantic color
+// classes. Safe-by-construction: tokens are only produced from JSON.stringify
+// output (or a string the caller explicitly opted-in), so React's default
+// escaping handles arbitrary user content.
+function highlightJson(src: string): React.ReactNode {
+  const tokenRe =
+    /("(?:\\.|[^"\\])*"\s*:?)|\b(true|false|null)\b|(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)|([{}[\],])/g;
+  const parts: React.ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let i = 0;
+  while ((match = tokenRe.exec(src)) !== null) {
+    if (match.index > last) parts.push(src.slice(last, match.index));
+    const [raw, str, lit, num, punct] = match;
+    if (str !== undefined) {
+      const isKey = str.endsWith(":") || /"\s*:$/.test(str);
+      parts.push(
+        <span key={i++} className={isKey ? "text-sky-300" : "text-emerald-300"}>
+          {str}
+        </span>,
+      );
+    } else if (lit !== undefined) {
+      parts.push(
+        <span key={i++} className="text-amber-300">
+          {lit}
+        </span>,
+      );
+    } else if (num !== undefined) {
+      parts.push(
+        <span key={i++} className="text-fuchsia-300">
+          {num}
+        </span>,
+      );
+    } else if (punct !== undefined) {
+      parts.push(
+        <span key={i++} className="text-muted-foreground">
+          {punct}
+        </span>,
+      );
+    } else {
+      parts.push(raw);
+    }
+    last = match.index + raw.length;
+  }
+  if (last < src.length) parts.push(src.slice(last));
+  return parts;
+}
+
+function RawJsonBlock({
+  value,
+  testId,
+  defaultOpen = false,
+}: {
+  value: unknown;
+  testId?: string;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
   let body: string;
   try {
     body = typeof value === "string" ? value : JSON.stringify(value, null, 2);
   } catch {
     body = String(value);
   }
+  const lineCount = body ? body.split("\n").length : 0;
   return (
-    <pre
-      data-testid={testId}
-      className="text-xs font-mono bg-background/50 border border-border rounded p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-96"
-    >
-      {body || "—"}
-    </pre>
+    <Collapsible open={open} onOpenChange={setOpen} data-testid={testId}>
+      <CollapsibleTrigger
+        className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded border border-border bg-background/40 hover-elevate text-left"
+        data-testid={testId ? `${testId}-toggle` : undefined}
+      >
+        <span className="inline-flex items-center gap-2 text-xs font-mono">
+          {open ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
+          Raw JSON
+        </span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          {lineCount} line{lineCount !== 1 ? "s" : ""}
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent>
+        <pre className="mt-2 text-xs font-mono bg-background/60 border border-border rounded p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-96 leading-relaxed">
+          {body ? highlightJson(body) : "—"}
+        </pre>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
-// =============================================================================
 // Retrieved memory
-// =============================================================================
 function RetrievedMemorySection({ hits }: { hits: MemoryHit[] }) {
   if (hits.length === 0) return null;
   return (
@@ -784,9 +932,7 @@ function RetrievedMemorySection({ hits }: { hits: MemoryHit[] }) {
   );
 }
 
-// =============================================================================
 // Tool calls section
-// =============================================================================
 function ToolCallsSection({
   toolCalls,
   steps,
@@ -877,9 +1023,7 @@ function ToolCallRow({
   );
 }
 
-// =============================================================================
 // Approval Decision section
-// =============================================================================
 function ApprovalDecisionSection({
   workflow,
   queryKey,
@@ -1025,9 +1169,7 @@ function ApprovalDecisionSection({
   );
 }
 
-// =============================================================================
 // Final Executive Brief — board-ready, sourced from synthesis + workflow.
-// =============================================================================
 function FinalExecutiveBrief({
   workflow,
   synthesis,
@@ -1115,9 +1257,7 @@ function FinalExecutiveBrief({
   );
 }
 
-// =============================================================================
 // Audit log sidebar
-// =============================================================================
 function AuditLogSidebar({ activity }: { activity: ActivityLog[] }) {
   return (
     <Card className="p-5 bg-card border-card-border">
