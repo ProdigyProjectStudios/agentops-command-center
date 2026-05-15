@@ -560,8 +560,8 @@ function HeroBeam({
         delay,
         repeat: Infinity,
         repeatDelay: 6,
-        ease: "easeInOut",
-        times: [0, 0.15, 0.85, 1],
+        ease: "linear",
+        times: [0, 0.1, 0.9, 1],
       }}
     />
   );
