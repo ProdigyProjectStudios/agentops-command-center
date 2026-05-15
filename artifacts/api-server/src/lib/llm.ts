@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { ZodTypeAny } from "zod";
 import { logger } from "./logger";
+import { FALLBACK_DEFAULT_MODEL } from "./llm-models";
 
 export type LlmMode = "demo" | "live";
 
@@ -33,7 +34,7 @@ function getClient(): OpenAI | null {
   return client;
 }
 
-const MODEL = process.env["LLM_MODEL"] ?? "gpt-4o-mini";
+const ENV_MODEL = process.env["LLM_MODEL"] ?? FALLBACK_DEFAULT_MODEL;
 const MAX_TOKENS = 2048;
 const REQUEST_TIMEOUT_MS = Number(
   process.env["LLM_REQUEST_TIMEOUT_MS"] ?? "20000",
@@ -41,8 +42,8 @@ const REQUEST_TIMEOUT_MS = Number(
 
 if (!process.env["LLM_MODEL"] && liveCredentials()) {
   logger.warn(
-    { defaultModel: MODEL },
-    "LLM_MODEL env var not set; defaulting model. Set LLM_MODEL to pin a specific model.",
+    { defaultModel: ENV_MODEL },
+    "LLM_MODEL env var not set; defaulting model. Operators can pick a model in the AgentOps settings UI, or set LLM_MODEL to pin one.",
   );
 }
 
@@ -59,6 +60,12 @@ export interface AgentInvocation {
    * demo fallback). Validation failures fall back to the demo output.
    */
   schema?: ZodTypeAny;
+  /**
+   * Override the model used for this invocation. When omitted the env-var
+   * default is used. Resolved per-agent via `lib/model-config` so operators
+   * can tune cost vs. quality from the AgentOps settings UI.
+   */
+  model?: string;
 }
 
 export async function generateAgentOutput(
@@ -76,6 +83,7 @@ export async function generateAgentOutput(
     return invocation.demoFallback;
   }
 
+  const model = invocation.model ?? ENV_MODEL;
   const schemaHint = JSON.stringify(invocation.demoFallback, null, 2);
   const system = `${invocation.systemPrompt}
 
@@ -96,7 +104,7 @@ ${schemaHint}`;
   try {
     const completion = await openai.chat.completions.create(
       {
-        model: MODEL,
+        model: model,
         max_completion_tokens: MAX_TOKENS,
         response_format: { type: "json_object" },
         messages: [
@@ -109,7 +117,7 @@ ${schemaHint}`;
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
       logger.warn(
-        { agentSlug: invocation.agentSlug, model: MODEL },
+        { agentSlug: invocation.agentSlug, model: model },
         "LLM live call fell back to demo: empty content from model",
       );
       return invocation.demoFallback;
@@ -117,7 +125,7 @@ ${schemaHint}`;
     const parsed = JSON.parse(raw) as unknown;
     if (!isPlainObject(parsed)) {
       logger.warn(
-        { agentSlug: invocation.agentSlug, model: MODEL, raw },
+        { agentSlug: invocation.agentSlug, model: model, raw },
         "LLM live call fell back to demo: response was not a JSON object",
       );
       return invocation.demoFallback;
@@ -129,7 +137,7 @@ ${schemaHint}`;
         logger.warn(
           {
             agentSlug: invocation.agentSlug,
-            model: MODEL,
+            model: model,
             raw,
             issues: result.error.issues,
           },
@@ -138,7 +146,7 @@ ${schemaHint}`;
         return invocation.demoFallback;
       }
       logger.debug(
-        { agentSlug: invocation.agentSlug, model: MODEL },
+        { agentSlug: invocation.agentSlug, model: model },
         "LLM live call succeeded",
       );
       return deepMerge(
@@ -148,19 +156,19 @@ ${schemaHint}`;
     }
     if (!matchesShape(parsed, invocation.demoFallback)) {
       logger.warn(
-        { agentSlug: invocation.agentSlug, model: MODEL, raw },
+        { agentSlug: invocation.agentSlug, model: model, raw },
         "LLM live call fell back to demo: response did not match expected shape",
       );
       return invocation.demoFallback;
     }
     logger.debug(
-      { agentSlug: invocation.agentSlug, model: MODEL },
+      { agentSlug: invocation.agentSlug, model: model },
       "LLM live call succeeded",
     );
     return deepMerge(invocation.demoFallback, parsed);
   } catch (err) {
     logger.warn(
-      { err, agentSlug: invocation.agentSlug, model: MODEL },
+      { err, agentSlug: invocation.agentSlug, model: model },
       "LLM live call fell back to demo: API, timeout, or parse error",
     );
     return invocation.demoFallback;

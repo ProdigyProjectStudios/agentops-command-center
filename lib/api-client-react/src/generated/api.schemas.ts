@@ -26,6 +26,56 @@ export interface SystemMode {
   hasApiKey: boolean;
 }
 
+export type AvailableModelTier = typeof AvailableModelTier[keyof typeof AvailableModelTier];
+
+
+export const AvailableModelTier = {
+  frontier: 'frontier',
+  balanced: 'balanced',
+  fast: 'fast',
+} as const;
+
+export interface AvailableModel {
+  id: string;
+  label: string;
+  description: string;
+  tier: AvailableModelTier;
+}
+
+export interface AgentModelOverride {
+  agentSlug: string;
+  agentName: string;
+  modelOverride: string | null;
+}
+
+export type ModelSettingsEffectiveDefaultSource = typeof ModelSettingsEffectiveDefaultSource[keyof typeof ModelSettingsEffectiveDefaultSource];
+
+
+export const ModelSettingsEffectiveDefaultSource = {
+  system_settings: 'system_settings',
+  env: 'env',
+  fallback: 'fallback',
+} as const;
+
+export interface ModelSettings {
+  defaultModel: string;
+  effectiveDefaultSource: ModelSettingsEffectiveDefaultSource;
+  available: AvailableModel[];
+  overrides: AgentModelOverride[];
+}
+
+export interface UpdateModelOverrideInput {
+  /** @minLength 1 */
+  agentSlug: string;
+  modelOverride?: string | null;
+}
+
+export interface UpdateModelSettingsInput {
+  /** @minLength 1 */
+  defaultModel?: string;
+  overrides?: UpdateModelOverrideInput[];
+}
+
 export type WorkflowStatus = typeof WorkflowStatus[keyof typeof WorkflowStatus];
 
 

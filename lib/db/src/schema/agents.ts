@@ -12,6 +12,7 @@ export const agentsTable = pgTable("agents", {
   capabilities: jsonb("capabilities").$type<string[]>().notNull().default([]),
   tools: jsonb("tools").$type<string[]>().notNull().default([]),
   status: agentStatusEnum("status").notNull().default("active"),
+  modelOverride: text("model_override"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),

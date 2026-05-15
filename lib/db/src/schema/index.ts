@@ -10,3 +10,4 @@ export * from "./agent-steps";
 export * from "./tool-calls";
 export * from "./approval-requests";
 export * from "./activity-logs";
+export * from "./system-settings";

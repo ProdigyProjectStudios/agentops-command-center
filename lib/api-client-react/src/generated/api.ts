@@ -29,6 +29,7 @@ import type {
   HealthStatus,
   KnowledgeDocument,
   ListApprovalsParams,
+  ModelSettings,
   NotFoundResponse,
   OperationalRequest,
   OperationalRequestInput,
@@ -38,6 +39,7 @@ import type {
   SystemMode,
   ToolCall,
   ToolCallEntry,
+  UpdateModelSettingsInput,
   WorkflowRunDetail,
   WorkflowRunSummary
 } from './api.schemas';
@@ -1643,4 +1645,152 @@ export function useGetSystemMode<TData = Awaited<ReturnType<typeof getSystemMode
 
 
 
+
+export const getGetSystemModelsUrl = () => {
+
+
+
+
+  return `/api/system/models`
+}
+
+/**
+ * @summary Returns the configured default LLM model and per-agent overrides
+ */
+export const getSystemModels = async ( options?: RequestInit): Promise<ModelSettings> => {
+
+  return customFetch<ModelSettings>(getGetSystemModelsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSystemModelsQueryKey = () => {
+    return [
+    `/api/system/models`
+    ] as const;
+    }
+
+
+export const getGetSystemModelsQueryOptions = <TData = Awaited<ReturnType<typeof getSystemModels>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSystemModels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSystemModelsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSystemModels>>> = ({ signal }) => getSystemModels({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSystemModels>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSystemModelsQueryResult = NonNullable<Awaited<ReturnType<typeof getSystemModels>>>
+export type GetSystemModelsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Returns the configured default LLM model and per-agent overrides
+ */
+
+export function useGetSystemModels<TData = Awaited<ReturnType<typeof getSystemModels>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSystemModels>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSystemModelsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return { ...query, queryKey: queryOptions.queryKey };
+}
+
+
+
+
+
+
+
+export const getUpdateSystemModelsUrl = () => {
+
+
+
+
+  return `/api/system/models`
+}
+
+/**
+ * @summary Update the default LLM model and per-agent overrides
+ */
+export const updateSystemModels = async (updateModelSettingsInput: UpdateModelSettingsInput, options?: RequestInit): Promise<ModelSettings> => {
+
+  return customFetch<ModelSettings>(getUpdateSystemModelsUrl(),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateModelSettingsInput,)
+  }
+);}
+
+
+
+
+export const getUpdateSystemModelsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemModels>>, TError,{data: BodyType<UpdateModelSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSystemModels>>, TError,{data: BodyType<UpdateModelSettingsInput>}, TContext> => {
+
+const mutationKey = ['updateSystemModels'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSystemModels>>, {data: BodyType<UpdateModelSettingsInput>}> = (props) => {
+          const {data} = props ?? {};
+
+          return  updateSystemModels(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSystemModelsMutationResult = NonNullable<Awaited<ReturnType<typeof updateSystemModels>>>
+    export type UpdateSystemModelsMutationBody = BodyType<UpdateModelSettingsInput>
+    export type UpdateSystemModelsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Update the default LLM model and per-agent overrides
+ */
+export const useUpdateSystemModels = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSystemModels>>, TError,{data: BodyType<UpdateModelSettingsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSystemModels>>,
+        TError,
+        {data: BodyType<UpdateModelSettingsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateSystemModelsMutationOptions(options));
+    }
 

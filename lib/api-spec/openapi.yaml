@@ -409,6 +409,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/SystemMode"
 
+  /system/models:
+    get:
+      operationId: getSystemModels
+      tags: [dashboard]
+      summary: Returns the configured default LLM model and per-agent overrides
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelSettings"
+    put:
+      operationId: updateSystemModels
+      tags: [dashboard]
+      summary: Update the default LLM model and per-agent overrides
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateModelSettingsInput"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelSettings"
+
 components:
   responses:
     NotFound:
@@ -442,6 +472,72 @@ components:
           enum: [demo, live]
         hasApiKey:
           type: boolean
+
+    AvailableModel:
+      type: object
+      required: [id, label, description, tier]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        description:
+          type: string
+        tier:
+          type: string
+          enum: [frontier, balanced, fast]
+
+    AgentModelOverride:
+      type: object
+      required: [agentSlug, agentName, modelOverride]
+      properties:
+        agentSlug:
+          type: string
+        agentName:
+          type: string
+        modelOverride:
+          type: string
+          nullable: true
+
+    ModelSettings:
+      type: object
+      required: [defaultModel, effectiveDefaultSource, available, overrides]
+      properties:
+        defaultModel:
+          type: string
+        effectiveDefaultSource:
+          type: string
+          enum: [system_settings, env, fallback]
+        available:
+          type: array
+          items:
+            $ref: "#/components/schemas/AvailableModel"
+        overrides:
+          type: array
+          items:
+            $ref: "#/components/schemas/AgentModelOverride"
+
+    UpdateModelOverrideInput:
+      type: object
+      required: [agentSlug]
+      properties:
+        agentSlug:
+          type: string
+          minLength: 1
+        modelOverride:
+          type: string
+          nullable: true
+
+    UpdateModelSettingsInput:
+      type: object
+      properties:
+        defaultModel:
+          type: string
+          minLength: 1
+        overrides:
+          type: array
+          items:
+            $ref: "#/components/schemas/UpdateModelOverrideInput"
 
     WorkflowStatus:
       type: string

@@ -585,3 +585,55 @@ export const GetSystemModeResponse = zod.object({
 })
 
 
+/**
+ * @summary Returns the configured default LLM model and per-agent overrides
+ */
+export const GetSystemModelsResponse = zod.object({
+  "defaultModel": zod.string(),
+  "effectiveDefaultSource": zod.enum(['system_settings', 'env', 'fallback']),
+  "available": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "tier": zod.enum(['frontier', 'balanced', 'fast'])
+})),
+  "overrides": zod.array(zod.object({
+  "agentSlug": zod.string(),
+  "agentName": zod.string(),
+  "modelOverride": zod.string().nullable()
+}))
+})
+
+
+/**
+ * @summary Update the default LLM model and per-agent overrides
+ */
+
+
+
+
+export const UpdateSystemModelsBody = zod.object({
+  "defaultModel": zod.string().min(1).optional(),
+  "overrides": zod.array(zod.object({
+  "agentSlug": zod.string().min(1),
+  "modelOverride": zod.string().nullish()
+})).optional()
+})
+
+export const UpdateSystemModelsResponse = zod.object({
+  "defaultModel": zod.string(),
+  "effectiveDefaultSource": zod.enum(['system_settings', 'env', 'fallback']),
+  "available": zod.array(zod.object({
+  "id": zod.string(),
+  "label": zod.string(),
+  "description": zod.string(),
+  "tier": zod.enum(['frontier', 'balanced', 'fast'])
+})),
+  "overrides": zod.array(zod.object({
+  "agentSlug": zod.string(),
+  "agentName": zod.string(),
+  "modelOverride": zod.string().nullable()
+}))
+})
+
+

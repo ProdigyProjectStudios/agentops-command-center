@@ -1,5 +1,6 @@
 import type { ZodTypeAny } from "zod";
 import { generateAgentOutput, type AgentInvocation } from "../llm";
+import { getModelForAgent } from "../model-config";
 import type { AgentOutput, ToolCallRequest, WorkflowState } from "./types";
 import { agentOutputSchema, parseConfidence } from "./types";
 
@@ -49,6 +50,7 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
     const userPrompt = this.cfg.buildPrompt
       ? this.cfg.buildPrompt(state)
       : `${state.request.title}\n\n${state.request.description}`;
+    const model = await getModelForAgent(this.cfg.slug);
     const invocation: AgentInvocation = {
       agentSlug: this.cfg.slug,
       agentName: this.cfg.name,
@@ -56,6 +58,7 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
       userPrompt,
       demoFallback: demoDetails,
       schema: this.cfg.detailsSchema,
+      model,
     };
     const details = (await generateAgentOutput(invocation)) as TDetails;
     const env = this.cfg.buildEnvelope(details, state);

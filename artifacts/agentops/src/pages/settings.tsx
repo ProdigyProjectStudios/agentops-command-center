@@ -15,7 +15,11 @@ import {
   useCreateCompany,
   useGetSystemMode,
   useListAgents,
+  useGetSystemModels,
+  useUpdateSystemModels,
   getListCompaniesQueryKey,
+  getGetSystemModelsQueryKey,
+  type ModelSettings,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -29,6 +33,13 @@ import {
   TabsTrigger,
   TabsContent,
 } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { StatusBadge } from "@/components/StatusBadge";
 
@@ -255,6 +266,7 @@ function SystemTab() {
   const isDemo = mode?.mode === "demo";
 
   return (
+    <div className="space-y-6">
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <Card className="p-5 bg-card border-card-border">
         <div className="flex items-center gap-2 mb-3">
@@ -320,5 +332,199 @@ function SystemTab() {
         </p>
       </Card>
     </div>
+    <ModelsSection />
+    </div>
+  );
+}
+
+function ModelsSection() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { data, isLoading } = useGetSystemModels();
+  const [pendingDefault, setPendingDefault] = useState<string | null>(null);
+  const [pendingOverrides, setPendingOverrides] = useState<
+    Record<string, string | null>
+  >({});
+
+  const update = useUpdateSystemModels({
+    mutation: {
+      onSuccess: (settings) => {
+        toast({
+          title: "Models updated",
+          description: `Default is now ${settings.defaultModel}.`,
+        });
+        setPendingDefault(null);
+        setPendingOverrides({});
+        queryClient.invalidateQueries({
+          queryKey: getGetSystemModelsQueryKey(),
+        });
+      },
+      onError: (e) => {
+        toast({
+          title: "Could not update models",
+          description: e instanceof Error ? e.message : "Unknown error",
+          variant: "destructive",
+        });
+      },
+    },
+  });
+
+  if (isLoading || !data) {
+    return (
+      <Card className="p-5 bg-card border-card-border">
+        <Skeleton className="h-40 w-full" />
+      </Card>
+    );
+  }
+
+  const settings: ModelSettings = data;
+  const NONE = "__default__";
+  const effectiveDefault = pendingDefault ?? settings.defaultModel;
+  const dirty =
+    pendingDefault !== null || Object.keys(pendingOverrides).length > 0;
+
+  function handleSave() {
+    const body: Parameters<typeof update.mutate>[0]["data"] = {};
+    if (pendingDefault !== null) body.defaultModel = pendingDefault;
+    const overrides = Object.entries(pendingOverrides).map(
+      ([agentSlug, modelOverride]) => ({ agentSlug, modelOverride }),
+    );
+    if (overrides.length > 0) body.overrides = overrides;
+    update.mutate({ data: body });
+  }
+
+  function handleReset() {
+    setPendingDefault(null);
+    setPendingOverrides({});
+  }
+
+  return (
+    <Card className="p-5 bg-card border-card-border" data-testid="card-models">
+      <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+        <div>
+          <div className="flex items-center gap-2">
+            <Bot className="size-4 text-primary" />
+            <h3 className="text-sm font-semibold">Models</h3>
+          </div>
+          <p className="text-xs text-muted-foreground mt-1 max-w-xl">
+            Pick the LLM that powers each agent. The default applies to every
+            agent unless an override is set. Source:{" "}
+            <code className="text-[11px]">
+              {settings.effectiveDefaultSource}
+            </code>
+            .
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={!dirty || update.isPending}
+            onClick={handleReset}
+            data-testid="button-reset-models"
+          >
+            Reset
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            disabled={!dirty || update.isPending}
+            onClick={handleSave}
+            data-testid="button-save-models"
+          >
+            {update.isPending ? (
+              <Loader2 className="size-3 animate-spin" />
+            ) : null}
+            Save changes
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="space-y-2">
+          <Label className="text-xs">Default model (all agents)</Label>
+          <Select
+            value={effectiveDefault}
+            onValueChange={(v) => setPendingDefault(v)}
+          >
+            <SelectTrigger data-testid="select-default-model">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {settings.available.map((m) => (
+                <SelectItem key={m.id} value={m.id}>
+                  <div className="flex flex-col items-start">
+                    <span className="text-sm">{m.label}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {m.description}
+                    </span>
+                  </div>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="text-[11px] text-muted-foreground">
+            Currently <code className="text-[11px]">{settings.defaultModel}</code>{" "}
+            (saved).
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-xs">Per-agent overrides</Label>
+          <div className="space-y-2">
+            {settings.overrides.map((ov) => {
+              const pending = pendingOverrides[ov.agentSlug];
+              const current =
+                pending !== undefined
+                  ? pending ?? NONE
+                  : ov.modelOverride ?? NONE;
+              return (
+                <div
+                  key={ov.agentSlug}
+                  className="flex items-center gap-2"
+                  data-testid={`row-model-override-${ov.agentSlug}`}
+                >
+                  <div className="flex-1 min-w-0 text-xs">
+                    <div className="font-medium truncate">{ov.agentName}</div>
+                    <code className="text-[10px] text-muted-foreground">
+                      {ov.agentSlug}
+                    </code>
+                  </div>
+                  <div className="w-56">
+                    <Select
+                      value={current}
+                      onValueChange={(v) => {
+                        setPendingOverrides((prev) => ({
+                          ...prev,
+                          [ov.agentSlug]: v === NONE ? null : v,
+                        }));
+                      }}
+                    >
+                      <SelectTrigger
+                        className="h-8"
+                        data-testid={`select-override-${ov.agentSlug}`}
+                      >
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value={NONE}>
+                          Use default ({effectiveDefault})
+                        </SelectItem>
+                        {settings.available.map((m) => (
+                          <SelectItem key={m.id} value={m.id}>
+                            {m.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </Card>
   );
 }

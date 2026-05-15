@@ -31,7 +31,8 @@ async function reset() {
       knowledge_documents,
       agents,
       users,
-      portfolio_companies
+      portfolio_companies,
+      system_settings
     RESTART IDENTITY CASCADE
   `);
 }
