@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
+import { PageTransition } from "@/components/PageTransition";
 import {
   ArrowLeft,
   Bot,
@@ -111,7 +112,8 @@ export default function WorkflowDetailPage() {
 
   if (!Number.isFinite(id) || error) {
     return (
-      <div className="px-8 py-12 max-w-2xl mx-auto">
+      <PageTransition>
+      <div className="px-4 sm:px-6 lg:px-8 py-12 max-w-2xl mx-auto">
         <Card className="p-8 bg-card border-card-border text-center" data-testid="workflow-error">
           <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-4">
             <AlertTriangle className="size-6" />
@@ -133,16 +135,19 @@ export default function WorkflowDetailPage() {
           </Link>
         </Card>
       </div>
+      </PageTransition>
     );
   }
 
   if (isLoading || !workflow) {
     return (
-      <div className="px-8 py-8 max-w-[1400px] mx-auto">
+      <PageTransition>
+      <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-[1400px] mx-auto">
         <Skeleton className="h-8 w-72 mb-4" />
         <Skeleton className="h-32 w-full mb-6" />
         <Skeleton className="h-96 w-full" />
       </div>
+      </PageTransition>
     );
   }
 
@@ -156,7 +161,8 @@ export default function WorkflowDetailPage() {
   const stepsByIndex = new Map(workflow.steps.map((s) => [s.stepIndex, s]));
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <Link
           href="/workflows"
@@ -378,6 +384,7 @@ export default function WorkflowDetailPage() {
         </div>
       </div>
     </div>
+    </PageTransition>
   );
 }
 

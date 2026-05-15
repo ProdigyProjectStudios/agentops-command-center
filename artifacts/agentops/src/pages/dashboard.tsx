@@ -1,5 +1,6 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
+import { PageTransition } from "@/components/PageTransition";
 import {
   Activity,
   AlertTriangle,
@@ -34,7 +35,8 @@ export default function DashboardPage() {
   const recentWorkflows = (workflows ?? []).slice(0, 6);
 
   return (
-    <div className="px-8 py-8 space-y-8 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-[1400px] mx-auto">
       <div className="flex items-start justify-between gap-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
@@ -224,6 +226,7 @@ export default function DashboardPage() {
         </div>
       </Card>
     </div>
+    </PageTransition>
   );
 }
 

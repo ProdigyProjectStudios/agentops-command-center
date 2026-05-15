@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { PageTransition } from "@/components/PageTransition";
 import {
   Bot,
   Building2,
@@ -33,7 +34,8 @@ import { StatusBadge } from "@/components/StatusBadge";
 
 export default function SettingsPage() {
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1100px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1100px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           Admin Settings
@@ -66,6 +68,7 @@ export default function SettingsPage() {
         </TabsContent>
       </Tabs>
     </div>
+    </PageTransition>
   );
 }
 

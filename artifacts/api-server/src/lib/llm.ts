@@ -32,8 +32,15 @@ function getClient(): OpenAI | null {
   return client;
 }
 
-const MODEL = "gpt-5.4";
+const MODEL = process.env["LLM_MODEL"] ?? "gpt-4o-mini";
 const MAX_TOKENS = 2048;
+
+if (!process.env["LLM_MODEL"] && liveCredentials()) {
+  logger.warn(
+    { defaultModel: MODEL },
+    "LLM_MODEL env var not set; defaulting model. Set LLM_MODEL to pin a specific model.",
+  );
+}
 
 export interface AgentInvocation {
   agentSlug: string;
@@ -47,7 +54,14 @@ export async function generateAgentOutput(
   invocation: AgentInvocation,
 ): Promise<Record<string, unknown>> {
   const openai = getClient();
-  if (!openai) return invocation.demoFallback;
+  if (!openai) {
+    logger.warn(
+      { agentSlug: invocation.agentSlug },
+      "LLM live call fell back to demo: no credentials configured " +
+        "(set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY)",
+    );
+    return invocation.demoFallback;
+  }
 
   const schemaHint = JSON.stringify(invocation.demoFallback, null, 2);
   const system = `${invocation.systemPrompt}
@@ -72,17 +86,21 @@ ${schemaHint}`;
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
       logger.warn(
-        { agentSlug: invocation.agentSlug },
-        "LLM returned empty content; falling back to demo output",
+        { agentSlug: invocation.agentSlug, model: MODEL },
+        "LLM live call fell back to demo: empty content from model",
       );
       return invocation.demoFallback;
     }
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    logger.debug(
+      { agentSlug: invocation.agentSlug, model: MODEL },
+      "LLM live call succeeded",
+    );
     return { ...invocation.demoFallback, ...parsed };
   } catch (err) {
     logger.warn(
-      { err, agentSlug: invocation.agentSlug },
-      "LLM call failed; falling back to demo output",
+      { err, agentSlug: invocation.agentSlug, model: MODEL },
+      "LLM live call fell back to demo: API or parse error",
     );
     return invocation.demoFallback;
   }

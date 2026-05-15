@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { ListChecks, PlusCircle } from "lucide-react";
+import { PageTransition } from "@/components/PageTransition";
 import { Button } from "@/components/ui/button";
 import { useListWorkflows } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
@@ -19,7 +20,8 @@ export default function WorkflowsListPage() {
   const { data, isLoading } = useListWorkflows();
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">Workflows</h2>
         <p className="text-muted-foreground mt-1 text-sm">
@@ -107,5 +109,6 @@ export default function WorkflowsListPage() {
         )}
       </Card>
     </div>
+    </PageTransition>
   );
 }

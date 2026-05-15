@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
+import { PageTransition } from "@/components/PageTransition";
 import { Sparkles, Send, Loader2 } from "lucide-react";
 import {
   useListCompanies,
@@ -86,7 +87,8 @@ export default function NewRequestPage() {
   const submitting = createRequest.isPending;
 
   return (
-    <div className="px-8 py-8 max-w-3xl mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-3xl mx-auto">
       <div className="flex items-start justify-between mb-6">
         <div>
           <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
@@ -220,5 +222,6 @@ export default function NewRequestPage() {
         </form>
       </Card>
     </div>
+    </PageTransition>
   );
 }

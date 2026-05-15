@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import { BookOpen, FileText, Search, Sparkles } from "lucide-react";
+import { PageTransition } from "@/components/PageTransition";
 import {
   useListKnowledge,
   type KnowledgeDocument,
@@ -32,7 +34,8 @@ export default function KnowledgePage() {
     (data ?? []).find((d) => d.id === selectedId) ?? filtered[0] ?? null;
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           Knowledge Base
@@ -64,9 +67,12 @@ export default function KnowledgePage() {
           )}
 
           <div className="space-y-2">
-            {filtered.map((doc) => (
-              <button
+            {filtered.map((doc, idx) => (
+              <motion.button
                 key={doc.id}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: "easeOut", delay: Math.min(idx, 10) * 0.03 }}
                 onClick={() => setSelectedId(doc.id)}
                 data-testid={`doc-card-${doc.id}`}
                 className={cn(
@@ -89,11 +95,17 @@ export default function KnowledgePage() {
                     </p>
                   </div>
                 </div>
-              </button>
+              </motion.button>
             ))}
             {!isLoading && filtered.length === 0 && (
-              <Card className="p-6 text-center text-sm text-muted-foreground bg-card border-card-border border-dashed">
-                No documents match "{query}".
+              <Card className="p-8 text-center bg-card border-card-border border-dashed" data-testid="empty-knowledge">
+                <div className="inline-flex size-10 rounded-full bg-primary/10 text-primary items-center justify-center mb-2">
+                  <Search className="size-5" />
+                </div>
+                <p className="text-sm font-medium mb-0.5">No matches</p>
+                <p className="text-xs text-muted-foreground">
+                  Nothing in the knowledge base matches "{query}".
+                </p>
               </Card>
             )}
           </div>
@@ -113,6 +125,7 @@ export default function KnowledgePage() {
         </div>
       </div>
     </div>
+    </PageTransition>
   );
 }
 

@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { Link } from "wouter";
+import { motion } from "framer-motion";
+import { PageTransition } from "@/components/PageTransition";
 import {
   ArrowDown,
   ArrowUp,
@@ -86,7 +88,8 @@ export default function ToolCallsPage() {
   }
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           Tool Call History
@@ -143,21 +146,34 @@ export default function ToolCallsPage() {
         )}
 
         {!isLoading && rows.length === 0 && (
-          <div className="p-12 text-center text-sm text-muted-foreground">
-            No tool calls match the current filters.
+          <div className="p-12 text-center" data-testid="empty-tool-calls">
+            <div className="inline-flex size-12 rounded-full bg-primary/10 text-primary items-center justify-center mb-3">
+              <Wrench className="size-6" />
+            </div>
+            <p className="text-sm font-medium mb-1">No tool calls match</p>
+            <p className="text-xs text-muted-foreground">
+              Try clearing the search or switching the status filter.
+            </p>
           </div>
         )}
 
-        {rows.map((tc) => (
-          <ToolRow
+        {rows.map((tc, idx) => (
+          <motion.div
             key={tc.id}
-            tc={tc}
-            expanded={expandedId === tc.id}
-            onToggle={() => setExpandedId(expandedId === tc.id ? null : tc.id)}
-          />
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut", delay: Math.min(idx, 12) * 0.02 }}
+          >
+            <ToolRow
+              tc={tc}
+              expanded={expandedId === tc.id}
+              onToggle={() => setExpandedId(expandedId === tc.id ? null : tc.id)}
+            />
+          </motion.div>
         ))}
       </Card>
     </div>
+    </PageTransition>
   );
 }
 

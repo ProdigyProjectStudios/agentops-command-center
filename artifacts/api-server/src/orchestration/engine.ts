@@ -12,9 +12,18 @@ import {
   type WorkflowRun,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
+import { getLlmMode } from "../lib/llm";
 import { FINALIZE_NODE, PIPELINE } from "./edges";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
 import type { NodeContext, NodeDefinition, NodeResult } from "./types";
+
+const LIVE_INTER_STEP_DELAY_MS = Number(
+  process.env["LIVE_INTER_STEP_DELAY_MS"] ?? "500",
+);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function loadContext(workflowRunId: number): Promise<{
   workflowRun: WorkflowRun;
@@ -174,8 +183,14 @@ export class WorkflowEngine {
     const priorOutputs = new Map<string, Record<string, unknown>>();
 
     let lastResult: NodeResult | undefined;
+    const liveMode = getLlmMode() === "live";
     try {
       for (let i = 0; i < PIPELINE.length; i++) {
+        if (i > 0 && liveMode && LIVE_INTER_STEP_DELAY_MS > 0) {
+          // Pace agent transitions in live mode so the UI can render each
+          // step's running → completed handoff visibly.
+          await sleep(LIVE_INTER_STEP_DELAY_MS);
+        }
         const node = PIPELINE[i]!;
         const ctx: NodeContext = {
           workflowRun,

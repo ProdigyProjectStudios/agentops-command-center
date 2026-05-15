@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { Link } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
+import { PageTransition } from "@/components/PageTransition";
 import {
   CheckCircle2,
   Clock,
@@ -59,7 +61,8 @@ export default function ApprovalsPage() {
   });
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           Approval Queue
@@ -99,11 +102,22 @@ export default function ApprovalsPage() {
       )}
 
       <div className="space-y-4">
-        {(data ?? []).map((card) => (
-          <ApprovalRow key={card.id} card={card} />
-        ))}
+        <AnimatePresence initial={false}>
+          {(data ?? []).map((card, idx) => (
+            <motion.div
+              key={card.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              transition={{ duration: 0.25, ease: "easeOut", delay: Math.min(idx, 8) * 0.04 }}
+            >
+              <ApprovalRow card={card} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
       </div>
     </div>
+    </PageTransition>
   );
 }
 

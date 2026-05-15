@@ -1,3 +1,5 @@
+import { motion } from "framer-motion";
+import { PageTransition } from "@/components/PageTransition";
 import {
   Bot,
   Briefcase,
@@ -56,7 +58,8 @@ export default function AgentsPage() {
   }
 
   return (
-    <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <PageTransition>
+    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           Agent Directory
@@ -74,14 +77,25 @@ export default function AgentsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+      <motion.div
+        className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4"
+        initial="hidden"
+        animate="show"
+        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}
+      >
         {(data ?? []).map((agent) => {
           const Icon = AGENT_ICONS[agent.slug] ?? Bot;
           const derived = deriveStatus(agent);
           return (
-            <Card
+            <motion.div
               key={agent.id}
-              className="p-5 bg-card border-card-border flex flex-col"
+              variants={{
+                hidden: { opacity: 0, y: 8 },
+                show: { opacity: 1, y: 0, transition: { duration: 0.28, ease: "easeOut" } },
+              }}
+            >
+            <Card
+              className="p-5 bg-card border-card-border flex flex-col h-full"
               data-testid={`agent-card-${agent.slug}`}
             >
               <div className="flex items-start gap-3 mb-3">
@@ -155,9 +169,11 @@ export default function AgentsPage() {
                 </div>
               </div>
             </Card>
+            </motion.div>
           );
         })}
-      </div>
+      </motion.div>
     </div>
+    </PageTransition>
   );
 }
