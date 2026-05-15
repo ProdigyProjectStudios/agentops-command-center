@@ -10,7 +10,7 @@ A portfolio-grade multi-agent enterprise operations platform that triages operat
 - `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
 - `pnpm --filter @workspace/db run push` — push DB schema changes (dev only)
 - Required env: `DATABASE_URL` — Postgres connection string
-- Optional env: `OPENAI_API_KEY` — when present, enables live LLM mode; otherwise the orchestrator runs in deterministic demo mode
+- Optional env: `OPENAI_API_KEY` **or** Replit OpenAI integration vars (`AI_INTEGRATIONS_OPENAI_BASE_URL` + `AI_INTEGRATIONS_OPENAI_API_KEY`) — when either is present, enables live LLM mode; otherwise the orchestrator runs in deterministic demo mode
 
 ## Stack
 

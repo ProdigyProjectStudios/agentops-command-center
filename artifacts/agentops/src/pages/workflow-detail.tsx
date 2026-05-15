@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft,
   Bot,
@@ -278,9 +279,18 @@ export default function WorkflowDetailPage() {
                 No agents have run yet. Click <span className="text-foreground font-medium">Run Workflow</span> to start the pipeline.
               </Card>
             )}
-            {workflow.steps.map((step) => (
-              <AgentStepCard key={step.id} step={step} toolCalls={workflow.toolCalls} />
-            ))}
+            <AnimatePresence initial={false}>
+              {workflow.steps.map((step, idx) => (
+                <motion.div
+                  key={step.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.28, ease: "easeOut", delay: idx * 0.04 }}
+                >
+                  <AgentStepCard step={step} toolCalls={workflow.toolCalls} />
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
 
           {/* Final recommendation */}

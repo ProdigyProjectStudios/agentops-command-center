@@ -1,4 +1,7 @@
 import { Link } from "wouter";
+import { motion } from "framer-motion";
+import { ListChecks, PlusCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useListWorkflows } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -41,9 +44,14 @@ export default function WorkflowsListPage() {
             <Skeleton className="h-12 w-full" />
           </div>
         )}
-        {(data ?? []).map((w) => (
-          <Link
+        {(data ?? []).map((w, idx) => (
+          <motion.div
             key={w.id}
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.22, ease: "easeOut", delay: Math.min(idx, 12) * 0.025 }}
+          >
+          <Link
             href={`/workflows/${w.id}`}
             className="grid grid-cols-12 gap-4 px-5 py-3 text-sm border-b border-card-border last:border-0 hover-elevate"
             data-testid={`row-workflow-${w.id}`}
@@ -75,10 +83,26 @@ export default function WorkflowsListPage() {
               {formatRelative(w.createdAt)}
             </div>
           </Link>
+          </motion.div>
         ))}
         {data && data.length === 0 && (
-          <div className="p-12 text-center text-sm text-muted-foreground">
-            No workflows yet. Create one from the New Request page.
+          <div className="p-12 text-center" data-testid="empty-workflows">
+            <div className="inline-flex size-12 rounded-full bg-primary/10 text-primary items-center justify-center mb-4">
+              <ListChecks className="size-6" />
+            </div>
+            <h3 className="text-base font-semibold mb-1">No workflows yet</h3>
+            <p className="text-sm text-muted-foreground mb-5 max-w-sm mx-auto">
+              Submit your first operational request and watch the agent pipeline triage,
+              review, and recommend in real time.
+            </p>
+            <Link href="/requests/new">
+              <Button asChild>
+                <span className="cursor-pointer">
+                  <PlusCircle className="size-4" />
+                  New Request
+                </span>
+              </Button>
+            </Link>
           </div>
         )}
       </Card>

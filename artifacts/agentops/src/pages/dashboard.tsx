@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { motion } from "framer-motion";
 import {
   Activity,
   AlertTriangle,
@@ -53,7 +54,15 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      <motion.div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
+        initial="hidden"
+        animate="show"
+        variants={{
+          hidden: {},
+          show: { transition: { staggerChildren: 0.06 } },
+        }}
+      >
         <MetricCard
           icon={Workflow}
           label="Active Workflows"
@@ -96,7 +105,7 @@ export default function DashboardPage() {
           accent="text-emerald-300"
           testId="metric-cost-impact"
         />
-      </div>
+      </motion.div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-6 bg-card border-card-border">
@@ -234,6 +243,12 @@ function MetricCard({
   testId: string;
 }) {
   return (
+    <motion.div
+      variants={{
+        hidden: { opacity: 0, y: 8 },
+        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+      }}
+    >
     <Card className="p-5 bg-card border-card-border" data-testid={testId}>
       <div className="flex items-center justify-between">
         <span className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -251,5 +266,6 @@ function MetricCard({
         )}
       </div>
     </Card>
+    </motion.div>
   );
 }
