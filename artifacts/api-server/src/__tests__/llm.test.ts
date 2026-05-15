@@ -66,20 +66,26 @@ beforeEach(() => {
 test("falls back to demo when model returns empty content", async () => {
   nextResponse = { content: null };
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, demoFallback);
+  assert.deepEqual(out.details, demoFallback);
+  assert.equal(out.fallback?.mode, "live");
+  assert.equal(out.fallback?.reason, "empty_content");
 });
 
 test("falls back to demo when model returns a non-object JSON value", async () => {
   nextResponse = { content: "[1,2,3]" };
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, demoFallback);
+  assert.deepEqual(out.details, demoFallback);
+  assert.equal(out.fallback?.mode, "live");
+  assert.equal(out.fallback?.reason, "non_object");
 });
 
 test("falls back to demo when response fails Zod validation", async () => {
   // count should be a number; supply a string -> partial schema validation fails.
   nextResponse = { content: JSON.stringify({ count: "not-a-number" }) };
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, demoFallback);
+  assert.deepEqual(out.details, demoFallback);
+  assert.equal(out.fallback?.mode, "live");
+  assert.equal(out.fallback?.reason, "schema_validation");
 });
 
 test("partial-but-valid response is deep-merged onto the demo fallback", async () => {
@@ -90,10 +96,11 @@ test("partial-but-valid response is deep-merged onto the demo fallback", async (
     }),
   };
   const out = await generateAgentOutput(baseInvocation);
-  assert.equal(out["name"], "from-llm");
-  assert.equal(out["count"], 7); // preserved from demo
-  assert.deepEqual(out["nested"], { a: "from-llm-a", b: 99 });
-  assert.deepEqual(out["tags"], ["demo-tag"]);
+  assert.equal(out.details["name"], "from-llm");
+  assert.equal(out.details["count"], 7); // preserved from demo
+  assert.deepEqual(out.details["nested"], { a: "from-llm-a", b: 99 });
+  assert.deepEqual(out.details["tags"], ["demo-tag"]);
+  assert.equal(out.fallback, undefined);
 });
 
 test("fully-valid response replaces demo values end-to-end", async () => {
@@ -105,7 +112,8 @@ test("fully-valid response replaces demo values end-to-end", async () => {
   };
   nextResponse = { content: JSON.stringify(full) };
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, full);
+  assert.deepEqual(out.details, full);
+  assert.equal(out.fallback, undefined);
 });
 
 test("falls back to demo when the API call throws", async () => {
@@ -113,11 +121,15 @@ test("falls back to demo when the API call throws", async () => {
     throw new Error("boom");
   }) as unknown as () => never;
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, demoFallback);
+  assert.deepEqual(out.details, demoFallback);
+  assert.equal(out.fallback?.mode, "live");
+  assert.equal(out.fallback?.reason, "api_error");
 });
 
 test("falls back to demo when content is not valid JSON", async () => {
   nextResponse = { content: "not json {" };
   const out = await generateAgentOutput(baseInvocation);
-  assert.deepEqual(out, demoFallback);
+  assert.deepEqual(out.details, demoFallback);
+  assert.equal(out.fallback?.mode, "live");
+  assert.equal(out.fallback?.reason, "invalid_json");
 });

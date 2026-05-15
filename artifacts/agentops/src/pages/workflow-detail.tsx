@@ -16,6 +16,7 @@ import {
   XCircle,
   Clock,
   AlertTriangle,
+  AlertOctagon,
   Sparkles,
   BookOpen,
   Scale,
@@ -96,6 +97,20 @@ const PIPELINE_NODES: Array<{
 const SYNTHESIS_STEP_NAME = "Risk Synthesis";
 
 // AgentOutput envelope (mirror of the backend type) — only the fields we read.
+type FallbackMode = "demo" | "live";
+type FallbackReason =
+  | "no_credentials"
+  | "empty_content"
+  | "non_object"
+  | "invalid_json"
+  | "schema_validation"
+  | "shape_mismatch"
+  | "api_error";
+interface FallbackInfo {
+  mode: FallbackMode;
+  reason: FallbackReason;
+  message: string;
+}
 interface AgentOutputEnvelope {
   summary?: string;
   findings?: string[];
@@ -104,6 +119,27 @@ interface AgentOutputEnvelope {
   toolCallsRequested?: Array<{ toolName: string; input?: Record<string, unknown>; rationale?: string }>;
   confidence?: number;
   details?: Record<string, unknown>;
+  fallback?: FallbackInfo;
+}
+
+function parseFallback(v: unknown): FallbackInfo | undefined {
+  if (!v || typeof v !== "object") return undefined;
+  const o = v as Record<string, unknown>;
+  const mode = o["mode"];
+  const reason = o["reason"];
+  const message = o["message"];
+  if (
+    (mode === "demo" || mode === "live") &&
+    typeof reason === "string" &&
+    typeof message === "string"
+  ) {
+    return {
+      mode,
+      reason: reason as FallbackReason,
+      message,
+    };
+  }
+  return undefined;
 }
 
 function asEnvelope(output: unknown): AgentOutputEnvelope {
@@ -119,7 +155,18 @@ function asEnvelope(output: unknown): AgentOutputEnvelope {
       : [],
     confidence: typeof o["confidence"] === "number" ? (o["confidence"] as number) : undefined,
     details: (o["details"] as Record<string, unknown>) ?? {},
+    fallback: parseFallback(o["fallback"]),
   };
+}
+
+function fallbackBadgeClass(mode: FallbackMode): string {
+  return mode === "live"
+    ? "bg-amber-500/15 text-amber-200 border-amber-500/40"
+    : "bg-muted text-muted-foreground border-border";
+}
+
+function fallbackShortLabel(mode: FallbackMode): string {
+  return mode === "live" ? "Live fallback" : "Demo";
 }
 
 // Memory aggregation: read every memory_search tool call and dedupe
@@ -709,6 +756,26 @@ function AgentPanel({
                 {stepToolCalls.length} tool call{stepToolCalls.length !== 1 ? "s" : ""}
               </span>
             )}
+            {env.fallback && (
+              <span
+                title={env.fallback.message}
+                aria-label={env.fallback.message}
+                className={cn(
+                  "text-[10px] px-1.5 py-px rounded border font-medium inline-flex items-center gap-1",
+                  fallbackBadgeClass(env.fallback.mode),
+                )}
+                data-testid={`badge-fallback-${node.key}`}
+                data-fallback-mode={env.fallback.mode}
+                data-fallback-reason={env.fallback.reason}
+              >
+                {env.fallback.mode === "live" ? (
+                  <AlertOctagon className="size-3" />
+                ) : (
+                  <Bot className="size-3" />
+                )}
+                {fallbackShortLabel(env.fallback.mode)}
+              </span>
+            )}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">{node.label}</div>
         </div>
@@ -752,7 +819,37 @@ function AgentPanel({
                 <TabsTrigger value="raw" className="text-xs">Raw JSON</TabsTrigger>
               </TabsList>
 
-              <TabsContent value="summary" className="px-4 py-4 m-0">
+              <TabsContent value="summary" className="px-4 py-4 m-0 space-y-3">
+                {env.fallback && (
+                  <div
+                    className={cn(
+                      "flex items-start gap-2 text-xs rounded border px-3 py-2",
+                      env.fallback.mode === "live"
+                        ? "border-amber-500/40 bg-amber-500/10 text-amber-100"
+                        : "border-border bg-muted/40 text-muted-foreground",
+                    )}
+                    data-testid={`fallback-note-${node.key}`}
+                  >
+                    {env.fallback.mode === "live" ? (
+                      <AlertOctagon className="size-3.5 shrink-0 mt-0.5" />
+                    ) : (
+                      <Bot className="size-3.5 shrink-0 mt-0.5" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="font-medium">
+                        {env.fallback.mode === "live"
+                          ? "Live model fallback"
+                          : "Demo-mode output"}
+                        <span className="text-[10px] uppercase tracking-wider ml-2 opacity-70">
+                          {env.fallback.reason.replace(/_/g, " ")}
+                        </span>
+                      </div>
+                      <div className="opacity-90 whitespace-pre-wrap">
+                        {env.fallback.message}
+                      </div>
+                    </div>
+                  </div>
+                )}
                 <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`summary-${node.key}`}>
                   {env.summary || step!.reasoningSummary || "No summary produced."}
                 </p>

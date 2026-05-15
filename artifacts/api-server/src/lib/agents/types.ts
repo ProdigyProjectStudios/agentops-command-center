@@ -12,6 +12,21 @@ export const toolCallRequestSchema = z.object({
 });
 export type ToolCallRequest = z.infer<typeof toolCallRequestSchema>;
 
+export const fallbackInfoSchema = z.object({
+  mode: z.enum(["demo", "live"]),
+  reason: z.enum([
+    "no_credentials",
+    "empty_content",
+    "non_object",
+    "invalid_json",
+    "schema_validation",
+    "shape_mismatch",
+    "api_error",
+  ]),
+  message: z.string(),
+});
+export type FallbackInfo = z.infer<typeof fallbackInfoSchema>;
+
 export const agentOutputSchema = z.object({
   summary: z.string(),
   findings: z.array(z.string()),
@@ -20,6 +35,14 @@ export const agentOutputSchema = z.object({
   toolCallsRequested: z.array(toolCallRequestSchema),
   confidence: z.number().min(0).max(1),
   details: z.record(z.unknown()),
+  /**
+   * Set when the agent's `details` came from the deterministic demo fallback
+   * instead of a successful live model response. `mode === "demo"` means no
+   * credentials were configured (true demo run); `mode === "live"` means a
+   * live call was attempted but failed validation, parsing, or the API call
+   * itself, and the operator should investigate.
+   */
+  fallback: fallbackInfoSchema.optional(),
 });
 export type AgentOutput = z.infer<typeof agentOutputSchema>;
 

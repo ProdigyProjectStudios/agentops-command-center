@@ -60,7 +60,8 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
       schema: this.cfg.detailsSchema,
       model,
     };
-    const details = (await generateAgentOutput(invocation)) as TDetails;
+    const result = await generateAgentOutput(invocation);
+    const details = result.details as TDetails;
     const env = this.cfg.buildEnvelope(details, state);
     const candidate: AgentOutput = {
       summary: env.summary,
@@ -70,6 +71,7 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
       toolCallsRequested: env.toolCallsRequested ?? [],
       confidence: parseConfidence(env.confidence),
       details,
+      ...(result.fallback ? { fallback: result.fallback } : {}),
     };
     // Enforce the AgentOutput contract at the BaseAgent boundary so every
     // persisted agent_steps.output row is guaranteed-valid by construction.

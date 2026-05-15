@@ -47,6 +47,32 @@ if (!process.env["LLM_MODEL"] && liveCredentials()) {
   );
 }
 
+/**
+ * Why a step fell back to the demo payload. `no_credentials` means we never
+ * attempted a live call (true demo mode). All other reasons indicate a live
+ * call that failed in some way.
+ */
+export type FallbackReason =
+  | "no_credentials"
+  | "empty_content"
+  | "non_object"
+  | "invalid_json"
+  | "schema_validation"
+  | "shape_mismatch"
+  | "api_error";
+
+export interface FallbackInfo {
+  /** "demo" = no creds configured; "live" = live call attempted but failed. */
+  mode: LlmMode;
+  reason: FallbackReason;
+  message: string;
+}
+
+export interface AgentOutputResult {
+  details: Record<string, unknown>;
+  fallback?: FallbackInfo;
+}
+
 export interface AgentInvocation {
   agentSlug: string;
   agentName: string;
@@ -70,7 +96,7 @@ export interface AgentInvocation {
 
 export async function generateAgentOutput(
   invocation: AgentInvocation,
-): Promise<Record<string, unknown>> {
+): Promise<AgentOutputResult> {
   const openai = getClient();
   if (!openai) {
     // Demo mode is the documented default — log at debug to keep normal
@@ -80,7 +106,15 @@ export async function generateAgentOutput(
       "LLM in demo mode: no credentials configured " +
         "(set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY for live mode)",
     );
-    return invocation.demoFallback;
+    return {
+      details: invocation.demoFallback,
+      fallback: {
+        mode: "demo",
+        reason: "no_credentials",
+        message:
+          "Demo mode: no LLM credentials configured (set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY for live mode).",
+      },
+    };
   }
 
   const model = invocation.model ?? ENV_MODEL;
@@ -120,15 +154,36 @@ ${schemaHint}`;
         { agentSlug: invocation.agentSlug, model: model },
         "LLM live call fell back to demo: empty content from model",
       );
-      return invocation.demoFallback;
+      return liveFallback(
+        invocation,
+        "empty_content",
+        `Live call to ${model} returned empty content; using demo payload.`,
+      );
     }
-    const parsed = JSON.parse(raw) as unknown;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (parseErr) {
+      logger.warn(
+        { err: parseErr, agentSlug: invocation.agentSlug, model: model, raw },
+        "LLM live call fell back to demo: response was not valid JSON",
+      );
+      return liveFallback(
+        invocation,
+        "invalid_json",
+        `Live call to ${model} returned non-JSON content; using demo payload.`,
+      );
+    }
     if (!isPlainObject(parsed)) {
       logger.warn(
         { agentSlug: invocation.agentSlug, model: model, raw },
         "LLM live call fell back to demo: response was not a JSON object",
       );
-      return invocation.demoFallback;
+      return liveFallback(
+        invocation,
+        "non_object",
+        `Live call to ${model} returned a non-object JSON value; using demo payload.`,
+      );
     }
     if (invocation.schema) {
       const partial = toDeepPartial(invocation.schema);
@@ -143,38 +198,67 @@ ${schemaHint}`;
           },
           "LLM live call fell back to demo: response failed Zod validation",
         );
-        return invocation.demoFallback;
+        const issueSummary = result.error.issues
+          .slice(0, 2)
+          .map((i) => `${i.path.join(".") || "<root>"}: ${i.message}`)
+          .join("; ");
+        return liveFallback(
+          invocation,
+          "schema_validation",
+          `Live call to ${model} failed schema validation (${issueSummary}); using demo payload.`,
+        );
       }
       logger.debug(
         { agentSlug: invocation.agentSlug, model: model },
         "LLM live call succeeded",
       );
-      return deepMerge(
-        invocation.demoFallback,
-        result.data as Record<string, unknown>,
-      );
+      return {
+        details: deepMerge(
+          invocation.demoFallback,
+          result.data as Record<string, unknown>,
+        ),
+      };
     }
     if (!matchesShape(parsed, invocation.demoFallback)) {
       logger.warn(
         { agentSlug: invocation.agentSlug, model: model, raw },
         "LLM live call fell back to demo: response did not match expected shape",
       );
-      return invocation.demoFallback;
+      return liveFallback(
+        invocation,
+        "shape_mismatch",
+        `Live call to ${model} returned a payload that did not match the expected shape; using demo payload.`,
+      );
     }
     logger.debug(
       { agentSlug: invocation.agentSlug, model: model },
       "LLM live call succeeded",
     );
-    return deepMerge(invocation.demoFallback, parsed);
+    return { details: deepMerge(invocation.demoFallback, parsed) };
   } catch (err) {
     logger.warn(
       { err, agentSlug: invocation.agentSlug, model: model },
       "LLM live call fell back to demo: API, timeout, or parse error",
     );
-    return invocation.demoFallback;
+    return liveFallback(
+      invocation,
+      "api_error",
+      `Live call to ${model} failed (${err instanceof Error ? err.message : String(err)}); using demo payload.`,
+    );
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function liveFallback(
+  invocation: AgentInvocation,
+  reason: FallbackReason,
+  message: string,
+): AgentOutputResult {
+  return {
+    details: invocation.demoFallback,
+    fallback: { mode: "live", reason, message },
+  };
 }
 
 /**

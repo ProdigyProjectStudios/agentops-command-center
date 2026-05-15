@@ -376,11 +376,15 @@ for (const fx of fixtures) {
       demoFallback: fx.demoFallback,
       schema: fx.schema,
     });
-    fx.expectMerged(out);
+    fx.expectMerged(out.details);
     // Sanity: every key the demo defines should still be present after merge.
     for (const key of Object.keys(fx.demoFallback)) {
-      assert.ok(key in out, `expected merged result to contain key "${key}"`);
+      assert.ok(
+        key in out.details,
+        `expected merged result to contain key "${key}"`,
+      );
     }
+    assert.equal(out.fallback, undefined);
   });
 
   test(`[${fx.name}] almost-right-but-invalid response falls back to demo`, async () => {
@@ -393,6 +397,8 @@ for (const fx of fixtures) {
       demoFallback: fx.demoFallback,
       schema: fx.schema,
     });
-    assert.deepEqual(out, fx.demoFallback);
+    assert.deepEqual(out.details, fx.demoFallback);
+    assert.equal(out.fallback?.mode, "live");
+    assert.equal(out.fallback?.reason, "schema_validation");
   });
 }
