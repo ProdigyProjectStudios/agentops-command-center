@@ -1,24 +1,26 @@
 /**
  * Multi-agent workflow engine.
  *
- * This module implements a LangGraph-style state graph: a fixed pipeline of
- * nodes (PIPELINE) where each node receives a shared, mutable WorkflowState
- * (NodeContext.state) and returns an AgentOutput envelope plus side-effect
- * metadata (tool calls, audit-log activity entries). The engine persists each
- * step into agent_steps + tool_calls + activity_logs and updates the
- * workflow_runs row with progress markers.
+ * LangGraph-style state graph: a fixed pipeline of nodes (PIPELINE) where
+ * each node receives a shared, mutable WorkflowState (NodeContext.state) and
+ * returns an AgentOutput envelope plus side-effect metadata (tool calls,
+ * audit-log activity entries). The engine persists each step into
+ * agent_steps + tool_calls + activity_logs, updates workflow_runs with
+ * progress markers, and supports resumable execution: a re-run skips any
+ * steps that already completed for this workflowRunId and only re-executes
+ * the remainder.
  *
  * Why hand-rolled instead of `langgraph` directly: the JS LangGraph package
  * (`@langchain/langgraph`) is heavy, requires a langchain runtime, and ties
  * us to its message contract. The shape here intentionally mirrors LangGraph
  * primitives — `WorkflowState` is the channel/state object, each node is a
- * pure-ish function `(state) -> partial state`, and the ordering is declared
+ * pure-ish function `(state) -> partial state`, and ordering is declared
  * via PIPELINE / FINALIZE_NODE — so a future drop-in is mechanical:
  *   1. wrap each NodeDefinition.run in a langgraph `addNode` callback
  *   2. translate PIPELINE order into `addEdge`s
  *   3. swap `executeNode` for the langgraph compiled `invoke`
  *
- * Memory grounding (memory_lookup_node) goes through the pluggable
+ * Memory grounding (memory_retrieval) goes through the pluggable
  * `keywordSearcher` in lib/memory; swap it for a vector / hybrid retriever
  * later without touching node code.
  */
@@ -30,9 +32,11 @@ import {
   approvalRequestsTable,
   db,
   operationalRequestsTable,
+  portfolioCompaniesTable,
   toolCallsTable,
   workflowRunsTable,
   type AgentStep,
+  type PortfolioCompany,
   type WorkflowRun,
 } from "@workspace/db";
 import { logger } from "../lib/logger";
@@ -59,6 +63,7 @@ function sleep(ms: number): Promise<void> {
 async function loadContext(workflowRunId: number): Promise<{
   workflowRun: WorkflowRun;
   request: typeof operationalRequestsTable.$inferSelect;
+  portfolioCompany: PortfolioCompany | undefined;
 } | null> {
   const [workflowRun] = await db
     .select()
@@ -70,7 +75,11 @@ async function loadContext(workflowRunId: number): Promise<{
     .from(operationalRequestsTable)
     .where(eq(operationalRequestsTable.id, workflowRun.requestId));
   if (!request) return null;
-  return { workflowRun, request };
+  const [portfolioCompany] = await db
+    .select()
+    .from(portfolioCompaniesTable)
+    .where(eq(portfolioCompaniesTable.id, request.portfolioCompanyId));
+  return { workflowRun, request, portfolioCompany };
 }
 
 async function getAgentIdBySlug(slug: string): Promise<number> {
@@ -82,33 +91,40 @@ async function getAgentIdBySlug(slug: string): Promise<number> {
   return agent.id;
 }
 
-// Build the canonical stepName -> node.key map from the actual NodeDefinitions
-// so hydration is exact, not derived from string-munging the persisted name.
+// Canonical stepName -> node.key map, derived directly from the
+// NodeDefinitions so hydration is exact (not string-munged).
 const STEP_NAME_TO_KEY: Map<string, string> = new Map(
   [...PIPELINE, FINALIZE_NODE].map((n) => [n.stepName, n.key]),
 );
 
 /**
- * Hydrate WorkflowState.agentOutputs from previously persisted agent_steps.
- * Used by finalize() so the finalize node can see prior agent outputs even
- * after a process restart. Only AgentOutput-shaped rows are loaded; legacy
- * rows are silently skipped.
+ * Hydrate previously persisted agent_steps into shared WorkflowState. Used by
+ * `run()` for resumability and by `finalize()` so the finalize node sees prior
+ * agent outputs even after a process restart. Only AgentOutput-shaped rows
+ * (with `status="completed"`) are loaded; legacy / pending / failed rows are
+ * silently skipped so the engine can re-execute them.
  */
-async function hydrateAgentOutputs(
+async function hydrateState(
   workflowRunId: number,
-): Promise<Record<string, AgentOutput>> {
+): Promise<{
+  agentOutputs: Record<string, AgentOutput>;
+  completedSteps: AgentStep[];
+}> {
   const steps = await db
     .select()
     .from(agentStepsTable)
     .where(eq(agentStepsTable.workflowRunId, workflowRunId));
-  const out: Record<string, AgentOutput> = {};
+  const agentOutputs: Record<string, AgentOutput> = {};
+  const completedSteps: AgentStep[] = [];
   for (const s of steps) {
+    if (s.status !== "completed") continue;
     if (!isAgentOutput(s.output)) continue;
     const key = STEP_NAME_TO_KEY.get(s.name);
     if (!key) continue;
-    out[key] = s.output;
+    agentOutputs[key] = s.output;
+    completedSteps.push(s);
   }
-  return out;
+  return { agentOutputs, completedSteps };
 }
 
 async function executeNode(
@@ -118,6 +134,22 @@ async function executeNode(
 ): Promise<{ step: AgentStep; result: NodeResult }> {
   const agentId = await getAgentIdBySlug(node.agentSlug);
   const startedAt = new Date();
+
+  // Defensive: drop any prior pending/failed/running row at this stepIndex so
+  // re-execution doesn't collide.
+  const existing = await db
+    .select()
+    .from(agentStepsTable)
+    .where(eq(agentStepsTable.workflowRunId, ctx.workflowRun.id));
+  const stale = existing.find(
+    (s) => s.stepIndex === stepIndex && s.status !== "completed",
+  );
+  if (stale) {
+    await db
+      .delete(toolCallsTable)
+      .where(eq(toolCallsTable.agentStepId, stale.id));
+    await db.delete(agentStepsTable).where(eq(agentStepsTable.id, stale.id));
+  }
 
   const [step] = await db
     .insert(agentStepsTable)
@@ -196,8 +228,9 @@ export class WorkflowEngine {
   async run(workflowRunId: number): Promise<void> {
     const loaded = await loadContext(workflowRunId);
     if (!loaded) throw new Error(`Workflow run ${workflowRunId} not found`);
-    let { workflowRun, request } = loaded;
+    let { workflowRun, request, portfolioCompany } = loaded;
 
+    // Eligibility: brand-new submissions OR retried failed runs only.
     if (
       workflowRun.status !== "submitted" &&
       workflowRun.status !== "failed"
@@ -209,63 +242,102 @@ export class WorkflowEngine {
       return;
     }
 
-    // Clear any artifacts from a prior failed/aborted attempt so the timeline
-    // stays deterministic and stepIndex never collides on rerun.
-    await db
-      .delete(toolCallsTable)
-      .where(eq(toolCallsTable.workflowRunId, workflowRunId));
-    await db
-      .delete(agentStepsTable)
+    // Hydrate any work that completed on a previous attempt — true resume.
+    // We do NOT wipe completed agent_steps / tool_calls / activity_logs:
+    // those rows are durable evidence and the timeline reads from them.
+    const { agentOutputs, completedSteps } = await hydrateState(workflowRunId);
+    const completedKeys = new Set(Object.keys(agentOutputs));
+
+    // Clean up artifacts that didn't reach a "completed" state from a prior
+    // failed/aborted attempt so we can re-execute from where we stopped.
+    const allSteps = await db
+      .select()
+      .from(agentStepsTable)
       .where(eq(agentStepsTable.workflowRunId, workflowRunId));
-    await db
-      .delete(activityLogsTable)
-      .where(eq(activityLogsTable.workflowRunId, workflowRunId));
+    for (const s of allSteps) {
+      if (s.status !== "completed") {
+        await db
+          .delete(toolCallsTable)
+          .where(eq(toolCallsTable.agentStepId, s.id));
+        await db
+          .delete(agentStepsTable)
+          .where(eq(agentStepsTable.id, s.id));
+      }
+    }
+    // Approval requests are reset on re-run — they get re-created at the
+    // approval gate.
     await db
       .delete(approvalRequestsTable)
       .where(eq(approvalRequestsTable.workflowRunId, workflowRunId));
 
-    const startedAt = new Date();
+    const isResume = completedSteps.length > 0;
+    const startedAt = workflowRun.startedAt ?? new Date();
     [workflowRun] = await db
       .update(workflowRunsTable)
-      .set({ status: "triaged", startedAt, currentStage: "triaged" })
+      .set({
+        status: "triaged",
+        startedAt,
+        currentStage: workflowRun.currentStage || "triaged",
+      })
       .where(eq(workflowRunsTable.id, workflowRunId))
       .returning();
 
-    const systemActivity = composeAuditEntry(
-      "workflow_started",
-      "Workflow run started.",
-      {},
+    const startActivity = composeAuditEntry(
+      isResume ? "workflow_resumed" : "workflow_started",
+      isResume
+        ? `Workflow resumed from prior attempt — ${completedKeys.size} step(s) already completed.`
+        : "Workflow run started.",
+      { resumedSteps: Array.from(completedKeys) },
       { workflowRunId },
     );
     await db.insert(activityLogsTable).values({
       workflowRunId,
       actor: "system",
       actorType: "system",
-      action: systemActivity.action,
-      message: systemActivity.message,
-      metadata: systemActivity.metadata ?? {},
+      action: startActivity.action,
+      message: startActivity.message,
+      metadata: startActivity.metadata ?? {},
     });
 
     // The shared WorkflowState that flows through every node.
     const state: WorkflowState = {
       workflowRun: workflowRun!,
       request,
-      agentOutputs: {},
+      ...(portfolioCompany ? { portfolioCompany } : {}),
+      currentStage: workflowRun!.currentStage,
+      agentOutputs: { ...agentOutputs },
+      retrievedMemory: [],
+      toolCallResults: [],
+      riskFlags: [],
+      finalNextActions: [],
       metadata: { startedAt },
     };
+    // Replay risks / tool-call summaries from any hydrated outputs so the
+    // synthesis node sees a consistent picture even on a fresh resume.
+    for (const out of Object.values(agentOutputs)) {
+      state.riskFlags.push(...out.risks);
+    }
 
     let synthesisResult: NodeResult | undefined;
     const liveMode = getLlmMode() === "live";
     try {
       for (let i = 0; i < PIPELINE.length; i++) {
+        const node = PIPELINE[i]!;
+
+        // Resume: skip nodes whose AgentOutput we already have.
+        if (completedKeys.has(node.key)) {
+          logger.debug(
+            { nodeKey: node.key, workflowRunId },
+            "Skipping already-completed node on resume",
+          );
+          continue;
+        }
+
         if (i > 0 && liveMode && LIVE_INTER_STEP_DELAY_MS > 0) {
-          // Pace agent transitions in live mode so the UI can render each
-          // step's running → completed handoff visibly.
           await sleep(LIVE_INTER_STEP_DELAY_MS);
         }
-        const node = PIPELINE[i]!;
-        // Refresh the workflowRun on the state in case prior step updated it.
         state.workflowRun = workflowRun!;
+        state.currentStage = workflowRun!.currentStage;
         const ctx: NodeContext = {
           state,
           workflowRun: workflowRun!,
@@ -273,6 +345,16 @@ export class WorkflowEngine {
         };
         const { result } = await executeNode(node, ctx, i);
         state.agentOutputs[node.key] = result.output;
+        state.riskFlags.push(...result.output.risks);
+        for (const tc of result.toolCalls ?? []) {
+          state.toolCallResults.push({
+            agentSlug: node.agentSlug,
+            toolName: tc.toolName,
+            status: tc.status,
+            outputSummary: tc.outputSummary,
+            durationMs: tc.durationMs,
+          });
+        }
         if (node === synthesisNode) {
           synthesisResult = result;
         }
@@ -299,12 +381,16 @@ export class WorkflowEngine {
       logger.error({ err, workflowRunId }, "Pipeline failed; marking run failed");
       await db
         .update(workflowRunsTable)
-        .set({ status: "failed", currentStage: "failed", completedAt: new Date() })
+        .set({
+          status: "failed",
+          currentStage: "failed",
+          completedAt: new Date(),
+        })
         .where(eq(workflowRunsTable.id, workflowRunId));
       const failedActivity = composeAuditEntry(
         "workflow_failed",
-        `Pipeline failed: ${String(err)}`,
-        {},
+        `Pipeline failed at stage ${workflowRun?.currentStage ?? "unknown"}: ${String(err)}`,
+        { lastStage: workflowRun?.currentStage },
         { workflowRunId },
       );
       await db.insert(activityLogsTable).values({
@@ -318,30 +404,35 @@ export class WorkflowEngine {
       throw err;
     }
 
+    // If synthesis ran in this pass we have its NodeResult; otherwise pull
+    // the AgentOutput we resumed from state.
+    const synthesisOutput =
+      synthesisResult?.output ?? state.agentOutputs["synthesis"];
     const fp = fingerprintRequest(request);
     const demoSynthesis = synthesisDemo(request, fp);
-    // Prefer the synthesis step's AgentOutput.details (captured by node
-    // identity, since the pipeline ends with createApprovalNode), falling
-    // back to the deterministic demo synthesis.
-    const liveDetails = synthesisResult?.output.details ?? null;
-    const synthesis = liveDetails ?? demoSynthesis;
+    const synthDetails = synthesisOutput?.details ?? demoSynthesis;
     const summary =
-      synthesisResult?.output.summary && synthesisResult.output.summary.length > 0
-        ? synthesisResult.output.summary
-        : typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0
-          ? (synthesis["summary"] as string)
+      synthesisOutput?.summary && synthesisOutput.summary.length > 0
+        ? synthesisOutput.summary
+        : typeof synthDetails["summary"] === "string" &&
+            (synthDetails["summary"] as string).length > 0
+          ? (synthDetails["summary"] as string)
           : ((demoSynthesis["summary"] as string) ?? "");
     const recommendation =
-      synthesis["recommendedDecision"] === "approve"
+      synthDetails["recommendedDecision"] === "approve"
         ? `Recommend approve: ${summary}`
         : `Recommend reject based on synthesis findings.`;
     const nextActions =
-      synthesisResult?.output.recommendedActions &&
-      synthesisResult.output.recommendedActions.length > 0
-        ? synthesisResult.output.recommendedActions
-        : Array.isArray(synthesis["nextActions"])
-          ? (synthesis["nextActions"] as string[])
+      synthesisOutput?.recommendedActions &&
+      synthesisOutput.recommendedActions.length > 0
+        ? synthesisOutput.recommendedActions
+        : Array.isArray(synthDetails["nextActions"])
+          ? (synthDetails["nextActions"] as string[])
           : ((demoSynthesis["nextActions"] as string[]) ?? []);
+
+    state.finalSummary = summary;
+    state.finalNextActions = nextActions;
+    state.approvalStatus = "pending";
 
     await db
       .update(workflowRunsTable)
@@ -366,7 +457,7 @@ export class WorkflowEngine {
   async finalize(workflowRunId: number): Promise<void> {
     const loaded = await loadContext(workflowRunId);
     if (!loaded) throw new Error(`Workflow run ${workflowRunId} not found`);
-    const { workflowRun, request } = loaded;
+    const { workflowRun, request, portfolioCompany } = loaded;
 
     if (
       workflowRun.status !== "approved" &&
@@ -379,17 +470,20 @@ export class WorkflowEngine {
       return;
     }
 
-    const existingSteps = await db
-      .select()
-      .from(agentStepsTable)
-      .where(eq(agentStepsTable.workflowRunId, workflowRunId));
-    const stepIndex = existingSteps.length;
+    const { agentOutputs, completedSteps } = await hydrateState(workflowRunId);
+    const stepIndex = completedSteps.length;
 
-    const agentOutputs = await hydrateAgentOutputs(workflowRunId);
     const state: WorkflowState = {
       workflowRun,
       request,
+      ...(portfolioCompany ? { portfolioCompany } : {}),
+      currentStage: workflowRun.currentStage,
       agentOutputs,
+      retrievedMemory: [],
+      toolCallResults: [],
+      riskFlags: Object.values(agentOutputs).flatMap((o) => o.risks),
+      approvalStatus: workflowRun.status as "approved" | "rejected",
+      finalNextActions: [],
       metadata: { startedAt: workflowRun.startedAt ?? new Date() },
     };
 
@@ -400,9 +494,6 @@ export class WorkflowEngine {
     };
     await executeNode(FINALIZE_NODE, ctx, stepIndex);
 
-    // Preserve `rejected` as the durable terminal status so the operator
-    // decision is visible in the UI. Only an approved decision graduates the
-    // run to `finalized`.
     const terminalStatus =
       workflowRun.status === "approved" ? "finalized" : "rejected";
 

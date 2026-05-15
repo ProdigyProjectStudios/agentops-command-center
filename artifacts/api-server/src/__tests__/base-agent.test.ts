@@ -39,11 +39,11 @@ test("runAgent returns AgentOutput envelope wrapping demo details on fallback", 
   nextResponse = { content: null };
   const out = await runAgent(
     {
-      agentSlug: "x",
-      agentName: "X",
+      slug: "x",
+      name: "X",
       systemPrompt: "sys",
       detailsSchema,
-      demoDetails,
+      demoDetails: () => demoDetails,
       buildEnvelope: (d) => ({
         summary: `Class=${d["classification"]}`,
         findings: [`risk=${d["riskLevel"]}`],
@@ -67,11 +67,11 @@ test("runAgent merges LLM details into envelope when valid", async () => {
   };
   const out = await runAgent(
     {
-      agentSlug: "x",
-      agentName: "X",
+      slug: "x",
+      name: "X",
       systemPrompt: "sys",
       detailsSchema,
-      demoDetails,
+      demoDetails: () => demoDetails,
       buildEnvelope: (d) => ({
         summary: `Class=${d["classification"]}`,
         findings: [`risk=${d["riskLevel"]}`],
@@ -90,11 +90,11 @@ test("runAgent merges LLM details into envelope when valid", async () => {
 test("runAgent clamps confidence values into [0,1]", async () => {
   const out = await runAgent(
     {
-      agentSlug: "x",
-      agentName: "X",
+      slug: "x",
+      name: "X",
       systemPrompt: "sys",
       detailsSchema,
-      demoDetails,
+      demoDetails: () => demoDetails,
       buildEnvelope: () => ({
         summary: "s",
         findings: [],

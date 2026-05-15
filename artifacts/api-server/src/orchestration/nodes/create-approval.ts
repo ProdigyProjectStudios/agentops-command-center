@@ -3,19 +3,16 @@ import { fingerprintRequest, synthesisDemo } from "../demo-outputs";
 import { composeAuditEntry } from "../../lib/audit";
 
 export const createApprovalNode: NodeDefinition = {
-  key: "approval_gate",
+  key: "approval",
   agentSlug: "ops-conductor",
   stepName: "Open Approval Gate",
   pendingStatus: "approval_pending",
-  run: async ({ request, state }) => {
-    const fp = fingerprintRequest(request);
+  run: async (ctx) => {
+    const fp = fingerprintRequest(ctx.request);
 
-    // Pull live synthesis output from the shared WorkflowState; fall back to
-    // a deterministic demo synthesis if (somehow) the synthesis step did not
-    // populate the state.
-    const synthesis = state.agentOutputs["risk_synthesis"];
-    const synthDetails =
-      synthesis?.details ?? synthesisDemo(request, fp);
+    // Pull live synthesis output from the shared WorkflowState.
+    const synthesis = ctx.state.agentOutputs["synthesis"];
+    const synthDetails = synthesis?.details ?? synthesisDemo(ctx.request, fp);
     const summary =
       synthesis?.summary ?? (synthDetails["summary"] as string) ?? "";
     const recommendedDecision =
@@ -24,6 +21,11 @@ export const createApprovalNode: NodeDefinition = {
       recommendedDecision === "approve"
         ? `Recommend approve: ${summary}`
         : `Recommend reject: blocking concerns identified during synthesis.`;
+
+    // Flip approval status on the shared state for downstream observers.
+    ctx.state.approvalStatus = "pending";
+    ctx.state.finalSummary = summary;
+    ctx.state.finalNextActions = synthesis?.recommendedActions ?? [];
 
     return {
       output: {
@@ -51,7 +53,7 @@ export const createApprovalNode: NodeDefinition = {
         {
           toolName: "approval_queue",
           status: "success",
-          input: { workflowTitle: request.title },
+          input: { workflowTitle: ctx.request.title },
           output: { queued: true },
           outputSummary: "Approval card pushed to operator queue.",
           durationMs: 52,
@@ -59,9 +61,14 @@ export const createApprovalNode: NodeDefinition = {
       ],
       activity: [
         composeAuditEntry(
-          "approval_opened",
-          "Approval card created and added to the operator queue.",
-          { recommendedDecision },
+          "stage_transition",
+          `Stage advanced communications_draft → approval_pending. Approval card created and queued for operator decision (recommendation: ${recommendedDecision}).`,
+          {
+            from: "communications_draft",
+            to: "approval_pending",
+            recommendedDecision,
+            approvalStatus: "pending",
+          },
           { agentSlug: "ops-conductor" },
         ),
       ],

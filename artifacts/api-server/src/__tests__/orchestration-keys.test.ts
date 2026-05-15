@@ -27,12 +27,28 @@ test("every NodeDefinition has a unique stepName for hydration mapping", () => {
   );
 });
 
-test("synthesis and approval-gate keys are the documented values", () => {
-  // create-approval depends on reading state.agentOutputs["risk_synthesis"];
+test("node keys match the documented LangGraph-style contract", () => {
+  // create-approval depends on reading state.agentOutputs["synthesis"];
   // engine derives the workflow summary from the same key. If anyone renames
-  // synthesisNode.key, this test catches it before runtime breakage.
-  const synth = PIPELINE.find((n) => n.stepName === "Risk Synthesis");
-  const approval = PIPELINE.find((n) => n.stepName === "Open Approval Gate");
-  assert.equal(synth?.key, "risk_synthesis");
-  assert.equal(approval?.key, "approval_gate");
+  // these keys, this test catches it before runtime breakage.
+  const expected: Record<string, string> = {
+    "Triage & Routing": "ops_triage",
+    "Knowledge Grounding": "memory_retrieval",
+    "Legal & Compliance Review": "legal_review",
+    "Finance & Budget Review": "finance_review",
+    "Communications Draft": "communications",
+    "Risk Synthesis": "synthesis",
+    "Open Approval Gate": "approval",
+    "Finalize Workflow": "finalize",
+  };
+  const all = [...PIPELINE, FINALIZE_NODE];
+  for (const [stepName, key] of Object.entries(expected)) {
+    const node = all.find((n) => n.stepName === stepName);
+    assert.ok(node, `missing node for stepName "${stepName}"`);
+    assert.equal(
+      node!.key,
+      key,
+      `expected node "${stepName}" to have key "${key}"`,
+    );
+  }
 });

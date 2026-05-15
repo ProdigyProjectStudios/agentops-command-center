@@ -1,56 +1,55 @@
 import type { NodeDefinition } from "../types";
 import { communicationsDemo, fingerprintRequest } from "../demo-outputs";
 import { communicationsSchema } from "../schemas";
-import { runAgent } from "../../lib/agents/base-agent";
+import { BaseAgent } from "../../lib/agents/base-agent";
 import { composeAuditEntry } from "../../lib/audit";
 
+const commsAgent = new BaseAgent({
+  slug: "communications",
+  name: "Communications Lead",
+  systemPrompt:
+    "You are the Communications agent. Draft polished internal and external messaging.",
+  detailsSchema: communicationsSchema,
+  demoDetails: (state) =>
+    communicationsDemo(
+      state.request,
+      fingerprintRequest(state.request),
+    ) as Record<string, unknown>,
+  buildEnvelope: (details, state) => {
+    const fp = fingerprintRequest(state.request);
+    const distribution = (details["distributionList"] as string[]) ?? [];
+    return {
+      summary: `Drafted internal memo + ${
+        fp.riskLevel === "low" ? "no" : "stakeholder"
+      } external announcement.`,
+      findings: [
+        `Tone: ${details["tone"] ?? "neutral"}`,
+        `Distribution: ${distribution.join(", ")}`,
+      ],
+      risks:
+        fp.riskLevel === "critical"
+          ? [
+              "Critical-risk request — confirm legal sign-off before any external distribution.",
+            ]
+          : [],
+      recommendedActions: [
+        "Park drafted memo in approval queue",
+        "Notify distribution list once operator approves",
+      ],
+      confidence:
+        parseFloat((details["confidence"] as string) ?? "0.91") || 0.91,
+    };
+  },
+});
+
 export const communicationsDraftNode: NodeDefinition = {
-  key: "communications_draft",
+  key: "communications",
   agentSlug: "communications",
   stepName: "Communications Draft",
   pendingStatus: "communications_draft",
-  run: async ({ request }) => {
-    const fp = fingerprintRequest(request);
-    const demoDetails = communicationsDemo(request, fp) as Record<
-      string,
-      unknown
-    >;
-
-    const output = await runAgent(
-      {
-        agentSlug: "communications",
-        agentName: "Communications Lead",
-        systemPrompt:
-          "You are the Communications agent. Draft polished internal and external messaging.",
-        detailsSchema: communicationsSchema,
-        demoDetails,
-        buildEnvelope: (details) => {
-          const distribution = (details["distributionList"] as string[]) ?? [];
-          return {
-            summary: `Drafted internal memo + ${
-              fp.riskLevel === "low" ? "no" : "stakeholder"
-            } external announcement.`,
-            findings: [
-              `Tone: ${details["tone"] ?? "neutral"}`,
-              `Distribution: ${distribution.join(", ")}`,
-            ],
-            risks:
-              fp.riskLevel === "critical"
-                ? [
-                    "Critical-risk request — confirm legal sign-off before any external distribution.",
-                  ]
-                : [],
-            recommendedActions: [
-              "Park drafted memo in approval queue",
-              "Notify distribution list once operator approves",
-            ],
-            confidence:
-              parseFloat((details["confidence"] as string) ?? "0.91") || 0.91,
-          };
-        },
-      },
-      `${request.title}\n\n${request.description}`,
-    );
+  run: async (ctx) => {
+    const fp = fingerprintRequest(ctx.request);
+    const output = await commsAgent.run(ctx.state);
 
     return {
       output,
@@ -81,9 +80,13 @@ export const communicationsDraftNode: NodeDefinition = {
       ],
       activity: [
         composeAuditEntry(
-          "comms_drafted",
-          "Communications agent drafted internal memo and distribution plan.",
-          {},
+          "stage_transition",
+          `Stage advanced finance_review → communications_draft. Communications Lead drafted internal memo and distribution plan.`,
+          {
+            from: "finance_review",
+            to: "communications_draft",
+            tone: output.details["tone"] ?? "neutral",
+          },
           { agentSlug: "communications" },
         ),
       ],

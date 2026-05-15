@@ -1,66 +1,63 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, financeReviewDemo } from "../demo-outputs";
 import { financeReviewSchema } from "../schemas";
-import { runAgent } from "../../lib/agents/base-agent";
+import { BaseAgent } from "../../lib/agents/base-agent";
 import { composeAuditEntry } from "../../lib/audit";
+
+const financeAgent = new BaseAgent({
+  slug: "finance-analyst",
+  name: "Finance Analyst",
+  systemPrompt:
+    "You are the Finance Analyst agent. Verify spend fits budget, model forecast and ROI.",
+  detailsSchema: financeReviewSchema,
+  demoDetails: (state) =>
+    financeReviewDemo(
+      state.request,
+      fingerprintRequest(state.request),
+    ) as Record<string, unknown>,
+  buildEnvelope: (details) => {
+    const bc = details["budgetCheck"] as {
+      passes: boolean;
+      utilizationPct: number;
+      requestedCents: number;
+    };
+    const forecast = details["forecast"] as {
+      paybackPeriodMonths: number;
+      irr: string;
+    };
+    return {
+      summary:
+        (details["recommendation"] as string) ?? "Finance review complete.",
+      findings: [
+        `Budget utilization: ${bc?.utilizationPct ?? 0}%`,
+        `12-month payback: ${forecast?.paybackPeriodMonths ?? "?"} months`,
+        `Projected IRR: ${forecast?.irr ?? "n/a"}`,
+      ],
+      risks: bc?.passes
+        ? []
+        : [
+            `Spend pushes department past 85% quarterly utilization (${bc?.utilizationPct}%).`,
+          ],
+      recommendedActions: bc?.passes
+        ? ["Approve spend within budget envelope"]
+        : [
+            "Defer or rescope to fit quarterly budget",
+            "Escalate to CFO for override approval",
+          ],
+      confidence:
+        parseFloat((details["confidence"] as string) ?? "0.88") || 0.88,
+    };
+  },
+});
 
 export const financeReviewNode: NodeDefinition = {
   key: "finance_review",
   agentSlug: "finance-analyst",
   stepName: "Finance & Budget Review",
   pendingStatus: "finance_review",
-  run: async ({ request }) => {
-    const fp = fingerprintRequest(request);
-    const demoDetails = financeReviewDemo(request, fp) as Record<
-      string,
-      unknown
-    >;
-
-    const output = await runAgent(
-      {
-        agentSlug: "finance-analyst",
-        agentName: "Finance Analyst",
-        systemPrompt:
-          "You are the Finance Analyst agent. Verify spend fits budget, model forecast and ROI.",
-        detailsSchema: financeReviewSchema,
-        demoDetails,
-        buildEnvelope: (details) => {
-          const bc = details["budgetCheck"] as {
-            passes: boolean;
-            utilizationPct: number;
-            requestedCents: number;
-          };
-          const forecast = details["forecast"] as {
-            paybackPeriodMonths: number;
-            irr: string;
-          };
-          return {
-            summary:
-              (details["recommendation"] as string) ??
-              "Finance review complete.",
-            findings: [
-              `Budget utilization: ${bc?.utilizationPct ?? 0}%`,
-              `12-month payback: ${forecast?.paybackPeriodMonths ?? "?"} months`,
-              `Projected IRR: ${forecast?.irr ?? "n/a"}`,
-            ],
-            risks: bc?.passes
-              ? []
-              : [
-                  `Spend pushes department past 85% quarterly utilization (${bc?.utilizationPct}%).`,
-                ],
-            recommendedActions: bc?.passes
-              ? ["Approve spend within budget envelope"]
-              : [
-                  "Defer or rescope to fit quarterly budget",
-                  "Escalate to CFO for override approval",
-                ],
-            confidence:
-              parseFloat((details["confidence"] as string) ?? "0.88") || 0.88,
-          };
-        },
-      },
-      `${request.title}\n\n${request.description}`,
-    );
+  run: async (ctx) => {
+    const fp = fingerprintRequest(ctx.request);
+    const output = await financeAgent.run(ctx.state);
 
     const budgetCheck = output.details["budgetCheck"] as {
       passes: boolean;
@@ -77,7 +74,7 @@ export const financeReviewNode: NodeDefinition = {
         {
           toolName: "budget_query",
           status: "success",
-          input: { department: request.department, quarter: "current" },
+          input: { department: ctx.request.department, quarter: "current" },
           output: (budgetCheck as Record<string, unknown>) ?? {},
           outputSummary: `Department budget utilization at ${budgetCheck?.utilizationPct}%.`,
           durationMs: 224,
@@ -105,11 +102,16 @@ export const financeReviewNode: NodeDefinition = {
       ],
       activity: [
         composeAuditEntry(
-          "finance_review_complete",
-          `Finance Analyst ${
+          "stage_transition",
+          `Stage advanced legal_review → finance_review. Finance Analyst ${
             budgetCheck?.passes ? "approved" : "deferred"
-          } spend at ${budgetCheck?.utilizationPct}% utilization.`,
-          { passes: budgetCheck?.passes },
+          } spend at ${budgetCheck?.utilizationPct}% quarterly utilization.`,
+          {
+            from: "legal_review",
+            to: "finance_review",
+            passes: budgetCheck?.passes,
+            utilizationPct: budgetCheck?.utilizationPct,
+          },
           { agentSlug: "finance-analyst" },
         ),
       ],

@@ -6,11 +6,11 @@ export const finalizeNode: NodeDefinition = {
   agentSlug: "ops-conductor",
   stepName: "Finalize Workflow",
   pendingStatus: "finalized",
-  run: async ({ request, workflowRun }) => {
-    const isApproved = workflowRun.status === "approved";
+  run: async (ctx) => {
+    const isApproved = ctx.workflowRun.status === "approved";
     const followUps = isApproved
       ? [
-          `Send drafted memo to ${request.department} leadership`,
+          `Send drafted memo to ${ctx.request.department} leadership`,
           "Update vendor record with engagement metadata",
           "Schedule 30-day post-engagement review",
         ]
@@ -19,6 +19,9 @@ export const finalizeNode: NodeDefinition = {
           "Archive supporting agent reports",
         ];
     const finalizedAt = new Date().toISOString();
+
+    ctx.state.approvalStatus = isApproved ? "approved" : "rejected";
+    ctx.state.finalNextActions = followUps;
 
     return {
       output: {
@@ -53,9 +56,13 @@ export const finalizeNode: NodeDefinition = {
       ],
       activity: [
         composeAuditEntry(
-          "workflow_finalized",
-          `Workflow finalized as ${isApproved ? "approved" : "rejected"}.`,
-          { outcome: isApproved ? "approved" : "rejected" },
+          "stage_transition",
+          `Stage advanced ${ctx.workflowRun.status} → ${isApproved ? "finalized" : "rejected"}. Workflow closed by Ops Conductor.`,
+          {
+            from: ctx.workflowRun.status,
+            to: isApproved ? "finalized" : "rejected",
+            outcome: isApproved ? "approved" : "rejected",
+          },
           { agentSlug: "ops-conductor" },
         ),
       ],
