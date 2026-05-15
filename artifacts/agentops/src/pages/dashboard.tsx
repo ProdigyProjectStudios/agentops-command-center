@@ -65,34 +65,64 @@ export default function DashboardPage() {
   return (
     <PageTransition>
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-[1400px] mx-auto">
-      {/* Hero band */}
+      {/* Hero band — premium edition */}
       <motion.section
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: "easeOut" }}
-        className="relative overflow-hidden rounded-xl border border-card-border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8"
+        transition={{ duration: 0.4, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-2xl border border-card-border bg-[radial-gradient(120%_120%_at_0%_0%,hsl(252_87%_67%/0.18)_0%,transparent_55%),radial-gradient(80%_80%_at_100%_100%,hsl(190_95%_60%/0.12)_0%,transparent_60%)] bg-card p-6 sm:p-9"
       >
-        <div className="absolute -top-24 -right-24 size-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
-        <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+        {/* Animated grid backdrop */}
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 opacity-[0.07] pointer-events-none"
+          style={{
+            backgroundImage:
+              "linear-gradient(to right, hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--foreground)) 1px, transparent 1px)",
+            backgroundSize: "44px 44px",
+            maskImage:
+              "radial-gradient(ellipse 70% 60% at 30% 30%, black 30%, transparent 80%)",
+          }}
+        />
+        <motion.div
+          aria-hidden="true"
+          className="absolute -top-32 -right-32 size-[420px] rounded-full bg-primary/15 blur-3xl pointer-events-none"
+          animate={{ scale: [1, 1.08, 1], opacity: [0.7, 1, 0.7] }}
+          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
+        />
+        <motion.div
+          aria-hidden="true"
+          className="absolute -bottom-32 -left-24 size-[360px] rounded-full bg-chart-2/10 blur-3xl pointer-events-none"
+          animate={{ scale: [1.05, 1, 1.05], opacity: [0.6, 0.9, 0.6] }}
+          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
+        />
+
+        <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-8">
           <div className="max-w-2xl">
-            <div className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-medium mb-2">
+            <div className="inline-flex items-center gap-2 px-2.5 py-1 rounded-full border border-primary/30 bg-primary/10 text-[10px] uppercase tracking-[0.22em] text-primary font-medium mb-4">
+              <span className="size-1.5 rounded-full bg-primary animate-pulse" />
               {PRODUCT.tagline}
             </div>
-            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight" data-testid="text-page-title">
+            <h2
+              className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent"
+              data-testid="text-page-title"
+            >
               {PAGE.dashboard.title}
             </h2>
-            <p className="text-muted-foreground mt-2 text-sm sm:text-base leading-relaxed">
+            <p className="text-muted-foreground mt-3 text-base sm:text-lg leading-relaxed max-w-xl">
               {PAGE.dashboard.subtitle}
             </p>
-            <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+            <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5">
               {PILLARS.map((p) => {
                 const Icon = p.icon;
                 return (
                   <div
                     key={p.label}
-                    className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                    className="inline-flex items-center gap-1.5 text-xs text-muted-foreground"
                   >
-                    <Icon className="size-3 text-primary/80" />
+                    <span className="inline-flex size-5 rounded-md bg-primary/10 text-primary items-center justify-center">
+                      <Icon className="size-3" />
+                    </span>
                     {p.label}
                   </div>
                 );
@@ -109,7 +139,12 @@ export default function DashboardPage() {
               </Button>
             </Link>
             <Link href="/requests/new">
-              <Button data-testid="button-new-request" size="lg" asChild>
+              <Button
+                data-testid="button-new-request"
+                size="lg"
+                className="bg-gradient-to-r from-primary to-chart-2 text-primary-foreground shadow-lg shadow-primary/25 hover:opacity-95"
+                asChild
+              >
                 <span className="cursor-pointer">
                   <PlusCircle className="size-4" />
                   New Request
@@ -432,18 +467,28 @@ function MetricCard({
         show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
       }}
     >
-    <Card className="p-5 bg-card border-card-border" data-testid={testId}>
+    <Card
+      className="group relative overflow-hidden p-5 bg-card border-card-border hover:border-primary/40 transition-colors"
+      data-testid={testId}
+    >
+      <div
+        aria-hidden="true"
+        className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"
+      />
       <div className="flex items-center justify-between">
-        <span className="text-xs text-muted-foreground uppercase tracking-wide">
+        <span className="text-[11px] text-muted-foreground uppercase tracking-[0.14em] font-medium">
           {label}
         </span>
-        <Icon className={cn("size-4", accent)} />
+        <span className={cn("inline-flex size-7 rounded-md items-center justify-center bg-card-border/40", accent)}>
+          <Icon className="size-3.5" />
+        </span>
       </div>
-      <div className="mt-3 text-2xl font-semibold tabular-nums" data-testid={`${testId}-value`}>
+      <div
+        className="mt-4 text-3xl font-semibold tabular-nums tracking-tight"
+        data-testid={`${testId}-value`}
+      >
         {loading ? (
-          <span className="inline-flex items-center gap-2 text-muted-foreground">
-            <Skeleton className="h-7 w-20" />
-          </span>
+          <Skeleton className="h-8 w-24" />
         ) : value !== undefined ? (
           value
         ) : (
