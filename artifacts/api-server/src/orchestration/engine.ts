@@ -183,7 +183,6 @@ export class WorkflowEngine {
     const priorSteps = new Map<string, AgentStep>();
     const priorOutputs = new Map<string, Record<string, unknown>>();
 
-    let lastResult: NodeResult | undefined;
     let synthesisResult: NodeResult | undefined;
     const liveMode = getLlmMode() === "live";
     try {
@@ -203,7 +202,6 @@ export class WorkflowEngine {
         const { step, result } = await executeNode(node, ctx, i);
         priorSteps.set(node.agentSlug + ":" + i, step);
         priorOutputs.set(node.agentSlug + ":" + i, result.output);
-        lastResult = result;
         if (node === synthesisNode) {
           synthesisResult = result;
         }
@@ -247,7 +245,6 @@ export class WorkflowEngine {
       synthesisResult?.output && typeof synthesisResult.output === "object"
         ? (synthesisResult.output as Record<string, unknown>)
         : null;
-    void lastResult;
     const synthesis = liveSynthesis ?? demoSynthesis;
     const summary =
       typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0

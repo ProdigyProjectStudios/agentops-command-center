@@ -55,10 +55,12 @@ export async function generateAgentOutput(
 ): Promise<Record<string, unknown>> {
   const openai = getClient();
   if (!openai) {
-    logger.warn(
+    // Demo mode is the documented default — log at debug to keep normal
+    // operation quiet. True live-call failures still log at warn below.
+    logger.debug(
       { agentSlug: invocation.agentSlug },
-      "LLM live call fell back to demo: no credentials configured " +
-        "(set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY)",
+      "LLM in demo mode: no credentials configured " +
+        "(set AI_INTEGRATIONS_OPENAI_API_KEY or OPENAI_API_KEY for live mode)",
     );
     return invocation.demoFallback;
   }
