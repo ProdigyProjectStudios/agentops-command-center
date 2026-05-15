@@ -118,35 +118,112 @@ function ApprovalRow({
   const [note, setNote] = useState("");
   const [open, setOpen] = useState(false);
 
-  function refresh() {
-    queryClient.invalidateQueries({
-      predicate: (q) => q.queryKey[0] === getListApprovalsQueryKey()[0],
-    });
-    queryClient.invalidateQueries({ queryKey: getGetDashboardMetricsQueryKey() });
+  const approvalsKeyRoot = getListApprovalsQueryKey()[0];
+
+  function extractStatusFromKey(
+    key: readonly unknown[],
+  ): ApprovalCardModel["status"] | undefined {
+    for (let i = 1; i < key.length; i++) {
+      const part = key[i];
+      if (part && typeof part === "object") {
+        const visit = (obj: unknown): string | undefined => {
+          if (!obj || typeof obj !== "object") return undefined;
+          const rec = obj as Record<string, unknown>;
+          if (typeof rec.status === "string") return rec.status;
+          for (const v of Object.values(rec)) {
+            if (v && typeof v === "object") {
+              const found = visit(v);
+              if (found) return found;
+            }
+          }
+          return undefined;
+        };
+        const s = visit(part);
+        if (s) return s as ApprovalCardModel["status"];
+      }
+    }
+    return undefined;
+  }
+
+  function buildOptimistic(
+    nextStatus: ApprovalCardModel["status"],
+  ): {
+    onMutate: () => Promise<{ snapshots: [readonly unknown[], ApprovalCardModel[] | undefined][] }>;
+    onError: (
+      _err: unknown,
+      _vars: unknown,
+      ctx?: { snapshots: [readonly unknown[], ApprovalCardModel[] | undefined][] },
+    ) => void;
+    onSettled: () => void;
+  } {
+    return {
+      onMutate: async () => {
+        await queryClient.cancelQueries({
+          predicate: (q) => q.queryKey[0] === approvalsKeyRoot,
+        });
+        const snapshots = queryClient.getQueriesData<ApprovalCardModel[]>({
+          predicate: (q) => q.queryKey[0] === approvalsKeyRoot,
+        });
+        const patched: ApprovalCardModel = {
+          ...card,
+          status: nextStatus,
+          decidedBy: decidedBy || "Operator",
+          decisionNote: note || null,
+          decidedAt: new Date().toISOString(),
+        };
+        const matches = queryClient.getQueryCache().findAll({
+          predicate: (q) => q.queryKey[0] === approvalsKeyRoot,
+        });
+        for (const q of matches) {
+          const prev = q.state.data as ApprovalCardModel[] | undefined;
+          if (!prev) continue;
+          const filterStatus = extractStatusFromKey(q.queryKey);
+          const present = prev.some((c) => c.id === card.id);
+          let next: ApprovalCardModel[];
+          if (!filterStatus || filterStatus === nextStatus) {
+            next = present
+              ? prev.map((c) => (c.id === card.id ? patched : c))
+              : [patched, ...prev];
+          } else {
+            next = prev.filter((c) => c.id !== card.id);
+          }
+          queryClient.setQueryData(q.queryKey, next);
+        }
+        return { snapshots };
+      },
+      onError: (_err, _vars, ctx) => {
+        if (!ctx) return;
+        for (const [key, value] of ctx.snapshots) {
+          queryClient.setQueryData(key, value);
+        }
+        toast({ title: "Action failed", variant: "destructive" });
+      },
+      onSettled: () => {
+        queryClient.invalidateQueries({
+          predicate: (q) => q.queryKey[0] === approvalsKeyRoot,
+        });
+        queryClient.invalidateQueries({ queryKey: getGetDashboardMetricsQueryKey() });
+      },
+    };
   }
 
   const approve = useApproveApproval({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Approved", description: card.workflowTitle });
-        refresh();
-      },
+      ...buildOptimistic("approved"),
+      onSuccess: () => toast({ title: "Approved", description: card.workflowTitle }),
     },
   });
   const reject = useRejectApproval({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Rejected", description: card.workflowTitle });
-        refresh();
-      },
+      ...buildOptimistic("rejected"),
+      onSuccess: () => toast({ title: "Rejected", description: card.workflowTitle }),
     },
   });
   const revise = useRequestApprovalRevision({
     mutation: {
-      onSuccess: () => {
-        toast({ title: "Revision requested", description: card.workflowTitle });
-        refresh();
-      },
+      ...buildOptimistic("revision_requested"),
+      onSuccess: () =>
+        toast({ title: "Revision requested", description: card.workflowTitle }),
     },
   });
 

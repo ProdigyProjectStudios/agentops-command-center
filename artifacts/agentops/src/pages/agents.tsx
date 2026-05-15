@@ -10,7 +10,9 @@ import {
 } from "lucide-react";
 import {
   useListAgents,
+  useListWorkflows,
   type AgentDirectoryEntry,
+  type WorkflowStatus,
 } from "@workspace/api-client-react";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -26,19 +28,32 @@ const AGENT_ICONS: Record<string, typeof Bot> = {
   memory: Database,
 };
 
-function statusBadgeClass(status: AgentDirectoryEntry["status"]): string {
+type DerivedStatus = "active" | "idle";
+
+const TERMINAL_STATUSES = new Set<WorkflowStatus>([
+  "approved",
+  "rejected",
+  "finalized",
+  "failed",
+]);
+
+function statusBadgeClass(status: DerivedStatus): string {
   switch (status) {
     case "active":
       return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
     case "idle":
       return "bg-slate-500/15 text-slate-300 border-slate-500/30";
-    case "offline":
-      return "bg-rose-500/15 text-rose-300 border-rose-500/30";
   }
 }
 
 export default function AgentsPage() {
   const { data, isLoading } = useListAgents();
+  const { data: workflows } = useListWorkflows();
+  const anyRunning = (workflows ?? []).some((w) => !TERMINAL_STATUSES.has(w.status));
+
+  function deriveStatus(agent: AgentDirectoryEntry): DerivedStatus {
+    return anyRunning && agent.status !== "offline" ? "active" : "idle";
+  }
 
   return (
     <div className="px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
@@ -62,6 +77,7 @@ export default function AgentsPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {(data ?? []).map((agent) => {
           const Icon = AGENT_ICONS[agent.slug] ?? Bot;
+          const derived = deriveStatus(agent);
           return (
             <Card
               key={agent.id}
@@ -75,16 +91,18 @@ export default function AgentsPage() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-sm truncate">{agent.name}</h3>
-                    <StatusBadge className={statusBadgeClass(agent.status)}>
+                    <StatusBadge
+                      className={statusBadgeClass(derived)}
+                      testId={`agent-status-${agent.slug}`}
+                    >
                       <span
                         className={cn(
                           "size-1.5 rounded-full",
-                          agent.status === "active" && "bg-emerald-300 animate-pulse",
-                          agent.status === "idle" && "bg-slate-300",
-                          agent.status === "offline" && "bg-rose-300",
+                          derived === "active" && "bg-emerald-300 animate-pulse",
+                          derived === "idle" && "bg-slate-300",
                         )}
                       />
-                      {agent.status}
+                      {derived}
                     </StatusBadge>
                   </div>
                   <div className="text-xs text-muted-foreground mt-0.5">{agent.role}</div>

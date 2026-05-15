@@ -125,9 +125,10 @@ export default function ToolCallsPage() {
 
       <Card className="bg-card border-card-border overflow-hidden">
         <div className="grid grid-cols-12 gap-3 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
-          <SortHeader label="Tool" sortKey="toolName" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-3" />
-          <div className="col-span-3">Workflow</div>
-          <div className="col-span-3">Output</div>
+          <SortHeader label="Tool" sortKey="toolName" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-2" />
+          <div className="col-span-2">Workflow</div>
+          <div className="col-span-3">Input</div>
+          <div className="col-span-2">Output</div>
           <SortHeader label="Status" sortKey="status" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-1" />
           <SortHeader label="Duration" sortKey="durationMs" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-1 justify-end" />
           <SortHeader label="When" sortKey="createdAt" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-1 justify-end" />
@@ -176,7 +177,7 @@ function ToolRow({
         data-testid={`tool-row-${tc.id}`}
         className="w-full grid grid-cols-12 gap-3 px-5 py-3 text-sm border-b border-card-border last:border-0 hover-elevate text-left items-center"
       >
-        <div className="col-span-3 flex items-center gap-2 min-w-0">
+        <div className="col-span-2 flex items-center gap-2 min-w-0">
           {expanded ? (
             <ChevronDown className="size-3 text-muted-foreground shrink-0" />
           ) : (
@@ -185,13 +186,20 @@ function ToolRow({
           <Wrench className="size-3.5 text-primary shrink-0" />
           <code className="text-xs font-mono truncate">{tc.toolName}</code>
         </div>
-        <div className="col-span-3 min-w-0">
+        <div className="col-span-2 min-w-0">
           <div className="truncate text-xs">{tc.workflowTitle}</div>
           {tc.agentName && (
             <div className="text-[11px] text-muted-foreground truncate">{tc.agentName}</div>
           )}
         </div>
-        <div className="col-span-3 text-xs text-muted-foreground truncate">
+        <div
+          className="col-span-3 text-xs text-muted-foreground truncate font-mono"
+          data-testid={`tool-input-summary-${tc.id}`}
+          title={summarizeJson(tc.input, 200)}
+        >
+          {summarizeJson(tc.input, 80)}
+        </div>
+        <div className="col-span-2 text-xs text-muted-foreground truncate">
           {tc.outputSummary}
         </div>
         <div className="col-span-1">
@@ -222,6 +230,24 @@ function ToolRow({
       )}
     </>
   );
+}
+
+function summarizeJson(value: unknown, max: number): string {
+  if (value == null) return "—";
+  if (typeof value === "string") return value.length > max ? value.slice(0, max - 1) + "…" : value;
+  if (typeof value !== "object") return String(value);
+  const entries = Object.entries(value as Record<string, unknown>);
+  if (entries.length === 0) return "—";
+  const parts = entries.map(([k, v]) => {
+    let display: string;
+    if (v == null) display = "null";
+    else if (typeof v === "string") display = `"${v}"`;
+    else if (typeof v === "object") display = Array.isArray(v) ? `[${v.length}]` : "{…}";
+    else display = String(v);
+    return `${k}: ${display}`;
+  });
+  const joined = parts.join(", ");
+  return joined.length > max ? joined.slice(0, max - 1) + "…" : joined;
 }
 
 function DetailBlock({ label, value }: { label: string; value: unknown }) {
