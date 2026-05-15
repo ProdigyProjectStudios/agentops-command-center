@@ -82,12 +82,12 @@ export default function DashboardPage() {
               {PRODUCT.tagline}
             </div>
             <h2
-              className="font-['Instrument_Serif',_serif] italic text-6xl sm:text-7xl font-normal tracking-[-0.025em] leading-[0.95] bg-gradient-to-r from-foreground via-foreground/95 to-foreground/80 bg-clip-text text-transparent [text-shadow:0_0_28px_hsl(var(--primary)/0.18)]"
+              className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent"
               data-testid="text-page-title"
             >
               {PAGE.dashboard.title}
             </h2>
-            <p className="text-muted-foreground/90 mt-4 text-base sm:text-lg leading-relaxed max-w-xl font-light tracking-[-0.005em]">
+            <p className="text-muted-foreground mt-3 text-base sm:text-lg leading-relaxed max-w-xl">
               {PAGE.dashboard.subtitle}
             </p>
             <div className="mt-6 flex flex-wrap gap-x-5 gap-y-2.5">
