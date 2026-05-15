@@ -39,6 +39,7 @@ A portfolio-grade multi-agent enterprise operations platform that triages operat
 - **Workflow stages are first-class enums** — `workflow_status` (`submitted → triaged → legal_review → finance_review → communications_draft → approval_pending → approved/rejected → finalized/failed`) is the contract the orchestrator state machine drives.
 - **`OperationalRequest.workflowRunId`** is a join projection, not a column — handlers project it explicitly.
 - **Demo-mode-first orchestrator** — pipeline produces deterministic output without an API key, so the platform is always demoable.
+- **Internal-only DB models** — `users` and `memory_chunks` are intentionally excluded from the public API contract (`lib/api-spec/openapi.yaml`). They are server-side concerns: `users` backs `requestedBy` / `decidedBy` attribution and future auth, and `memory_chunks` is used internally by the Memory agent for retrieval. They may be exposed later if a UI need arises.
 
 ## Product
 
