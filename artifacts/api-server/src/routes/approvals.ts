@@ -127,7 +127,7 @@ async function decide(
   await db.insert(activityLogsTable).values({
     workflowRunId: updated.workflowRunId,
     actor: operatorLabel,
-    actorType: "user",
+    actorType: "operator",
     action: auditEntry.action,
     message: auditEntry.message,
     metadata: auditEntry.metadata ?? {},
