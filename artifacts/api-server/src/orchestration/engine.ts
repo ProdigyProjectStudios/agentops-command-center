@@ -162,7 +162,8 @@ async function hydrateState(workflowRunId: number): Promise<{
       });
       // memory_search tool-call output payload carries the canonical memory
       // hits with snippets; rehydrate them onto state.retrievedMemory so
-      // resumed downstream nodes see the same context.
+      // resumed downstream nodes see the same context. Dedupe by documentId
+      // (keeping highest score) so repeated reruns don't inflate the channel.
       if (tc.toolName === "memory_search") {
         const out = tc.output as {
           hits?: Array<{
@@ -174,13 +175,26 @@ async function hydrateState(workflowRunId: number): Promise<{
           }>;
         };
         for (const h of out.hits ?? []) {
-          retrievedMemory.push({
-            documentId: h.documentId,
-            title: h.title,
-            category: h.category,
-            snippet: h.snippet,
-            score: h.score,
-          });
+          const existingIdx = retrievedMemory.findIndex(
+            (r) => r.documentId === h.documentId,
+          );
+          if (existingIdx === -1) {
+            retrievedMemory.push({
+              documentId: h.documentId,
+              title: h.title,
+              category: h.category,
+              snippet: h.snippet,
+              score: h.score,
+            });
+          } else if (h.score > retrievedMemory[existingIdx]!.score) {
+            retrievedMemory[existingIdx] = {
+              documentId: h.documentId,
+              title: h.title,
+              category: h.category,
+              snippet: h.snippet,
+              score: h.score,
+            };
+          }
         }
       }
     }
