@@ -52,10 +52,11 @@ export default function WorkflowsListPage() {
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.22, ease: "easeOut", delay: Math.min(idx, 12) * 0.025 }}
+            className="border-b border-card-border last:border-0"
           >
           <Link
             href={`/workflows/${w.id}`}
-            className="grid grid-cols-12 gap-4 px-5 py-3 text-sm border-b border-card-border last:border-0 hover-elevate"
+            className="grid grid-cols-12 gap-4 px-5 py-3 text-sm hover-elevate"
             data-testid={`row-workflow-${w.id}`}
           >
             <div className="col-span-5 min-w-0">
@@ -97,14 +98,12 @@ export default function WorkflowsListPage() {
               Submit your first operational request and watch the agent pipeline triage,
               review, and recommend in real time.
             </p>
-            <Link href="/requests/new">
-              <Button asChild>
-                <span className="cursor-pointer">
-                  <PlusCircle className="size-4" />
-                  New Request
-                </span>
-              </Button>
-            </Link>
+            <Button asChild>
+              <Link href="/requests/new">
+                <PlusCircle className="size-4" />
+                New Request
+              </Link>
+            </Button>
           </div>
         )}
       </Card>
