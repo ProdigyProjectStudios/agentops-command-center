@@ -205,29 +205,22 @@ export default function WorkflowDetailPage() {
   }, [workflow]);
   const [expanded, setExpanded] = useState<Set<NodeKey>>(() => new Set());
   // Auto-expand newly-active nodes as the run progresses, but preserve any
-  // panels the user has manually collapsed/opened. On mobile, newly-active
-  // nodes replace whatever was open; on desktop they're additive.
-  const [seenAuto, setSeenAuto] = useState<Set<NodeKey>>(() => new Set());
+  // panel state the user has manually changed and don't reset on every poll.
+  // `seenAuto` tracks which nodes we've already auto-expanded once.
+  const seenAutoRef = useMemo(() => ({ current: new Set<NodeKey>() }), []);
   useEffect(() => {
+    const newlyActive: NodeKey[] = [];
+    for (const key of defaultExpanded) {
+      if (!seenAutoRef.current.has(key)) newlyActive.push(key);
+    }
+    if (newlyActive.length === 0) return;
     setExpanded((prev) => {
       const next = isMobile ? new Set<NodeKey>() : new Set(prev);
-      let changed = isMobile;
-      for (const key of defaultExpanded) {
-        if (!seenAuto.has(key)) {
-          if (isMobile) next.clear();
-          next.add(key);
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-    setSeenAuto((prev) => {
-      if ([...defaultExpanded].every((k) => prev.has(k))) return prev;
-      const next = new Set(prev);
-      for (const k of defaultExpanded) next.add(k);
+      for (const key of newlyActive) next.add(key);
       return next;
     });
-  }, [defaultExpanded, isMobile, seenAuto]);
+    for (const key of newlyActive) seenAutoRef.current.add(key);
+  }, [defaultExpanded, isMobile, seenAutoRef]);
   const toggleNode = useCallback(
     (key: NodeKey) => {
       setExpanded((prev) => {
