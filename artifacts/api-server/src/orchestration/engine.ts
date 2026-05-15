@@ -277,13 +277,31 @@ export class WorkflowEngine {
       .where(eq(approvalRequestsTable.workflowRunId, workflowRunId));
 
     const isResume = completedSteps.length > 0;
+    const priorStage = workflowRun.currentStage;
+    const priorStatus = workflowRun.status;
     const startedAt = workflowRun.startedAt ?? new Date();
+    // On resume, preserve the highest stage we already reached instead of
+    // snapping back to "triaged" — that keeps the audit/status history
+    // monotonic. Fresh runs advance to "triaged" as before.
+    const STAGE_ORDER = [
+      "submitted",
+      "triaged",
+      "legal_review",
+      "finance_review",
+      "communications_draft",
+      "approval_pending",
+    ];
+    const resumeStage = isResume
+      ? (STAGE_ORDER.indexOf(priorStage) >= STAGE_ORDER.indexOf("triaged")
+          ? priorStage
+          : "triaged")
+      : "triaged";
     [workflowRun] = await db
       .update(workflowRunsTable)
       .set({
-        status: "triaged",
+        status: resumeStage as typeof workflowRun.status,
         startedAt,
-        currentStage: workflowRun.currentStage || "triaged",
+        currentStage: resumeStage,
       })
       .where(eq(workflowRunsTable.id, workflowRunId))
       .returning();
@@ -295,13 +313,17 @@ export class WorkflowEngine {
         : "Workflow run started — pipeline kicked off from submitted state.",
       actor: "system",
       actorType: "system",
-      from: isResume ? (workflowRun?.currentStage ?? "submitted") : "submitted",
-      to: "triaged",
+      from: isResume ? priorStage : "submitted",
+      to: resumeStage,
       change: isResume
-        ? `currentStage: ${workflowRun?.currentStage ?? "submitted"} → triaged (resume)`
+        ? `resume: previous stage ${priorStage} (status=${priorStatus}) preserved; ${completedKeys.size} step(s) hydrated`
         : "status: submitted → triaged",
       workflowRunId,
-      metadata: { resumedSteps: Array.from(completedKeys) },
+      metadata: {
+        resumedSteps: Array.from(completedKeys),
+        priorStatus,
+        priorStage,
+      },
     });
     await db.insert(activityLogsTable).values({
       workflowRunId,

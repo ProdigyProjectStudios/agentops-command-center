@@ -80,7 +80,7 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
  * called from non-state-aware code paths (tests, ad-hoc usage).
  */
 export async function runAgent<TDetails extends Record<string, unknown>>(
-  cfg: BaseAgentConfig<TDetails> & { demoDetailsValue?: TDetails },
+  cfg: BaseAgentConfig<TDetails>,
   userPrompt: string,
 ): Promise<AgentOutput> {
   const fakeState = {
