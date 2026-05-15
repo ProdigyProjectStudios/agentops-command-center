@@ -7,7 +7,11 @@ import DashboardPage from "@/pages/dashboard";
 import NewRequestPage from "@/pages/new-request";
 import WorkflowsListPage from "@/pages/workflows-list";
 import WorkflowDetailPage from "@/pages/workflow-detail";
-import { ComingSoon } from "@/pages/coming-soon";
+import ApprovalsPage from "@/pages/approvals";
+import AgentsPage from "@/pages/agents";
+import KnowledgePage from "@/pages/knowledge";
+import ToolCallsPage from "@/pages/tool-calls";
+import SettingsPage from "@/pages/settings";
 import NotFound from "@/pages/not-found";
 
 const queryClient = new QueryClient({
@@ -26,36 +30,11 @@ function Router() {
       <Route path="/requests/new" component={NewRequestPage} />
       <Route path="/workflows" component={WorkflowsListPage} />
       <Route path="/workflows/:id" component={WorkflowDetailPage} />
-      <Route path="/approvals">
-        <ComingSoon
-          title="Approval Queue"
-          description="Triage every pending decision across the portfolio in one place."
-        />
-      </Route>
-      <Route path="/agents">
-        <ComingSoon
-          title="Agent Directory"
-          description="Browse the multi-agent crew, their tools, and live activity."
-        />
-      </Route>
-      <Route path="/knowledge">
-        <ComingSoon
-          title="Knowledge Base"
-          description="Policy docs and SOPs the agents reference during reasoning."
-        />
-      </Route>
-      <Route path="/tool-calls">
-        <ComingSoon
-          title="Tool Call History"
-          description="Full forensic log of every external API call agents have made."
-        />
-      </Route>
-      <Route path="/settings">
-        <ComingSoon
-          title="Settings"
-          description="Toggle demo vs. live mode and configure portfolio companies."
-        />
-      </Route>
+      <Route path="/approvals" component={ApprovalsPage} />
+      <Route path="/agents" component={AgentsPage} />
+      <Route path="/knowledge" component={KnowledgePage} />
+      <Route path="/tool-calls" component={ToolCallsPage} />
+      <Route path="/settings" component={SettingsPage} />
       <Route component={NotFound} />
     </Switch>
   );
