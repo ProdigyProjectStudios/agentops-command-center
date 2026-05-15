@@ -81,7 +81,10 @@ export async function generateAgentOutput(
 
 You MUST respond with a single JSON object that matches the SAME SHAPE as the example below
 (keep every key, preserve types and units; numeric *Cents fields are integers; risk levels are
-one of "low" | "medium" | "high" | "critical"). Do not wrap your response in markdown.
+one of "low" | "medium" | "high" | "critical"; recommendedDecision is exactly
+"approve" or "reject"; each entry in complianceChecks has a status of
+"pass" | "review" | "flag" | "fail").
+Do not wrap your response in markdown.
 
 EXAMPLE SHAPE:
 ${schemaHint}`;

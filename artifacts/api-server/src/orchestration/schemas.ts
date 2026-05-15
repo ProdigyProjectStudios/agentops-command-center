@@ -2,6 +2,7 @@ import { z } from "zod";
 
 const riskLevel = z.enum(["low", "medium", "high", "critical"]);
 const checkStatus = z.enum(["pass", "review", "flag", "fail"]);
+const recommendedDecision = z.enum(["approve", "reject"]);
 
 export const opsTriageSchema = z.object({
   classification: z.string(),
@@ -68,7 +69,7 @@ export const communicationsSchema = z.object({
 export const synthesisSchema = z.object({
   overallRisk: riskLevel,
   blockingIssues: z.array(z.string()),
-  recommendedDecision: z.string(),
+  recommendedDecision: recommendedDecision,
   keyEvidence: z.array(z.string()),
   nextActions: z.array(z.string()),
   summary: z.string(),
