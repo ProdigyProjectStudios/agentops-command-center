@@ -5,11 +5,17 @@ import {
   Activity,
   AlertTriangle,
   ArrowRight,
+  BookOpen,
+  Bot,
   CheckCircle2,
   Clock,
   DollarSign,
+  Flag,
+  Layers,
   PlusCircle,
+  Sparkles,
   Workflow,
+  Wrench,
   Zap,
 } from "lucide-react";
 import {
@@ -20,6 +26,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
+import { EmptyState } from "@/components/EmptyState";
 import {
   formatCurrencyCents,
   formatRelative,
@@ -27,6 +34,16 @@ import {
   workflowStatusLabel,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { PRODUCT } from "@/lib/copy";
+
+const PILLARS: Array<{ icon: typeof Bot; label: string }> = [
+  { icon: Bot, label: "Multi-agent triage" },
+  { icon: Flag, label: "Human approvals" },
+  { icon: BookOpen, label: "Shared memory" },
+  { icon: Wrench, label: "Tool execution" },
+  { icon: Activity, label: "Audit log" },
+  { icon: Layers, label: "Portfolio view" },
+];
 
 export default function DashboardPage() {
   const { data: metrics, isLoading } = useGetDashboardMetrics();
@@ -37,27 +54,65 @@ export default function DashboardPage() {
   return (
     <PageTransition>
     <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-[1400px] mx-auto">
-      <div className="flex items-start justify-between gap-6">
-        <div>
-          <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
-            Operations Dashboard
-          </h2>
-          <p className="text-muted-foreground mt-1 text-sm">
-            Live view of agent activity, approvals, and risk across your portfolio.
-          </p>
+      {/* Hero band */}
+      <motion.section
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, ease: "easeOut" }}
+        className="relative overflow-hidden rounded-xl border border-card-border bg-gradient-to-br from-primary/10 via-card to-card p-6 sm:p-8"
+      >
+        <div className="absolute -top-24 -right-24 size-72 rounded-full bg-primary/10 blur-3xl pointer-events-none" />
+        <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-6">
+          <div className="max-w-2xl">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-medium mb-2">
+              {PRODUCT.tagline}
+            </div>
+            <h2 className="text-3xl sm:text-4xl font-semibold tracking-tight" data-testid="text-page-title">
+              Operations Command Center
+            </h2>
+            <p className="text-muted-foreground mt-2 text-sm sm:text-base leading-relaxed">
+              A live cockpit for every operational request crossing your portfolio —
+              triaged, reviewed, and routed by a coordinated agent crew.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-x-4 gap-y-2">
+              {PILLARS.map((p) => {
+                const Icon = p.icon;
+                return (
+                  <div
+                    key={p.label}
+                    className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground"
+                  >
+                    <Icon className="size-3 text-primary/80" />
+                    {p.label}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Link href="/overview">
+              <Button variant="outline" size="lg" data-testid="button-overview" asChild>
+                <span className="cursor-pointer">
+                  <Sparkles className="size-4" />
+                  Why AgentOps
+                </span>
+              </Button>
+            </Link>
+            <Link href="/requests/new">
+              <Button data-testid="button-new-request" size="lg" asChild>
+                <span className="cursor-pointer">
+                  <PlusCircle className="size-4" />
+                  New Request
+                </span>
+              </Button>
+            </Link>
+          </div>
         </div>
-        <Link href="/requests/new">
-          <Button data-testid="button-new-request" size="lg" asChild>
-            <span className="cursor-pointer">
-              <PlusCircle className="size-4" />
-              New Request
-            </span>
-          </Button>
-        </Link>
-      </div>
+      </motion.section>
 
+      {/* KPI strip */}
       <motion.div
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4"
         initial="hidden"
         animate="show"
         variants={{
@@ -109,6 +164,58 @@ export default function DashboardPage() {
         />
       </motion.div>
 
+      {/* Demo story panel */}
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35, delay: 0.1, ease: "easeOut" }}
+      >
+        <Card
+          className="p-6 bg-gradient-to-br from-primary/8 via-card to-card border-primary/30"
+          data-testid="card-demo-story"
+        >
+          <div className="flex items-start gap-4 flex-col lg:flex-row lg:items-center justify-between">
+            <div className="flex items-start gap-4 max-w-3xl">
+              <div className="size-11 rounded-lg bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                <Sparkles className="size-5" />
+              </div>
+              <div>
+                <div className="text-[11px] uppercase tracking-wider text-primary/80 font-medium mb-1">
+                  Demo Story
+                </div>
+                <h3 className="text-lg font-semibold tracking-tight">
+                  Acme HQ wants to spend $48K on emergency roof repair.
+                </h3>
+                <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
+                  Submit the sample request and watch the crew light up: Ops triages, Memory pulls
+                  the procurement policy, Legal reads the contract, Finance checks budget fit,
+                  Comms drafts the announcement, and the run lands at the CFO approval gate —
+                  end to end in under a minute.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 lg:shrink-0">
+              <Link href="/requests/new">
+                <Button data-testid="button-run-demo" asChild>
+                  <span className="cursor-pointer">
+                    <PlusCircle className="size-4" />
+                    Run the demo
+                  </span>
+                </Button>
+              </Link>
+              <Link href="/overview">
+                <Button variant="outline" data-testid="button-see-how" asChild>
+                  <span className="cursor-pointer">
+                    See how it works <ArrowRight className="size-4" />
+                  </span>
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      </motion.div>
+
+      {/* Recent workflows + activity */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <Card className="lg:col-span-2 p-6 bg-card border-card-border">
           <div className="flex items-center justify-between mb-4">
@@ -133,6 +240,25 @@ export default function DashboardPage() {
                 <Skeleton className="h-14 w-full" />
                 <Skeleton className="h-14 w-full" />
               </>
+            )}
+            {workflows && recentWorkflows.length === 0 && (
+              <EmptyState
+                icon={Workflow}
+                title="No workflows yet"
+                description="File the first request and the agent crew will spin up a run in seconds."
+                action={
+                  <Link href="/requests/new">
+                    <Button size="sm" asChild>
+                      <span className="cursor-pointer">
+                        <PlusCircle className="size-4" />
+                        New Request
+                      </span>
+                    </Button>
+                  </Link>
+                }
+                variant="bare"
+                testId="empty-recent-workflows"
+              />
             )}
             {recentWorkflows.map((w) => (
               <Link

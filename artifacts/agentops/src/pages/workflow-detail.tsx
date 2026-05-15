@@ -46,6 +46,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
+import { ErrorState } from "@/components/ErrorState";
 import { useToast } from "@/hooks/use-toast";
 import {
   detectRecommendedOutcome,
@@ -255,26 +256,26 @@ export default function WorkflowDetailPage() {
     return (
       <PageTransition>
         <div className="px-4 sm:px-6 lg:px-8 py-12 max-w-2xl mx-auto">
-          <Card className="p-8 bg-card border-card-border text-center" data-testid="workflow-error">
-            <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-4">
-              <AlertTriangle className="size-6" />
-            </div>
-            <h2 className="text-lg font-semibold mb-1">Workflow not found</h2>
-            <p className="text-sm text-muted-foreground mb-5">
-              {!Number.isFinite(id)
+          <ErrorState
+            title="Workflow not found"
+            description={
+              !Number.isFinite(id)
                 ? "That workflow ID isn't valid."
                 : error instanceof Error
                   ? error.message
-                  : "We couldn't load this workflow run."}
-            </p>
-            <Link href="/workflows" data-testid="link-back-workflows">
-              <Button variant="outline" asChild>
-                <span className="cursor-pointer">
-                  <ArrowLeft className="size-3" /> Back to workflows
-                </span>
-              </Button>
-            </Link>
-          </Card>
+                  : "We couldn't load this workflow run."
+            }
+            testId="workflow-error"
+            action={
+              <Link href="/workflows" data-testid="link-back-workflows">
+                <Button variant="outline" asChild>
+                  <span className="cursor-pointer">
+                    <ArrowLeft className="size-3" /> Back to workflows
+                  </span>
+                </Button>
+              </Link>
+            }
+          />
         </div>
       </PageTransition>
     );
@@ -376,6 +377,11 @@ export default function WorkflowDetailPage() {
           </div>
         </div>
 
+        {/* Executive brief — shown once Risk Synthesis has actually completed */}
+        {(synthesisStep?.status === "completed" || isFinalized) && (
+          <FinalExecutiveBrief workflow={workflow} synthesis={synthesisEnvelope} />
+        )}
+
         {/* Graph timeline */}
         <Card className="p-5 bg-card border-card-border" data-testid="graph-timeline">
           <div className="flex items-center justify-between mb-5">
@@ -459,14 +465,6 @@ export default function WorkflowDetailPage() {
             {/* Approval Decision */}
             {workflow.approval && (
               <ApprovalDecisionSection workflow={workflow} queryKey={queryKey} />
-            )}
-
-            {/* Final Executive Brief */}
-            {isFinalized && (
-              <FinalExecutiveBrief
-                workflow={workflow}
-                synthesis={synthesisEnvelope}
-              />
             )}
           </div>
 

@@ -12,7 +12,9 @@ import AgentsPage from "@/pages/agents";
 import KnowledgePage from "@/pages/knowledge";
 import ToolCallsPage from "@/pages/tool-calls";
 import SettingsPage from "@/pages/settings";
+import OverviewPage from "@/pages/overview";
 import NotFound from "@/pages/not-found";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +37,7 @@ function Router() {
       <Route path="/knowledge" component={KnowledgePage} />
       <Route path="/tool-calls" component={ToolCallsPage} />
       <Route path="/settings" component={SettingsPage} />
+      <Route path="/overview" component={OverviewPage} />
       <Route component={NotFound} />
     </Switch>
   );
@@ -46,7 +49,9 @@ function App() {
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
           <AppShell>
-            <Router />
+            <ErrorBoundary>
+              <Router />
+            </ErrorBoundary>
           </AppShell>
         </WouterRouter>
         <Toaster />

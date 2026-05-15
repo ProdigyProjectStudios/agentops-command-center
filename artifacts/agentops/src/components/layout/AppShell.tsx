@@ -9,6 +9,7 @@ import {
   BookOpen,
   Wrench,
   Settings,
+  Sparkles,
   Activity,
 } from "lucide-react";
 import { useGetSystemMode } from "@workspace/api-client-react";
@@ -30,6 +31,7 @@ const NAV: NavItem[] = [
   { href: "/knowledge", label: "Knowledge", icon: BookOpen, testId: "nav-knowledge" },
   { href: "/tool-calls", label: "Tool Calls", icon: Wrench, testId: "nav-tool-calls" },
   { href: "/settings", label: "Settings", icon: Settings, testId: "nav-settings" },
+  { href: "/overview", label: "Why AgentOps", icon: Sparkles, testId: "nav-overview" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
