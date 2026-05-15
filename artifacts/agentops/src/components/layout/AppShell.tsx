@@ -160,22 +160,22 @@ export function AppShell({ children }: { children: ReactNode }) {
                 )}
                 <Icon
                   className={cn(
-                    "shrink-0",
+                    "shrink-0 transition-[filter,color] duration-300",
                     collapsed ? "size-[16px]" : "size-[15px]",
                     active
-                      ? "text-primary"
-                      : "text-muted-foreground/80 group-hover:text-sidebar-foreground",
+                      ? "text-primary [filter:drop-shadow(0_0_6px_hsl(var(--primary)/0.55))]"
+                      : "text-muted-foreground/80 group-hover:text-primary group-hover:[filter:drop-shadow(0_0_8px_hsl(var(--primary)/0.7))_drop-shadow(0_0_14px_hsl(var(--chart-2)/0.35))]",
                   )}
                   strokeWidth={active ? 2.25 : 1.75}
                 />
                 {!collapsed && (
                   <span
                     className={cn(
-                      "relative truncate tracking-tight transition-[text-shadow] duration-300",
-                      "after:pointer-events-none after:absolute after:left-0 after:-bottom-0.5 after:h-px after:w-0 after:rounded-full after:bg-gradient-to-r after:from-primary after:to-chart-2 after:transition-all after:duration-300 after:ease-out",
-                      "group-hover:after:w-full group-hover:[text-shadow:0_0_10px_hsl(var(--primary)/0.55),0_0_22px_hsl(var(--chart-2)/0.25)]",
+                      "relative inline-block whitespace-nowrap tracking-tight transition-[text-shadow,color] duration-300",
+                      "after:pointer-events-none after:absolute after:left-0 after:-bottom-1 after:h-[1.5px] after:w-0 after:rounded-full after:bg-gradient-to-r after:from-primary after:to-chart-2 after:shadow-[0_0_6px_hsl(var(--primary)/0.6)] after:transition-[width] after:duration-300 after:ease-out",
+                      "group-hover:text-sidebar-foreground group-hover:after:w-full group-hover:[text-shadow:0_0_10px_hsl(var(--primary)/0.65),0_0_22px_hsl(var(--chart-2)/0.3)]",
                       active &&
-                        "font-medium text-sidebar-foreground after:w-full [text-shadow:0_0_10px_hsl(var(--primary)/0.45)]",
+                        "font-medium text-sidebar-foreground after:w-full [text-shadow:0_0_10px_hsl(var(--primary)/0.5)]",
                     )}
                   >
                     {item.label}
