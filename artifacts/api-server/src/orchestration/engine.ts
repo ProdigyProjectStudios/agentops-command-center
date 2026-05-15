@@ -198,6 +198,7 @@ export class WorkflowEngine {
           request,
           priorSteps,
           priorOutputs,
+          ...(synthesisResult ? { synthesisOutput: synthesisResult.output } : {}),
         };
         const { step, result } = await executeNode(node, ctx, i);
         priorSteps.set(node.agentSlug + ":" + i, step);

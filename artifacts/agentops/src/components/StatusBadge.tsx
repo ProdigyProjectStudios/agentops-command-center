@@ -13,7 +13,7 @@ export function StatusBadge({
     <span
       data-testid={testId}
       className={cn(
-        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium",
+        "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-colors duration-300 ease-out",
         className,
       )}
     >

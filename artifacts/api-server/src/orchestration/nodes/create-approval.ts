@@ -5,17 +5,15 @@ export const createApprovalNode: NodeDefinition = {
   agentSlug: "ops-conductor",
   stepName: "Open Approval Gate",
   pendingStatus: "approval_pending",
-  run: async ({ request, priorOutputs }) => {
+  run: async ({ request, synthesisOutput }) => {
     const fp = fingerprintRequest(request);
-    // Prefer the live synthesis step output captured upstream so that the
-    // approval card stays consistent with the workflow-level summary.
-    let synthesis: Record<string, unknown> = synthesisDemo(request, fp);
-    for (const [key, output] of priorOutputs.entries()) {
-      if (key.startsWith("ops-conductor:") && output && typeof output["summary"] === "string") {
-        synthesis = output;
-        break;
-      }
-    }
+    // Prefer the live synthesis step output passed in by the engine so the
+    // approval card stays consistent with the workflow-level summary;
+    // fall back to the deterministic demo synthesis if absent.
+    const synthesis: Record<string, unknown> =
+      synthesisOutput && typeof synthesisOutput["summary"] === "string"
+        ? synthesisOutput
+        : synthesisDemo(request, fp);
     const summary = (synthesis["summary"] as string) ?? "";
     return {
       output: {

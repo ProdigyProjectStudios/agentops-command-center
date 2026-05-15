@@ -7,6 +7,12 @@ export interface NodeContext {
   request: OperationalRequest;
   priorSteps: Map<string, AgentStep>;
   priorOutputs: Map<string, Record<string, unknown>>;
+  /**
+   * Output of the synthesis step, populated by the engine once the
+   * synthesis node has executed. Downstream nodes (e.g. create-approval)
+   * should prefer this over recomputing demo synthesis.
+   */
+  synthesisOutput?: Record<string, unknown>;
 }
 
 export interface RecordedToolCall {
