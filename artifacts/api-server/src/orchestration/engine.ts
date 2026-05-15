@@ -48,7 +48,7 @@ import {
   type WorkflowState,
 } from "../lib/agents/types";
 import { FINALIZE_NODE, PIPELINE } from "./edges";
-import { synthesisNode } from "./nodes/synthesis";
+import { synthesisNode } from "./nodes/synthesis-node";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
 import type { NodeContext, NodeDefinition, NodeResult } from "./types";
 

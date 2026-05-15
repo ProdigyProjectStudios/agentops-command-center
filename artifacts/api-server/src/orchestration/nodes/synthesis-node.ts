@@ -82,7 +82,7 @@ export const synthesisNode: NodeDefinition = {
       ],
       activity: [
         composeAuditEntry({
-          action: "synthesis_complete",
+          action: "stage_transition",
           message: `Ops Conductor synthesized ${upstreamCount} upstream agent report(s) into recommendation: ${output.details["recommendedDecision"]}.`,
           actor: "ops-conductor",
           actorType: "agent",
