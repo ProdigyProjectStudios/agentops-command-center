@@ -137,10 +137,14 @@ function isPlainObject(v: unknown): v is Record<string, unknown> {
 }
 
 /**
- * Lightweight runtime shape check: every top-level key in `expected` must be
- * present in `actual`, and (for primitive/array values) the JS typeof must
- * match. Nested objects only need to exist as objects — their inner shape is
- * not enforced, but missing inner keys will be backfilled by deepMerge.
+ * Lightweight runtime shape check. Recursively validates that every key in
+ * `expected` is present in `actual` with a compatible type:
+ *   - primitives must match `typeof`
+ *   - arrays must be arrays (element types are not enforced — LLM outputs
+ *     legitimately produce variable array contents)
+ *   - nested plain objects are validated recursively
+ * Missing inner keys still benefit from `deepMerge` backfilling demo values,
+ * but a structural mismatch (wrong type at any level) triggers full fallback.
  */
 function matchesShape(
   actual: Record<string, unknown>,
@@ -157,6 +161,7 @@ function matchesShape(
     }
     if (isPlainObject(want)) {
       if (!isPlainObject(got)) return false;
+      if (!matchesShape(got, want)) return false;
       continue;
     }
     if (typeof want !== typeof got) return false;

@@ -146,6 +146,11 @@ The mode badge in the top-right of the app reflects which path is active.
 If either the Replit integration env vars **or** `OPENAI_API_KEY` is present, live mode is
 enabled. Otherwise the platform runs in demo mode.
 
+> **Credential precedence:** when both are set, the Replit OpenAI integration
+> (`AI_INTEGRATIONS_OPENAI_BASE_URL` + `AI_INTEGRATIONS_OPENAI_API_KEY`) is preferred over a
+> direct `OPENAI_API_KEY`. The integration handles billing, rotation, and observability
+> for you, so it's the recommended path on Replit.
+
 ---
 
 ## Useful scripts
