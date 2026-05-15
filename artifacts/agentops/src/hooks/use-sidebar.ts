@@ -4,13 +4,11 @@ const STORAGE_KEY = "agentops:sidebar-collapsed";
 const NARROW_QUERY = "(max-width: 1023px)";
 
 function readStored(): boolean {
-  if (typeof window === "undefined") return true;
+  if (typeof window === "undefined") return false;
   try {
-    const value = window.localStorage.getItem(STORAGE_KEY);
-    if (value === null) return true;
-    return value === "1";
+    return window.localStorage.getItem(STORAGE_KEY) === "1";
   } catch {
-    return true;
+    return false;
   }
 }
 
@@ -19,9 +17,7 @@ function readStored(): boolean {
  *
  * - On viewports narrower than 1024px the sidebar is forced collapsed
  *   regardless of the stored preference (and toggling is a no-op).
- * - On wider viewports the user's stored preference applies (default: collapsed
- *   on first load, so the cockpit feels clean — labels show as tooltips on
- *   hover; user can expand and the preference persists).
+ * - On wider viewports the user's stored preference applies (default: open).
  * - Manual toggles only persist when the user is on a wide viewport, so a
  *   resize back to desktop restores their chosen state.
  */

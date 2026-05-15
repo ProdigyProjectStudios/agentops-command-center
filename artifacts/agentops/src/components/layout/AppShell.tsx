@@ -55,8 +55,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex bg-background text-foreground">
       <aside
         className={cn(
-          "shrink-0 bg-sidebar border-r border-sidebar-border flex flex-col transition-[width] duration-300 ease-out",
-          collapsed ? "w-[68px]" : "w-64",
+          "shrink-0 bg-sidebar border-r border-sidebar-border/60 flex flex-col transition-[width] duration-300 ease-out",
+          collapsed ? "w-[60px]" : "w-[208px]",
         )}
         data-testid="sidebar"
         data-collapsed={collapsed}
@@ -64,8 +64,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Brand row + collapse toggle */}
         <div
           className={cn(
-            "border-b border-sidebar-border flex items-center gap-2",
-            collapsed ? "px-3 py-4 justify-center" : "px-4 py-4 justify-between",
+            "flex items-center gap-2",
+            collapsed ? "px-2.5 py-4 justify-center" : "px-3.5 py-4 justify-between",
           )}
         >
           <Link
@@ -76,13 +76,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             )}
             data-testid="link-home"
           >
-            <Logo size={collapsed ? 32 : 34} />
+            <Logo size={collapsed ? 28 : 30} />
             {!collapsed && (
               <div className="min-w-0">
-                <div className="font-semibold text-sidebar-foreground text-sm leading-tight tracking-tight">
+                <div className="font-medium text-sidebar-foreground text-[13px] leading-tight tracking-tight">
                   AgentOps
                 </div>
-                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/80 leading-tight mt-0.5">
+                <div className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground/70 leading-tight mt-0.5">
                   Command Center
                 </div>
               </div>
@@ -92,28 +92,31 @@ export function AppShell({ children }: { children: ReactNode }) {
             <button
               type="button"
               onClick={() => setCollapsed(true)}
-              className="p-1.5 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+              className="p-1 rounded-md text-muted-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors"
               data-testid="button-sidebar-collapse"
               aria-label="Collapse sidebar"
             >
-              <PanelLeftClose className="size-4" />
+              <PanelLeftClose className="size-3.5" />
             </button>
           )}
         </div>
 
+        {/* Hairline separator under brand */}
+        <div className="mx-3 h-px bg-gradient-to-r from-transparent via-sidebar-border/70 to-transparent" />
+
         {/* When collapsed, show expand button just below brand */}
         {collapsed && (
-          <div className="px-3 pt-2">
+          <div className="px-2.5 pt-2">
             <Tooltip>
               <TooltipTrigger asChild>
                 <button
                   type="button"
                   onClick={() => setCollapsed(false)}
-                  className="w-full flex items-center justify-center p-2 rounded-md text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/60 transition-colors"
+                  className="w-full flex items-center justify-center p-1.5 rounded-md text-muted-foreground/70 hover:text-sidebar-foreground hover:bg-sidebar-accent/40 transition-colors"
                   data-testid="button-sidebar-expand"
                   aria-label="Expand sidebar"
                 >
-                  <PanelLeftOpen className="size-4" />
+                  <PanelLeftOpen className="size-3.5" />
                 </button>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={8}>Expand</TooltipContent>
@@ -123,8 +126,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <nav
           className={cn(
-            "flex-1 py-4 space-y-1 overflow-y-auto overflow-x-hidden",
-            collapsed ? "px-2" : "px-3",
+            "flex-1 py-3 space-y-0.5 overflow-y-auto overflow-x-hidden",
+            collapsed ? "px-2" : "px-2.5",
           )}
         >
           {NAV.map((item) => {
@@ -139,32 +142,37 @@ export function AppShell({ children }: { children: ReactNode }) {
                 href={item.href}
                 data-testid={item.testId}
                 className={cn(
-                  "group relative flex items-center rounded-md text-sm transition-colors",
+                  "group relative flex items-center rounded-md text-[13px] font-normal transition-colors",
                   collapsed
-                    ? "justify-center p-2.5"
-                    : "gap-3 px-3 py-2",
+                    ? "justify-center p-2"
+                    : "gap-2.5 px-2.5 py-1.5",
                   active
-                    ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                    : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
+                    ? "bg-sidebar-accent/70 text-sidebar-accent-foreground"
+                    : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
                 )}
               >
                 {/* Active indicator rail */}
                 {active && (
                   <span
-                    className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[3px] rounded-r-full bg-gradient-to-b from-primary to-chart-2"
+                    className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-r-full bg-gradient-to-b from-primary to-chart-2"
                     aria-hidden="true"
                   />
                 )}
                 <Icon
                   className={cn(
                     "shrink-0",
-                    collapsed ? "size-[18px]" : "size-4",
+                    collapsed ? "size-[16px]" : "size-[15px]",
                     active
                       ? "text-primary"
-                      : "text-muted-foreground group-hover:text-foreground",
+                      : "text-muted-foreground/80 group-hover:text-sidebar-foreground",
                   )}
+                  strokeWidth={active ? 2.25 : 1.75}
                 />
-                {!collapsed && <span className="truncate">{item.label}</span>}
+                {!collapsed && (
+                  <span className={cn("truncate tracking-tight", active && "font-medium text-sidebar-foreground")}>
+                    {item.label}
+                  </span>
+                )}
               </Link>
             );
             if (!collapsed) return linkBody;
@@ -181,16 +189,18 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div
           className={cn(
-            "border-t border-sidebar-border text-[11px] text-muted-foreground",
-            collapsed ? "px-2 py-3 text-center" : "px-5 py-3 space-y-1",
+            "text-[10px] text-muted-foreground/70",
+            collapsed ? "px-2 py-3 text-center" : "px-3.5 py-3 space-y-0.5",
           )}
         >
+          {/* Hairline separator above footer */}
+          <div className={cn("h-px bg-gradient-to-r from-transparent via-sidebar-border/70 to-transparent", collapsed ? "mb-2" : "-mx-1 mb-2.5")} />
           {collapsed ? (
             <Tooltip>
               <TooltipTrigger asChild>
                 <Link
                   href="/overview"
-                  className="inline-flex items-center justify-center size-8 rounded-md hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+                  className="inline-flex items-center justify-center size-7 rounded-md hover:bg-sidebar-accent/40 hover:text-sidebar-foreground transition-colors"
                   data-testid="footer-link-overview"
                   aria-label="About this project"
                 >
@@ -203,12 +213,12 @@ export function AppShell({ children }: { children: ReactNode }) {
             <>
               <Link
                 href="/overview"
-                className="block hover:text-sidebar-foreground transition-colors"
+                className="block hover:text-sidebar-foreground transition-colors tracking-tight"
                 data-testid="footer-link-overview"
               >
                 About this project →
               </Link>
-              <div>v0.1 · Portfolio Demo</div>
+              <div className="uppercase tracking-[0.18em] text-muted-foreground/50">v0.1 · Portfolio Demo</div>
             </>
           )}
         </div>
