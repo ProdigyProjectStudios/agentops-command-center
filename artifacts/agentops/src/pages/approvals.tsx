@@ -38,7 +38,10 @@ import { StatusBadge } from "@/components/StatusBadge";
 import { useToast } from "@/hooks/use-toast";
 import {
   approvalStatusBadge,
+  detectRecommendedOutcome,
   formatRelative,
+  recommendedOutcomeBadge,
+  recommendedOutcomeLabel,
   riskBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -270,6 +273,25 @@ function ApprovalRow({
             <StatusBadge className={riskBadge(card.riskLevel)}>
               {card.riskLevel} risk
             </StatusBadge>
+            {(() => {
+              const outcome = detectRecommendedOutcome(card.recommendation);
+              if (!outcome) return null;
+              return (
+                <StatusBadge
+                  className={recommendedOutcomeBadge(outcome)}
+                  testId={`approval-outcome-${card.id}`}
+                >
+                  {outcome === "conditional_approve" ? (
+                    <AlertTriangle className="size-3" />
+                  ) : outcome === "approve" ? (
+                    <CheckCircle2 className="size-3" />
+                  ) : (
+                    <XCircle className="size-3" />
+                  )}
+                  {recommendedOutcomeLabel(outcome)}
+                </StatusBadge>
+              );
+            })()}
             <span className="text-xs text-muted-foreground">
               {card.portfolioCompanyName} · {formatRelative(card.createdAt)}
             </span>

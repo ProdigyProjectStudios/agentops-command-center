@@ -176,10 +176,23 @@ export function synthesisDemo(
   request: OperationalRequest,
   fp: ScenarioFingerprint,
 ): Record<string, unknown> {
+  const isConditional = fp.riskLevel === "high";
+  const isReject = fp.riskLevel === "critical";
+  const recommendedDecision = isReject
+    ? "reject"
+    : isConditional
+      ? "conditional_approve"
+      : "approve";
+  const blockingIssues = isConditional
+    ? [
+        "Insurance certificate refresh required before contract execution.",
+        "Indemnification clause must be redlined to 2× contract value cap.",
+      ]
+    : [];
   return {
     overallRisk: fp.riskLevel,
-    blockingIssues: [],
-    recommendedDecision: fp.riskLevel === "critical" ? "reject" : "approve",
+    blockingIssues,
+    recommendedDecision,
     keyEvidence: [
       "Legal review cleared (with conditions on insurance for higher-risk engagements).",
       "Finance review confirmed spend fits within quarterly envelope.",

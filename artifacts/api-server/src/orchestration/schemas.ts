@@ -2,7 +2,11 @@ import { z } from "zod";
 
 const riskLevel = z.enum(["low", "medium", "high", "critical"]);
 const checkStatus = z.enum(["pass", "review", "flag", "fail"]);
-const recommendedDecision = z.enum(["approve", "reject"]);
+const recommendedDecision = z.enum([
+  "approve",
+  "conditional_approve",
+  "reject",
+]);
 
 export const opsTriageSchema = z.object({
   classification: z.string(),

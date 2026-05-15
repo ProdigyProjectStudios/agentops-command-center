@@ -119,6 +119,41 @@ export function stepStatusBadge(s: AgentStepStatus): string {
   }
 }
 
+export type RecommendedOutcome = "approve" | "conditional_approve" | "reject";
+
+export function detectRecommendedOutcome(
+  text: string | null | undefined,
+): RecommendedOutcome | null {
+  if (!text) return null;
+  const t = text.trim().toLowerCase();
+  if (t.startsWith("conditional approve")) return "conditional_approve";
+  if (t.startsWith("recommend approve")) return "approve";
+  if (t.startsWith("recommend reject")) return "reject";
+  return null;
+}
+
+export function recommendedOutcomeLabel(o: RecommendedOutcome): string {
+  switch (o) {
+    case "approve":
+      return "Approve";
+    case "conditional_approve":
+      return "Conditional Approve";
+    case "reject":
+      return "Reject";
+  }
+}
+
+export function recommendedOutcomeBadge(o: RecommendedOutcome): string {
+  switch (o) {
+    case "approve":
+      return "bg-emerald-500/15 text-emerald-300 border-emerald-500/30";
+    case "conditional_approve":
+      return "bg-amber-500/15 text-amber-200 border-amber-400/40";
+    case "reject":
+      return "bg-rose-500/15 text-rose-300 border-rose-500/30";
+  }
+}
+
 export function approvalStatusBadge(s: ApprovalStatus): string {
   switch (s) {
     case "pending":

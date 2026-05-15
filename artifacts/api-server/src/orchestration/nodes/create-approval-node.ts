@@ -17,10 +17,19 @@ export const createApprovalNode: NodeDefinition = {
       synthesis?.summary ?? (synthDetails["summary"] as string) ?? "";
     const recommendedDecision =
       (synthDetails["recommendedDecision"] as string) ?? "approve";
+    const blockingIssues = Array.isArray(synthDetails["blockingIssues"])
+      ? (synthDetails["blockingIssues"] as string[])
+      : [];
+    const conditionsText =
+      blockingIssues.length > 0
+        ? blockingIssues.join("; ")
+        : "pending remediation of flagged conditions";
     const recommendation =
       recommendedDecision === "approve"
         ? `Recommend approve: ${summary}`
-        : `Recommend reject: blocking concerns identified during synthesis.`;
+        : recommendedDecision === "conditional_approve"
+          ? `Conditional approve: ${conditionsText}`
+          : `Recommend reject: blocking concerns identified during synthesis.`;
 
     // Flip approval status on the shared state for downstream observers.
     ctx.state.approvalStatus = "pending";
@@ -29,7 +38,7 @@ export const createApprovalNode: NodeDefinition = {
 
     return {
       output: {
-        summary: `Approval gate opened — ${recommendedDecision === "approve" ? "approval recommended" : "rejection recommended"}.`,
+        summary: `Approval gate opened — ${recommendedDecision === "approve" ? "approval recommended" : recommendedDecision === "conditional_approve" ? "conditional approval recommended" : "rejection recommended"}.`,
         findings: synthesis?.findings ?? [],
         risks: synthesis?.risks ?? [],
         recommendedActions: [

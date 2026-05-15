@@ -48,9 +48,12 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useToast } from "@/hooks/use-toast";
 import {
+  detectRecommendedOutcome,
   formatRelative,
   formatTimestamp,
   formatCurrencyCents,
+  recommendedOutcomeBadge,
+  recommendedOutcomeLabel,
   workflowStatusBadge,
   workflowStatusLabel,
   riskBadge,
@@ -1209,6 +1212,7 @@ function FinalExecutiveBrief({
     workflow.finalRecommendation ||
     (synthesis?.details?.["recommendedDecision"] as string | undefined) ||
     "—";
+  const recommendedOutcome = detectRecommendedOutcome(recommendation);
   const nextActions =
     workflow.nextActions.length > 0
       ? workflow.nextActions
@@ -1236,7 +1240,24 @@ function FinalExecutiveBrief({
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
           <div>
-            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Recommendation</div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1 flex items-center gap-2 flex-wrap">
+              <span>Recommendation</span>
+              {recommendedOutcome && (
+                <StatusBadge
+                  className={recommendedOutcomeBadge(recommendedOutcome)}
+                  testId="badge-recommended-outcome"
+                >
+                  {recommendedOutcome === "conditional_approve" ? (
+                    <AlertTriangle className="size-3" />
+                  ) : recommendedOutcome === "approve" ? (
+                    <CheckCircle2 className="size-3" />
+                  ) : (
+                    <XCircle className="size-3" />
+                  )}
+                  {recommendedOutcomeLabel(recommendedOutcome)}
+                </StatusBadge>
+              )}
+            </div>
             <p className="text-sm font-medium" data-testid="brief-recommendation">{recommendation}</p>
           </div>
           <div>

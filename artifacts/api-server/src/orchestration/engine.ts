@@ -539,10 +539,20 @@ export class WorkflowEngine {
             (synthDetails["summary"] as string).length > 0
           ? (synthDetails["summary"] as string)
           : ((demoSynthesis["summary"] as string) ?? "");
+    const decision = synthDetails["recommendedDecision"];
+    const blockingIssues = Array.isArray(synthDetails["blockingIssues"])
+      ? (synthDetails["blockingIssues"] as string[])
+      : [];
+    const conditionsText =
+      blockingIssues.length > 0
+        ? blockingIssues.join("; ")
+        : "pending remediation of flagged conditions";
     const recommendation =
-      synthDetails["recommendedDecision"] === "approve"
+      decision === "approve"
         ? `Recommend approve: ${summary}`
-        : `Recommend reject based on synthesis findings.`;
+        : decision === "conditional_approve"
+          ? `Conditional approve: ${conditionsText}`
+          : `Recommend reject based on synthesis findings.`;
     const nextActions =
       synthesisOutput?.recommendedActions &&
       synthesisOutput.recommendedActions.length > 0

@@ -81,8 +81,10 @@ export async function generateAgentOutput(
 
 You MUST respond with a single JSON object that matches the SAME SHAPE as the example below
 (keep every key, preserve types and units; numeric *Cents fields are integers; risk levels are
-one of "low" | "medium" | "high" | "critical"; recommendedDecision is exactly
-"approve" or "reject"; each entry in complianceChecks has a status of
+one of "low" | "medium" | "high" | "critical"; recommendedDecision is exactly one of
+"approve" | "conditional_approve" | "reject" (use "conditional_approve" when
+the deal can move forward only if specific blocking issues are remediated —
+populate blockingIssues with those conditions); each entry in complianceChecks has a status of
 "pass" | "review" | "flag" | "fail").
 Do not wrap your response in markdown.
 
