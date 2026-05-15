@@ -503,14 +503,14 @@ function HeroGridBackdrop() {
       />
 
       {/* Horizontal light dashes */}
-      <HeroBeam orientation="horizontal" top="22%" length={180} duration={3.4} delay={0} colorVar="--primary" />
-      <HeroBeam orientation="horizontal" top="58%" length={140} duration={4.2} delay={1.6} colorVar="--chart-2" />
-      <HeroBeam orientation="horizontal" top="80%" length={200} duration={3.8} delay={0.8} colorVar="--primary" />
+      <HeroBeam orientation="horizontal" top="22%" length={180} duration={8.5} delay={0} colorVar="--primary" />
+      <HeroBeam orientation="horizontal" top="58%" length={140} duration={10.5} delay={3.5} colorVar="--chart-2" />
+      <HeroBeam orientation="horizontal" top="80%" length={200} duration={9.5} delay={1.8} colorVar="--primary" />
 
       {/* Vertical light dashes */}
-      <HeroBeam orientation="vertical" left="18%" length={160} duration={4.6} delay={1.2} colorVar="--chart-2" />
-      <HeroBeam orientation="vertical" left="62%" length={120} duration={3.6} delay={0.4} colorVar="--primary" />
-      <HeroBeam orientation="vertical" left="86%" length={150} duration={5.0} delay={2.2} colorVar="--chart-2" />
+      <HeroBeam orientation="vertical" left="18%" length={160} duration={11.5} delay={2.6} colorVar="--chart-2" />
+      <HeroBeam orientation="vertical" left="62%" length={120} duration={9} delay={0.8} colorVar="--primary" />
+      <HeroBeam orientation="vertical" left="86%" length={150} duration={12.5} delay={4.5} colorVar="--chart-2" />
     </div>
   );
 }
@@ -559,7 +559,7 @@ function HeroBeam({
         duration,
         delay,
         repeat: Infinity,
-        repeatDelay: 1.4,
+        repeatDelay: 3.5,
         ease: "easeInOut",
         times: [0, 0.15, 0.85, 1],
       }}
