@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
@@ -15,6 +15,14 @@ import {
   Clock,
   AlertTriangle,
   Sparkles,
+  BookOpen,
+  Scale,
+  ShieldCheck,
+  Megaphone,
+  GitBranch,
+  Flag,
+  FileText,
+  Target,
 } from "lucide-react";
 import {
   useGetWorkflow,
@@ -25,6 +33,7 @@ import {
   type WorkflowRunDetail,
   type AgentStep,
   type ToolCall,
+  type ActivityLog,
 } from "@workspace/api-client-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
@@ -33,6 +42,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -47,17 +57,97 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-const PIPELINE_LABELS = [
-  "Triage",
-  "Legal Review",
-  "Finance Review",
-  "Comms Draft",
-  "Risk Compliance",
-  "Approval Routing",
-  "Audit Trail",
-  "Finalize",
+// -----------------------------------------------------------------------------
+// Pipeline graph definition — the seven user-visible nodes from Task #16.
+// Synthesis is intentionally hidden from the graph; its output is rolled into
+// the Final Executive Brief at the bottom of the page.
+// -----------------------------------------------------------------------------
+type NodeKey =
+  | "ops_triage"
+  | "memory_retrieval"
+  | "legal_review"
+  | "finance_review"
+  | "communications"
+  | "approval"
+  | "finalize";
+
+const PIPELINE_NODES: Array<{
+  key: NodeKey;
+  label: string;
+  short: string;
+  // Step `name` values persisted by the engine for this node.
+  matches: string[];
+  icon: typeof Bot;
+}> = [
+  { key: "ops_triage",       label: "Triage & Routing",         short: "Triage",   matches: ["Triage & Routing"],           icon: GitBranch },
+  { key: "memory_retrieval", label: "Knowledge Grounding",      short: "Memory",   matches: ["Knowledge Grounding"],        icon: BookOpen },
+  { key: "legal_review",     label: "Legal & Compliance",       short: "Legal",    matches: ["Legal & Compliance Review"],  icon: Scale },
+  { key: "finance_review",   label: "Finance & Budget",         short: "Finance",  matches: ["Finance & Budget Review"],    icon: ShieldCheck },
+  { key: "communications",   label: "Communications Draft",     short: "Comms",    matches: ["Communications Draft"],       icon: Megaphone },
+  { key: "approval",         label: "Approval Gate",            short: "Approval", matches: ["Open Approval Gate"],         icon: Flag },
+  { key: "finalize",         label: "Finalize Workflow",        short: "Finalize", matches: ["Finalize Workflow"],          icon: CheckCircle2 },
 ];
 
+// The synthesis node is the canonical source for the final executive brief.
+const SYNTHESIS_STEP_NAME = "Risk Synthesis";
+
+// -----------------------------------------------------------------------------
+// AgentOutput envelope (mirror of the backend type) — only the fields we read.
+// -----------------------------------------------------------------------------
+interface AgentOutputEnvelope {
+  summary?: string;
+  findings?: string[];
+  risks?: string[];
+  recommendedActions?: string[];
+  toolCallsRequested?: Array<{ toolName: string; input?: Record<string, unknown>; rationale?: string }>;
+  confidence?: number;
+  details?: Record<string, unknown>;
+}
+
+function asEnvelope(output: unknown): AgentOutputEnvelope {
+  if (!output || typeof output !== "object") return {};
+  const o = output as Record<string, unknown>;
+  return {
+    summary: typeof o["summary"] === "string" ? (o["summary"] as string) : undefined,
+    findings: Array.isArray(o["findings"]) ? (o["findings"] as string[]) : [],
+    risks: Array.isArray(o["risks"]) ? (o["risks"] as string[]) : [],
+    recommendedActions: Array.isArray(o["recommendedActions"]) ? (o["recommendedActions"] as string[]) : [],
+    toolCallsRequested: Array.isArray(o["toolCallsRequested"])
+      ? (o["toolCallsRequested"] as AgentOutputEnvelope["toolCallsRequested"])
+      : [],
+    confidence: typeof o["confidence"] === "number" ? (o["confidence"] as number) : undefined,
+    details: (o["details"] as Record<string, unknown>) ?? {},
+  };
+}
+
+// -----------------------------------------------------------------------------
+// Retrieved-memory aggregation: read every memory_search tool call and dedupe
+// by documentId, keeping the highest-scored hit (matches engine semantics).
+// -----------------------------------------------------------------------------
+interface MemoryHit {
+  documentId: number;
+  title: string;
+  category: string;
+  snippet: string;
+  score: number;
+}
+
+function aggregateMemory(toolCalls: ToolCall[]): MemoryHit[] {
+  const byId = new Map<number, MemoryHit>();
+  for (const tc of toolCalls) {
+    if (tc.toolName !== "memory_search") continue;
+    const out = tc.output as { hits?: MemoryHit[] } | undefined;
+    for (const h of out?.hits ?? []) {
+      const existing = byId.get(h.documentId);
+      if (!existing || h.score > existing.score) byId.set(h.documentId, h);
+    }
+  }
+  return Array.from(byId.values()).sort((a, b) => b.score - a.score);
+}
+
+// -----------------------------------------------------------------------------
+// Page
+// -----------------------------------------------------------------------------
 export default function WorkflowDetailPage() {
   const params = useParams<{ id: string }>();
   const id = Number(params.id);
@@ -75,15 +165,11 @@ export default function WorkflowDetailPage() {
     },
   });
 
-  const TERMINAL = new Set([
-    "approval_pending",
-    "approved",
-    "rejected",
-    "finalized",
-    "failed",
-  ]);
+  const TERMINAL = useMemo(
+    () => new Set(["approval_pending", "approved", "rejected", "finalized", "failed"]),
+    [],
+  );
 
-  // Auto-resume polling if the workflow is mid-flight when we land on the page.
   useEffect(() => {
     if (!workflow) return;
     if (polling) {
@@ -96,9 +182,7 @@ export default function WorkflowDetailPage() {
 
   const runWorkflow = useRunWorkflow({
     mutation: {
-      onSuccess: () => {
-        queryClient.invalidateQueries({ queryKey });
-      },
+      onSuccess: () => queryClient.invalidateQueries({ queryKey }),
       onError: (e) => {
         setPolling(false);
         toast({
@@ -113,28 +197,28 @@ export default function WorkflowDetailPage() {
   if (!Number.isFinite(id) || error) {
     return (
       <PageTransition>
-      <div className="px-4 sm:px-6 lg:px-8 py-12 max-w-2xl mx-auto">
-        <Card className="p-8 bg-card border-card-border text-center" data-testid="workflow-error">
-          <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-4">
-            <AlertTriangle className="size-6" />
-          </div>
-          <h2 className="text-lg font-semibold mb-1">Workflow not found</h2>
-          <p className="text-sm text-muted-foreground mb-5">
-            {!Number.isFinite(id)
-              ? "That workflow ID isn't valid."
-              : error instanceof Error
-                ? error.message
-                : "We couldn't load this workflow run."}
-          </p>
-          <Link href="/workflows" data-testid="link-back-workflows">
-            <Button variant="outline" asChild>
-              <span className="cursor-pointer">
-                <ArrowLeft className="size-3" /> Back to workflows
-              </span>
-            </Button>
-          </Link>
-        </Card>
-      </div>
+        <div className="px-4 sm:px-6 lg:px-8 py-12 max-w-2xl mx-auto">
+          <Card className="p-8 bg-card border-card-border text-center" data-testid="workflow-error">
+            <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-4">
+              <AlertTriangle className="size-6" />
+            </div>
+            <h2 className="text-lg font-semibold mb-1">Workflow not found</h2>
+            <p className="text-sm text-muted-foreground mb-5">
+              {!Number.isFinite(id)
+                ? "That workflow ID isn't valid."
+                : error instanceof Error
+                  ? error.message
+                  : "We couldn't load this workflow run."}
+            </p>
+            <Link href="/workflows" data-testid="link-back-workflows">
+              <Button variant="outline" asChild>
+                <span className="cursor-pointer">
+                  <ArrowLeft className="size-3" /> Back to workflows
+                </span>
+              </Button>
+            </Link>
+          </Card>
+        </div>
       </PageTransition>
     );
   }
@@ -142,11 +226,11 @@ export default function WorkflowDetailPage() {
   if (isLoading || !workflow) {
     return (
       <PageTransition>
-      <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-[1400px] mx-auto">
-        <Skeleton className="h-8 w-72 mb-4" />
-        <Skeleton className="h-32 w-full mb-6" />
-        <Skeleton className="h-96 w-full" />
-      </div>
+        <div className="px-4 sm:px-6 lg:px-8 py-8 max-w-[1400px] mx-auto">
+          <Skeleton className="h-8 w-72 mb-4" />
+          <Skeleton className="h-32 w-full mb-6" />
+          <Skeleton className="h-96 w-full" />
+        </div>
       </PageTransition>
     );
   }
@@ -158,245 +242,344 @@ export default function WorkflowDetailPage() {
     runWorkflow.mutate({ id });
   }
 
-  const stepsByIndex = new Map(workflow.steps.map((s) => [s.stepIndex, s]));
+  // Map each visible pipeline node to its agent_step (if any).
+  const stepsByName = new Map(workflow.steps.map((s) => [s.name, s]));
+  const nodeStateByKey = new Map<NodeKey, { step?: AgentStep; status: NodeStatus }>();
+  let sawFailure = false;
+  let sawRunning = false;
+  for (const node of PIPELINE_NODES) {
+    const step = node.matches.map((m) => stepsByName.get(m)).find(Boolean);
+    let status: NodeStatus;
+    if (!step) status = "pending";
+    else if (step.status === "completed") status = "completed";
+    else if (step.status === "failed") {
+      status = "failed";
+      sawFailure = true;
+    } else if (step.status === "running") {
+      status = "running";
+      sawRunning = true;
+    } else status = "pending";
+    nodeStateByKey.set(node.key, { step, status });
+  }
+  // Mark all post-failure nodes as skipped.
+  if (sawFailure) {
+    let past = false;
+    for (const node of PIPELINE_NODES) {
+      const cur = nodeStateByKey.get(node.key)!;
+      if (cur.status === "failed") {
+        past = true;
+        continue;
+      }
+      if (past && cur.status === "pending") cur.status = "skipped";
+    }
+  }
+  void sawRunning;
+
+  const synthesisStep = stepsByName.get(SYNTHESIS_STEP_NAME);
+  const synthesisEnvelope = synthesisStep ? asEnvelope(synthesisStep.output) : null;
+
+  const memoryHits = aggregateMemory(workflow.toolCalls);
+
+  const isFinalized = workflow.status === "finalized" || workflow.status === "approved";
 
   return (
     <PageTransition>
-    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
-      <div>
-        <Link
-          href="/workflows"
-          className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-3"
-          data-testid="link-back"
-        >
-          <ArrowLeft className="size-3" /> All workflows
-        </Link>
-        <div className="flex items-start justify-between gap-6">
-          <div className="min-w-0">
-            <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-workflow-title">
-              {workflow.request.title}
-            </h2>
-            <div className="mt-2 flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
-              <span data-testid="text-company">{workflow.request.portfolioCompanyName}</span>
-              <span>·</span>
-              <span>{workflow.request.department}</span>
-              <span>·</span>
-              <span>by {workflow.request.requestedBy}</span>
-              <span>·</span>
-              <span>{formatRelative(workflow.createdAt)}</span>
+      <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+        {/* Header */}
+        <div>
+          <Link
+            href="/workflows"
+            className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-3"
+            data-testid="link-back"
+          >
+            <ArrowLeft className="size-3" /> All workflows
+          </Link>
+          <div className="flex items-start justify-between gap-6">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-workflow-title">
+                {workflow.request.title}
+              </h2>
+              <div className="mt-2 flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
+                <span data-testid="text-company">{workflow.request.portfolioCompanyName}</span>
+                <span>·</span>
+                <span>{workflow.request.department}</span>
+                <span>·</span>
+                <span>by {workflow.request.requestedBy}</span>
+                <span>·</span>
+                <span>{formatRelative(workflow.createdAt)}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <StatusBadge className={priorityBadge(workflow.request.priority)} testId="badge-priority">
+                {workflow.request.priority.toUpperCase()}
+              </StatusBadge>
+              <StatusBadge className={riskBadge(workflow.riskLevel)} testId="badge-risk">
+                Risk: {workflow.riskLevel}
+              </StatusBadge>
+              <StatusBadge className={workflowStatusBadge(workflow.status)} testId="badge-status">
+                {workflowStatusLabel(workflow.status)}
+              </StatusBadge>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <StatusBadge className={priorityBadge(workflow.request.priority)} testId="badge-priority">
-              {workflow.request.priority.toUpperCase()}
-            </StatusBadge>
-            <StatusBadge className={riskBadge(workflow.riskLevel)} testId="badge-risk">
-              Risk: {workflow.riskLevel}
-            </StatusBadge>
-            <StatusBadge className={workflowStatusBadge(workflow.status)} testId="badge-status">
-              {workflowStatusLabel(workflow.status)}
-            </StatusBadge>
-          </div>
         </div>
-      </div>
 
-      {/* Pipeline timeline bar */}
-      <Card className="p-5 bg-card border-card-border">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-semibold">Agent Pipeline</h3>
-            <p className="text-[11px] text-muted-foreground mt-0.5">
-              Current stage: <span className="text-foreground">{workflow.currentStage}</span>
-            </p>
-          </div>
-          {canRun && (
-            <Button
-              onClick={handleRun}
-              disabled={runWorkflow.isPending || polling}
-              data-testid="button-run-workflow"
-            >
-              {runWorkflow.isPending || polling ? (
-                <>
-                  <Loader2 className="size-4 animate-spin" />
-                  Running agents…
-                </>
-              ) : (
-                <>
-                  <Play className="size-4" />
-                  Run Workflow
-                </>
-              )}
-            </Button>
-          )}
-        </div>
-        <div className="flex items-center gap-1">
-          {PIPELINE_LABELS.map((label, idx) => {
-            const step = stepsByIndex.get(idx);
-            const status = step?.status;
-            const done = status === "completed";
-            const failed = status === "failed";
-            const running = status === "running";
-            return (
-              <div key={label} className="flex-1 flex flex-col items-center gap-1.5">
-                <div className="w-full flex items-center gap-1">
-                  <div
-                    className={cn(
-                      "h-1.5 flex-1 rounded-full transition-colors",
-                      done && "bg-emerald-400/80",
-                      running && "bg-sky-400/80 animate-pulse",
-                      failed && "bg-rose-400/80",
-                      !status && "bg-muted",
-                    )}
-                  />
-                </div>
-                <span
-                  className={cn(
-                    "text-[10px] uppercase tracking-wide truncate w-full text-center",
-                    done && "text-emerald-300",
-                    running && "text-sky-300",
-                    failed && "text-rose-300",
-                    !status && "text-muted-foreground",
-                  )}
-                >
-                  {label}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </Card>
-
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2 space-y-6">
-          {/* Request brief */}
-          <Card className="p-5 bg-card border-card-border">
-            <h3 className="text-sm font-semibold mb-2">Request Brief</h3>
-            <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-description">
-              {workflow.request.description}
-            </p>
-          </Card>
-
-          {/* Agent step cards */}
-          <div className="space-y-3">
-            <h3 className="text-sm font-semibold px-1">Agent Outputs</h3>
-            {workflow.steps.length === 0 && (
-              <Card className="p-8 text-center text-sm text-muted-foreground bg-card border-card-border border-dashed">
-                No agents have run yet. Click <span className="text-foreground font-medium">Run Workflow</span> to start the pipeline.
-              </Card>
-            )}
-            <AnimatePresence initial={false}>
-              {workflow.steps.map((step, idx) => (
-                <motion.div
-                  key={step.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.28, ease: "easeOut", delay: idx * 0.04 }}
-                >
-                  <AgentStepCard step={step} toolCalls={workflow.toolCalls} />
-                </motion.div>
-              ))}
-            </AnimatePresence>
-          </div>
-
-          {/* Final recommendation */}
-          {workflow.finalRecommendation && (
-            <Card className="p-5 bg-gradient-to-br from-primary/10 to-card border-primary/30">
-              <div className="flex items-center gap-2 mb-2">
-                <Sparkles className="size-4 text-primary" />
-                <h3 className="text-sm font-semibold">Final Recommendation</h3>
-              </div>
-              <p className="text-sm whitespace-pre-wrap mb-4" data-testid="text-final-recommendation">
-                {workflow.finalRecommendation}
+        {/* Graph timeline */}
+        <Card className="p-5 bg-card border-card-border" data-testid="graph-timeline">
+          <div className="flex items-center justify-between mb-5">
+            <div>
+              <h3 className="text-sm font-semibold">Agent Graph</h3>
+              <p className="text-[11px] text-muted-foreground mt-0.5">
+                Current stage: <span className="text-foreground">{workflow.currentStage}</span>
               </p>
-              {workflow.nextActions.length > 0 && (
-                <div>
-                  <div className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                    Next Actions
-                  </div>
-                  <ul className="space-y-1.5">
-                    {workflow.nextActions.map((action, idx) => (
-                      <li key={idx} className="text-sm flex items-start gap-2" data-testid={`next-action-${idx}`}>
-                        <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
-                        <span>{action}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+            </div>
+            {canRun && (
+              <Button
+                onClick={handleRun}
+                disabled={runWorkflow.isPending || polling}
+                data-testid="button-run-workflow"
+              >
+                {runWorkflow.isPending || polling ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" /> Running agents…
+                  </>
+                ) : (
+                  <>
+                    <Play className="size-4" /> Run Workflow
+                  </>
+                )}
+              </Button>
+            )}
+          </div>
+          <GraphTimeline nodes={PIPELINE_NODES} state={nodeStateByKey} />
+        </Card>
+
+        {/* Two-column layout */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-6">
+            {/* Request brief */}
+            <Card className="p-5 bg-card border-card-border">
+              <h3 className="text-sm font-semibold mb-2">Request Brief</h3>
+              <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-description">
+                {workflow.request.description}
+              </p>
             </Card>
-          )}
-        </div>
 
-        <div className="space-y-6">
-          {/* Approval block */}
-          {workflow.approval && (
-            <ApprovalBlock workflow={workflow} queryKey={queryKey} />
-          )}
-
-          {/* Cost summary */}
-          <Card className="p-5 bg-card border-card-border">
-            <h3 className="text-sm font-semibold mb-3">Estimated Impact</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Cost</span>
-                <span className="font-medium tabular-nums" data-testid="text-cost">
-                  {formatCurrencyCents(workflow.estimatedCostCents)}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Risk Level</span>
-                <StatusBadge className={riskBadge(workflow.riskLevel)}>
-                  {workflow.riskLevel}
-                </StatusBadge>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Agent Steps</span>
-                <span className="tabular-nums">{workflow.steps.length}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tool Calls</span>
-                <span className="tabular-nums">{workflow.toolCalls.length}</span>
-              </div>
-            </div>
-          </Card>
-
-          {/* Activity log */}
-          <Card className="p-5 bg-card border-card-border">
-            <h3 className="text-sm font-semibold mb-3">Audit Log</h3>
-            <div className="space-y-2 max-h-[480px] overflow-y-auto pr-1">
-              {workflow.activity.map((a) => (
-                <div key={a.id} className="text-xs flex gap-2" data-testid={`audit-${a.id}`}>
-                  <div className="text-muted-foreground tabular-nums shrink-0">
-                    {formatTimestamp(a.createdAt)}
-                  </div>
-                  <div className="flex-1">
-                    <span className="font-medium text-foreground">{a.actor}</span>
-                    <span className="text-muted-foreground"> {a.message}</span>
-                  </div>
-                </div>
-              ))}
-              {workflow.activity.length === 0 && (
-                <div className="text-xs text-muted-foreground">No activity yet.</div>
+            {/* Agent panels */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold px-1">Agent Outputs</h3>
+              {workflow.steps.length === 0 && (
+                <Card className="p-8 text-center text-sm text-muted-foreground bg-card border-card-border border-dashed" data-testid="empty-agents">
+                  No agents have run yet. Click <span className="text-foreground font-medium">Run Workflow</span> to start the pipeline.
+                </Card>
               )}
+              <AnimatePresence initial={false}>
+                {PIPELINE_NODES.map((node, idx) => {
+                  const entry = nodeStateByKey.get(node.key)!;
+                  if (!entry.step) return null;
+                  return (
+                    <motion.div
+                      key={node.key}
+                      id={`agent-${node.key}`}
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.28, ease: "easeOut", delay: idx * 0.04 }}
+                    >
+                      <AgentPanel
+                        node={node}
+                        step={entry.step}
+                        toolCalls={workflow.toolCalls}
+                      />
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
             </div>
-          </Card>
+
+            {/* Retrieved Memory */}
+            <RetrievedMemorySection hits={memoryHits} />
+
+            {/* Tool Calls */}
+            <ToolCallsSection toolCalls={workflow.toolCalls} steps={workflow.steps} />
+
+            {/* Approval Decision */}
+            {workflow.approval && (
+              <ApprovalDecisionSection workflow={workflow} queryKey={queryKey} />
+            )}
+
+            {/* Final Executive Brief */}
+            {isFinalized && (
+              <FinalExecutiveBrief
+                workflow={workflow}
+                synthesis={synthesisEnvelope}
+              />
+            )}
+          </div>
+
+          <div className="space-y-6">
+            {/* Estimated impact */}
+            <Card className="p-5 bg-card border-card-border">
+              <h3 className="text-sm font-semibold mb-3">Estimated Impact</h3>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Cost</span>
+                  <span className="font-medium tabular-nums" data-testid="text-cost">
+                    {formatCurrencyCents(workflow.estimatedCostCents)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Risk Level</span>
+                  <StatusBadge className={riskBadge(workflow.riskLevel)}>{workflow.riskLevel}</StatusBadge>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Agent Steps</span>
+                  <span className="tabular-nums">{workflow.steps.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Tool Calls</span>
+                  <span className="tabular-nums">{workflow.toolCalls.length}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Memory Hits</span>
+                  <span className="tabular-nums">{memoryHits.length}</span>
+                </div>
+              </div>
+            </Card>
+
+            {/* Audit log */}
+            <AuditLogSidebar activity={workflow.activity} />
+          </div>
         </div>
       </div>
-    </div>
     </PageTransition>
   );
 }
 
-function AgentStepCard({ step, toolCalls }: { step: AgentStep; toolCalls: ToolCall[] }) {
-  const [expanded, setExpanded] = useState(false);
+// =============================================================================
+// Graph timeline
+// =============================================================================
+type NodeStatus = "pending" | "running" | "completed" | "failed" | "skipped";
+
+function nodeColor(status: NodeStatus) {
+  switch (status) {
+    case "completed":
+      return {
+        ring: "border-emerald-500/40 bg-emerald-500/10 text-emerald-200",
+        edge: "bg-emerald-500/60",
+        dot: "text-emerald-300",
+      };
+    case "running":
+      return {
+        ring: "border-sky-500/50 bg-sky-500/10 text-sky-100 shadow-[0_0_0_4px_rgba(14,165,233,0.12)]",
+        edge: "bg-sky-500/50",
+        dot: "text-sky-300",
+      };
+    case "failed":
+      return {
+        ring: "border-rose-500/50 bg-rose-500/10 text-rose-200",
+        edge: "bg-rose-500/50",
+        dot: "text-rose-300",
+      };
+    case "skipped":
+      return {
+        ring: "border-border bg-muted/30 text-muted-foreground opacity-50",
+        edge: "bg-muted",
+        dot: "text-muted-foreground",
+      };
+    default:
+      return {
+        ring: "border-border bg-card text-muted-foreground",
+        edge: "bg-muted",
+        dot: "text-muted-foreground",
+      };
+  }
+}
+
+function GraphTimeline({
+  nodes,
+  state,
+}: {
+  nodes: typeof PIPELINE_NODES;
+  state: Map<NodeKey, { step?: AgentStep; status: NodeStatus }>;
+}) {
+  function scrollToNode(key: NodeKey) {
+    const el = document.getElementById(`agent-${key}`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  return (
+    <div className="flex items-stretch gap-0 overflow-x-auto pb-1">
+      {nodes.map((node, i) => {
+        const entry = state.get(node.key)!;
+        const c = nodeColor(entry.status);
+        const Icon = node.icon;
+        const next = i < nodes.length - 1 ? state.get(nodes[i + 1]!.key)! : null;
+        const edgeStatus = entry.status === "completed" ? "completed" : entry.status;
+        const edge = nodeColor(edgeStatus).edge;
+        return (
+          <div key={node.key} className="flex items-center min-w-0 flex-1">
+            <motion.button
+              onClick={() => entry.step && scrollToNode(node.key)}
+              disabled={!entry.step}
+              data-testid={`graph-node-${node.key}`}
+              data-status={entry.status}
+              initial={false}
+              animate={{ scale: entry.status === "running" ? [1, 1.04, 1] : 1 }}
+              transition={
+                entry.status === "running"
+                  ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
+                  : { duration: 0.25 }
+              }
+              className={cn(
+                "flex flex-col items-center gap-1.5 px-2 py-2 rounded-lg border transition-colors min-w-0 flex-1",
+                c.ring,
+                entry.step ? "cursor-pointer hover-elevate" : "cursor-default",
+              )}
+            >
+              <div className="flex items-center gap-1.5 min-w-0">
+                {entry.status === "running" ? (
+                  <Loader2 className={cn("size-3.5 animate-spin shrink-0", c.dot)} />
+                ) : entry.status === "failed" ? (
+                  <XCircle className={cn("size-3.5 shrink-0", c.dot)} />
+                ) : entry.status === "completed" ? (
+                  <CheckCircle2 className={cn("size-3.5 shrink-0", c.dot)} />
+                ) : (
+                  <Icon className={cn("size-3.5 shrink-0", c.dot)} />
+                )}
+                <span className="text-[11px] font-medium truncate">{node.short}</span>
+              </div>
+              <span className="text-[9px] uppercase tracking-wider opacity-70">
+                {entry.status}
+              </span>
+            </motion.button>
+            {next && (
+              <div
+                className={cn("h-px w-3 sm:w-5 shrink-0 transition-colors", edge)}
+                aria-hidden
+              />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// =============================================================================
+// Agent detail panel with tabs over the AgentOutput envelope
+// =============================================================================
+function AgentPanel({
+  node,
+  step,
+  toolCalls,
+}: {
+  node: (typeof PIPELINE_NODES)[number];
+  step: AgentStep;
+  toolCalls: ToolCall[];
+}) {
+  const env = asEnvelope(step.output);
   const stepToolCalls = toolCalls.filter((tc) => tc.agentStepId === step.id);
   const completed = step.status === "completed";
   const failed = step.status === "failed";
   const running = step.status === "running";
-
-  const outputText = formatJsonish(step.output);
-  const inputText = formatJsonish(step.input);
 
   return (
     <Card
@@ -405,9 +588,9 @@ function AgentStepCard({ step, toolCalls }: { step: AgentStep; toolCalls: ToolCa
         running && "border-sky-500/40",
         failed && "border-rose-500/40",
       )}
-      data-testid={`step-card-${step.id}`}
+      data-testid={`agent-panel-${node.key}`}
     >
-      <div className="p-4 flex items-start gap-3">
+      <div className="p-4 flex items-start gap-3 border-b border-card-border">
         <div
           className={cn(
             "size-9 rounded-md flex items-center justify-center shrink-0",
@@ -429,133 +612,275 @@ function AgentStepCard({ step, toolCalls }: { step: AgentStep; toolCalls: ToolCa
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-xs text-muted-foreground tabular-nums">
-              #{step.stepIndex + 1}
-            </span>
-            <span className="text-sm font-medium" data-testid={`step-name-${step.id}`}>
+            <span className="text-xs text-muted-foreground tabular-nums">#{step.stepIndex + 1}</span>
+            <span className="text-sm font-medium" data-testid={`agent-name-${node.key}`}>
               {step.agentName}
             </span>
-            <StatusBadge className={stepStatusBadge(step.status)}>
-              {step.status}
-            </StatusBadge>
-            {step.confidence && (
+            <StatusBadge className={stepStatusBadge(step.status)}>{step.status}</StatusBadge>
+            {step.confidence != null && (
               <span className="text-[11px] text-muted-foreground">
                 conf {Math.round(Number(step.confidence) * 100)}%
               </span>
             )}
-            {step.toolsUsed.length > 0 && (
+            {stepToolCalls.length > 0 && (
               <span className="text-[11px] text-muted-foreground inline-flex items-center gap-1">
                 <Wrench className="size-3" />
-                {step.toolsUsed.length} tool{step.toolsUsed.length !== 1 ? "s" : ""}
+                {stepToolCalls.length} tool call{stepToolCalls.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">{step.name}</div>
-          {step.reasoningSummary && (
-            <p className="text-sm mt-2 text-foreground/90" data-testid={`step-reasoning-${step.id}`}>
-              {step.reasoningSummary}
-            </p>
-          )}
-          <button
-            onClick={() => setExpanded((v) => !v)}
-            className="mt-3 text-xs text-primary inline-flex items-center gap-1 hover:underline"
-            data-testid={`button-expand-step-${step.id}`}
-          >
-            {expanded ? <ChevronDown className="size-3" /> : <ChevronRight className="size-3" />}
-            {expanded ? "Hide details" : "Show input, output & tool calls"}
-          </button>
+          <div className="text-xs text-muted-foreground mt-0.5">{node.label}</div>
         </div>
         <div className="text-[11px] text-muted-foreground tabular-nums shrink-0">
-          {step.completedAt ? formatRelative(step.completedAt) : step.startedAt ? formatRelative(step.startedAt) : "—"}
+          {step.completedAt
+            ? formatRelative(step.completedAt)
+            : step.startedAt
+              ? formatRelative(step.startedAt)
+              : "—"}
         </div>
       </div>
 
-      {expanded && (
-        <div className="border-t border-card-border bg-background/40 px-4 py-3 space-y-3">
-          {step.toolsUsed.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {step.toolsUsed.map((t) => (
-                <span
-                  key={t}
-                  className="text-[11px] px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20"
-                >
-                  {t}
-                </span>
-              ))}
-            </div>
-          )}
+      {completed || failed ? (
+        <Tabs defaultValue="summary" className="w-full">
+          <TabsList className="w-full justify-start rounded-none border-b border-card-border bg-card/40 px-4 h-auto py-1.5 gap-0.5 overflow-x-auto">
+            <TabsTrigger value="summary" className="text-xs" data-testid={`tab-summary-${node.key}`}>Summary</TabsTrigger>
+            <TabsTrigger value="findings" className="text-xs">
+              Findings{env.findings && env.findings.length > 0 ? ` (${env.findings.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="risks" className="text-xs">
+              Risks{env.risks && env.risks.length > 0 ? ` (${env.risks.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="actions" className="text-xs">
+              Actions{env.recommendedActions && env.recommendedActions.length > 0 ? ` (${env.recommendedActions.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="tools" className="text-xs">
+              Tool Calls{stepToolCalls.length > 0 ? ` (${stepToolCalls.length})` : ""}
+            </TabsTrigger>
+            <TabsTrigger value="raw" className="text-xs">Raw JSON</TabsTrigger>
+          </TabsList>
 
-          <DetailBlock label="Input" content={inputText} testId={`step-input-${step.id}`} />
-          <DetailBlock label="Output" content={outputText} testId={`step-output-${step.id}`} />
+          <TabsContent value="summary" className="px-4 py-4 m-0">
+            <p className="text-sm text-foreground/90 whitespace-pre-wrap" data-testid={`summary-${node.key}`}>
+              {env.summary || step.reasoningSummary || "No summary produced."}
+            </p>
+          </TabsContent>
 
-          {stepToolCalls.length > 0 && (
-            <div>
-              <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">
-                Tool Calls
-              </div>
-              <div className="space-y-2">
-                {stepToolCalls.map((tc) => (
-                  <div
-                    key={tc.id}
-                    className="border border-border rounded p-2.5 bg-card/60"
-                    data-testid={`tool-call-${tc.id}`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
-                        <Wrench className="size-3 text-primary" />
-                        <code className="text-xs font-mono">{tc.toolName}</code>
-                        <StatusBadge
-                          className={cn(
-                            tc.status === "success" && "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
-                            tc.status === "failed" && "bg-rose-500/15 text-rose-300 border-rose-500/30",
-                            tc.status === "running" && "bg-sky-500/15 text-sky-300 border-sky-500/30",
-                          )}
-                        >
-                          {tc.status}
-                        </StatusBadge>
-                      </div>
-                      <span className="text-[11px] text-muted-foreground tabular-nums">
-                        {tc.durationMs}ms
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted-foreground">{tc.outputSummary}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
+          <TabsContent value="findings" className="px-4 py-4 m-0">
+            <BulletList items={env.findings ?? []} icon={FileText} testIdPrefix={`finding-${node.key}`} emptyText="No findings." />
+          </TabsContent>
+
+          <TabsContent value="risks" className="px-4 py-4 m-0">
+            <BulletList items={env.risks ?? []} icon={AlertTriangle} testIdPrefix={`risk-${node.key}`} emptyText="No risks flagged." iconClass="text-amber-300" />
+          </TabsContent>
+
+          <TabsContent value="actions" className="px-4 py-4 m-0">
+            <BulletList items={env.recommendedActions ?? []} icon={Target} testIdPrefix={`action-${node.key}`} emptyText="No recommended actions." iconClass="text-primary" />
+          </TabsContent>
+
+          <TabsContent value="tools" className="px-4 py-4 m-0 space-y-2">
+            {stepToolCalls.length === 0 && (
+              <p className="text-xs text-muted-foreground">No tool calls recorded for this agent.</p>
+            )}
+            {stepToolCalls.map((tc) => (
+              <ToolCallRow key={tc.id} tc={tc} compact />
+            ))}
+          </TabsContent>
+
+          <TabsContent value="raw" className="px-4 py-4 m-0">
+            <RawJsonBlock value={step.output} testId={`raw-${node.key}`} />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        <div className="px-4 py-6 text-xs text-muted-foreground" data-testid={`agent-pending-${node.key}`}>
+          {running ? "Agent is working…" : "Waiting for upstream agents."}
         </div>
       )}
     </Card>
   );
 }
 
-function DetailBlock({
-  label,
-  content,
-  testId,
+function BulletList({
+  items,
+  icon: Icon,
+  iconClass,
+  testIdPrefix,
+  emptyText,
 }: {
-  label: string;
-  content: string;
-  testId?: string;
+  items: string[];
+  icon: typeof FileText;
+  iconClass?: string;
+  testIdPrefix: string;
+  emptyText: string;
 }) {
-  if (!content) return null;
+  if (items.length === 0) {
+    return <p className="text-xs text-muted-foreground">{emptyText}</p>;
+  }
   return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">
-        {label}
+    <ul className="space-y-2">
+      {items.map((item, i) => (
+        <li key={i} className="text-sm flex items-start gap-2" data-testid={`${testIdPrefix}-${i}`}>
+          <Icon className={cn("size-3.5 shrink-0 mt-0.5 text-muted-foreground", iconClass)} />
+          <span>{item}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function RawJsonBlock({ value, testId }: { value: unknown; testId?: string }) {
+  let body: string;
+  try {
+    body = typeof value === "string" ? value : JSON.stringify(value, null, 2);
+  } catch {
+    body = String(value);
+  }
+  return (
+    <pre
+      data-testid={testId}
+      className="text-xs font-mono bg-background/50 border border-border rounded p-3 overflow-x-auto whitespace-pre-wrap break-words max-h-96"
+    >
+      {body || "—"}
+    </pre>
+  );
+}
+
+// =============================================================================
+// Retrieved memory
+// =============================================================================
+function RetrievedMemorySection({ hits }: { hits: MemoryHit[] }) {
+  if (hits.length === 0) return null;
+  return (
+    <Card className="p-5 bg-card border-card-border" data-testid="section-retrieved-memory">
+      <div className="flex items-center gap-2 mb-3">
+        <BookOpen className="size-4 text-primary" />
+        <h3 className="text-sm font-semibold">Retrieved Memory</h3>
+        <span className="text-[11px] text-muted-foreground">
+          {hits.length} document{hits.length !== 1 ? "s" : ""}
+        </span>
       </div>
-      <pre
-        data-testid={testId}
-        className="text-xs font-mono bg-card/60 border border-border rounded p-2.5 overflow-x-auto whitespace-pre-wrap break-words max-h-64"
+      <div className="space-y-2">
+        {hits.map((h) => (
+          <Link
+            key={h.documentId}
+            href={`/knowledge?doc=${h.documentId}`}
+            className="block p-3 rounded border border-border hover-elevate bg-card/60"
+            data-testid={`memory-hit-${h.documentId}`}
+          >
+            <div className="flex items-start justify-between gap-3 mb-1">
+              <div className="min-w-0">
+                <div className="text-sm font-medium truncate">{h.title}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5 flex items-center gap-2">
+                  <span className="px-1.5 py-px rounded bg-muted">{h.category}</span>
+                  <span>score {h.score.toFixed(2)}</span>
+                </div>
+              </div>
+              <ChevronRight className="size-4 text-muted-foreground shrink-0 mt-1" />
+            </div>
+            <p className="text-xs text-muted-foreground line-clamp-2">{h.snippet}</p>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// =============================================================================
+// Tool calls section
+// =============================================================================
+function ToolCallsSection({
+  toolCalls,
+  steps,
+}: {
+  toolCalls: ToolCall[];
+  steps: AgentStep[];
+}) {
+  const stepById = new Map(steps.map((s) => [s.id, s]));
+  const sorted = useMemo(
+    () => [...toolCalls].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()),
+    [toolCalls],
+  );
+  if (sorted.length === 0) return null;
+  return (
+    <Card className="p-5 bg-card border-card-border" data-testid="section-tool-calls">
+      <div className="flex items-center gap-2 mb-3">
+        <Wrench className="size-4 text-primary" />
+        <h3 className="text-sm font-semibold">Tool Calls</h3>
+        <span className="text-[11px] text-muted-foreground">
+          {sorted.length} call{sorted.length !== 1 ? "s" : ""}
+        </span>
+      </div>
+      <div className="space-y-2">
+        {sorted.map((tc) => (
+          <ToolCallRow
+            key={tc.id}
+            tc={tc}
+            agentName={tc.agentStepId ? stepById.get(tc.agentStepId)?.agentName : undefined}
+          />
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function ToolCallRow({
+  tc,
+  agentName,
+  compact,
+}: {
+  tc: ToolCall;
+  agentName?: string;
+  compact?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const statusClass =
+    tc.status === "success"
+      ? "bg-emerald-500/15 text-emerald-300 border-emerald-500/30"
+      : tc.status === "failed"
+        ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
+        : "bg-sky-500/15 text-sky-300 border-sky-500/30";
+  return (
+    <div className="border border-border rounded bg-card/60" data-testid={`tool-call-${tc.id}`}>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-left hover-elevate rounded"
       >
-        {content}
-      </pre>
+        {open ? (
+          <ChevronDown className="size-3 text-muted-foreground shrink-0" />
+        ) : (
+          <ChevronRight className="size-3 text-muted-foreground shrink-0" />
+        )}
+        <Wrench className="size-3 text-primary shrink-0" />
+        <code className="text-xs font-mono shrink-0">{tc.toolName}</code>
+        {agentName && !compact && (
+          <span className="text-[11px] text-muted-foreground truncate">{agentName}</span>
+        )}
+        <span className="flex-1 text-xs text-muted-foreground truncate">{tc.outputSummary}</span>
+        <StatusBadge className={statusClass}>{tc.status}</StatusBadge>
+        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{tc.durationMs}ms</span>
+      </button>
+      {open && (
+        <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            {formatTimestamp(tc.createdAt)}
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Input</div>
+            <RawJsonBlock value={tc.input} />
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Output</div>
+            <RawJsonBlock value={tc.output} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ApprovalBlock({
+// =============================================================================
+// Approval Decision section
+// =============================================================================
+function ApprovalDecisionSection({
   workflow,
   queryKey,
 }: {
@@ -597,44 +922,48 @@ function ApprovalBlock({
         isApproved && "border-emerald-500/30",
         isRejected && "border-rose-500/30",
       )}
-      data-testid="block-approval"
+      data-testid="section-approval-decision"
     >
       <div className="flex items-center gap-2 mb-3">
         {approval.status === "pending" ? (
           <Clock className="size-4 text-amber-300" />
         ) : isApproved ? (
           <CheckCircle2 className="size-4 text-emerald-300" />
-        ) : isRejected ? (
-          <XCircle className="size-4 text-rose-300" />
         ) : (
-          <AlertTriangle className="size-4 text-sky-300" />
+          <XCircle className="size-4 text-rose-300" />
         )}
-        <h3 className="text-sm font-semibold">
-          Human Approval
-        </h3>
-        <StatusBadge className={riskBadge(approval.riskLevel)}>
-          {approval.riskLevel}
+        <h3 className="text-sm font-semibold">Approval Decision</h3>
+        <StatusBadge className={riskBadge(approval.riskLevel)}>{approval.riskLevel}</StatusBadge>
+        <StatusBadge
+          className={cn(
+            "ml-auto",
+            approval.status === "pending" && "bg-amber-500/15 text-amber-300 border-amber-500/30",
+            isApproved && "bg-emerald-500/15 text-emerald-300 border-emerald-500/30",
+            isRejected && "bg-rose-500/15 text-rose-300 border-rose-500/30",
+          )}
+          testId="badge-approval-status"
+        >
+          {approval.status}
         </StatusBadge>
       </div>
 
-      <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-        Summary
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Summary</div>
+          <p className="text-sm" data-testid="text-approval-summary">{approval.summary}</p>
+        </div>
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Recommendation</div>
+          <p className="text-sm" data-testid="text-approval-recommendation">{approval.recommendation}</p>
+        </div>
       </div>
-      <p className="text-sm mb-3" data-testid="text-approval-summary">{approval.summary}</p>
-
-      <div className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
-        Recommendation
-      </div>
-      <p className="text-sm mb-4" data-testid="text-approval-recommendation">
-        {approval.recommendation}
-      </p>
 
       {decided ? (
-        <div className="space-y-2 pt-3 border-t border-border">
+        <div className="pt-3 border-t border-border space-y-1">
           <div className="text-xs">
             <span className="text-muted-foreground">Decided by </span>
             <span className="font-medium" data-testid="text-decided-by">{approval.decidedBy ?? "—"}</span>
-            <span className="text-muted-foreground"> · {formatRelative(approval.decidedAt)}</span>
+            <span className="text-muted-foreground"> · {formatTimestamp(approval.decidedAt)}</span>
           </div>
           {approval.decisionNote && (
             <p className="text-xs text-muted-foreground italic" data-testid="text-decision-note">
@@ -643,8 +972,8 @@ function ApprovalBlock({
           )}
         </div>
       ) : (
-        <div className="space-y-2 pt-3 border-t border-border">
-          <div className="grid grid-cols-1 gap-2">
+        <div className="pt-3 border-t border-border space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div>
               <Label htmlFor="approver" className="text-xs">Decided By</Label>
               <Input
@@ -661,21 +990,19 @@ function ApprovalBlock({
                 id="note"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                rows={2}
+                rows={1}
                 className="mt-1"
                 data-testid="input-note"
               />
             </div>
           </div>
-          <div className="flex gap-2 pt-2">
+          <div className="flex gap-2">
             <Button
               variant="destructive"
               size="sm"
               className="flex-1"
               disabled={reject.isPending || approve.isPending}
-              onClick={() =>
-                reject.mutate({ id: approval.id, data: { decidedBy, note } })
-              }
+              onClick={() => reject.mutate({ id: approval.id, data: { decidedBy, note } })}
               data-testid="button-reject"
             >
               {reject.isPending ? <Loader2 className="size-3 animate-spin" /> : <XCircle className="size-3" />}
@@ -685,9 +1012,7 @@ function ApprovalBlock({
               size="sm"
               className="flex-1"
               disabled={approve.isPending || reject.isPending}
-              onClick={() =>
-                approve.mutate({ id: approval.id, data: { decidedBy, note } })
-              }
+              onClick={() => approve.mutate({ id: approval.id, data: { decidedBy, note } })}
               data-testid="button-approve"
             >
               {approve.isPending ? <Loader2 className="size-3 animate-spin" /> : <CheckCircle2 className="size-3" />}
@@ -700,12 +1025,139 @@ function ApprovalBlock({
   );
 }
 
-function formatJsonish(value: unknown): string {
-  if (value == null) return "";
-  if (typeof value === "string") return value;
-  try {
-    return JSON.stringify(value, null, 2);
-  } catch {
-    return String(value);
-  }
+// =============================================================================
+// Final Executive Brief — board-ready, sourced from synthesis + workflow.
+// =============================================================================
+function FinalExecutiveBrief({
+  workflow,
+  synthesis,
+}: {
+  workflow: WorkflowRunDetail;
+  synthesis: AgentOutputEnvelope | null;
+}) {
+  const summary = workflow.summary || synthesis?.summary || "Workflow finalized.";
+  const recommendation =
+    workflow.finalRecommendation ||
+    (synthesis?.details?.["recommendedDecision"] as string | undefined) ||
+    "—";
+  const nextActions =
+    workflow.nextActions.length > 0
+      ? workflow.nextActions
+      : synthesis?.recommendedActions ?? [];
+  const keyEvidence = (synthesis?.details?.["keyEvidence"] as string[] | undefined) ?? synthesis?.findings ?? [];
+
+  return (
+    <Card
+      className="p-6 bg-gradient-to-br from-primary/10 via-primary/5 to-card border-primary/40 shadow-lg"
+      data-testid="section-final-brief"
+    >
+      <div className="flex items-center gap-2 mb-1">
+        <Sparkles className="size-4 text-primary" />
+        <h3 className="text-base font-semibold tracking-tight">Final Executive Brief</h3>
+      </div>
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">
+        Prepared by Ops Conductor · {formatTimestamp(workflow.completedAt)}
+      </div>
+
+      <div className="space-y-5">
+        <div>
+          <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Executive summary</div>
+          <p className="text-sm leading-relaxed whitespace-pre-wrap" data-testid="brief-summary">{summary}</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Recommendation</div>
+            <p className="text-sm font-medium" data-testid="brief-recommendation">{recommendation}</p>
+          </div>
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-1">Risk posture</div>
+            <div className="flex items-center gap-2">
+              <StatusBadge className={riskBadge(workflow.riskLevel)} testId="brief-risk">
+                {workflow.riskLevel}
+              </StatusBadge>
+              <span className="text-xs text-muted-foreground">
+                {(synthesis?.risks?.length ?? 0)} flag{(synthesis?.risks?.length ?? 0) !== 1 ? "s" : ""}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {keyEvidence.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Key evidence</div>
+            <ul className="space-y-1.5">
+              {keyEvidence.slice(0, 5).map((e, i) => (
+                <li key={i} className="text-sm flex items-start gap-2" data-testid={`brief-evidence-${i}`}>
+                  <FileText className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <span>{e}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {nextActions.length > 0 && (
+          <div>
+            <div className="text-[11px] uppercase tracking-wide text-muted-foreground mb-2">Next actions</div>
+            <ul className="space-y-1.5">
+              {nextActions.map((action, i) => (
+                <li key={i} className="text-sm flex items-start gap-2" data-testid={`brief-next-action-${i}`}>
+                  <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+                  <span>{action}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+// =============================================================================
+// Audit log sidebar
+// =============================================================================
+function AuditLogSidebar({ activity }: { activity: ActivityLog[] }) {
+  return (
+    <Card className="p-5 bg-card border-card-border">
+      <h3 className="text-sm font-semibold mb-3">Audit Log</h3>
+      <div className="space-y-3 max-h-[560px] overflow-y-auto pr-1">
+        {activity.map((a) => (
+          <div
+            key={a.id}
+            className="text-xs border-l-2 border-border pl-3 py-0.5"
+            data-testid={`audit-${a.id}`}
+          >
+            <div className="flex items-center gap-2 flex-wrap mb-0.5">
+              <span className="font-mono tabular-nums text-[10px] text-muted-foreground">
+                {formatTimestamp(a.createdAt)}
+              </span>
+              <span
+                className={cn(
+                  "text-[10px] px-1.5 py-px rounded border font-medium",
+                  a.actorType === "agent"
+                    ? "border-primary/30 bg-primary/10 text-primary"
+                    : a.actorType === "operator"
+                      ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                      : "border-border bg-muted text-muted-foreground",
+                )}
+              >
+                {a.actor}
+              </span>
+            </div>
+            <div className="text-foreground/90 leading-snug whitespace-pre-wrap">{a.message}</div>
+            {(typeof a.metadata?.from === "string" || typeof a.metadata?.to === "string") && (
+              <div className="text-[10px] text-muted-foreground mt-1 font-mono">
+                {String(a.metadata.from ?? "—")} → {String(a.metadata.to ?? "—")}
+              </div>
+            )}
+          </div>
+        ))}
+        {activity.length === 0 && (
+          <div className="text-xs text-muted-foreground">No activity yet.</div>
+        )}
+      </div>
+    </Card>
+  );
 }
