@@ -1,3 +1,27 @@
+/**
+ * Multi-agent workflow engine.
+ *
+ * This module implements a LangGraph-style state graph: a fixed pipeline of
+ * nodes (PIPELINE) where each node receives a shared, mutable WorkflowState
+ * (NodeContext.state) and returns an AgentOutput envelope plus side-effect
+ * metadata (tool calls, audit-log activity entries). The engine persists each
+ * step into agent_steps + tool_calls + activity_logs and updates the
+ * workflow_runs row with progress markers.
+ *
+ * Why hand-rolled instead of `langgraph` directly: the JS LangGraph package
+ * (`@langchain/langgraph`) is heavy, requires a langchain runtime, and ties
+ * us to its message contract. The shape here intentionally mirrors LangGraph
+ * primitives — `WorkflowState` is the channel/state object, each node is a
+ * pure-ish function `(state) -> partial state`, and the ordering is declared
+ * via PIPELINE / FINALIZE_NODE — so a future drop-in is mechanical:
+ *   1. wrap each NodeDefinition.run in a langgraph `addNode` callback
+ *   2. translate PIPELINE order into `addEdge`s
+ *   3. swap `executeNode` for the langgraph compiled `invoke`
+ *
+ * Memory grounding (memory_lookup_node) goes through the pluggable
+ * `keywordSearcher` in lib/memory; swap it for a vector / hybrid retriever
+ * later without touching node code.
+ */
 import { eq } from "drizzle-orm";
 import {
   activityLogsTable,
@@ -13,6 +37,12 @@ import {
 } from "@workspace/db";
 import { logger } from "../lib/logger";
 import { getLlmMode } from "../lib/llm";
+import { composeAuditEntry } from "../lib/audit";
+import {
+  isAgentOutput,
+  type AgentOutput,
+  type WorkflowState,
+} from "../lib/agents/types";
 import { FINALIZE_NODE, PIPELINE } from "./edges";
 import { synthesisNode } from "./nodes/synthesis";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
@@ -50,6 +80,35 @@ async function getAgentIdBySlug(slug: string): Promise<number> {
     .where(eq(agentsTable.slug, slug));
   if (!agent) throw new Error(`Agent not found: ${slug}`);
   return agent.id;
+}
+
+// Build the canonical stepName -> node.key map from the actual NodeDefinitions
+// so hydration is exact, not derived from string-munging the persisted name.
+const STEP_NAME_TO_KEY: Map<string, string> = new Map(
+  [...PIPELINE, FINALIZE_NODE].map((n) => [n.stepName, n.key]),
+);
+
+/**
+ * Hydrate WorkflowState.agentOutputs from previously persisted agent_steps.
+ * Used by finalize() so the finalize node can see prior agent outputs even
+ * after a process restart. Only AgentOutput-shaped rows are loaded; legacy
+ * rows are silently skipped.
+ */
+async function hydrateAgentOutputs(
+  workflowRunId: number,
+): Promise<Record<string, AgentOutput>> {
+  const steps = await db
+    .select()
+    .from(agentStepsTable)
+    .where(eq(agentStepsTable.workflowRunId, workflowRunId));
+  const out: Record<string, AgentOutput> = {};
+  for (const s of steps) {
+    if (!isAgentOutput(s.output)) continue;
+    const key = STEP_NAME_TO_KEY.get(s.name);
+    if (!key) continue;
+    out[key] = s.output;
+  }
+  return out;
 }
 
 async function executeNode(
@@ -172,16 +231,28 @@ export class WorkflowEngine {
       .where(eq(workflowRunsTable.id, workflowRunId))
       .returning();
 
+    const systemActivity = composeAuditEntry(
+      "workflow_started",
+      "Workflow run started.",
+      {},
+      { workflowRunId },
+    );
     await db.insert(activityLogsTable).values({
       workflowRunId,
       actor: "system",
       actorType: "system",
-      action: "workflow_started",
-      message: "Workflow run started.",
+      action: systemActivity.action,
+      message: systemActivity.message,
+      metadata: systemActivity.metadata ?? {},
     });
 
-    const priorSteps = new Map<string, AgentStep>();
-    const priorOutputs = new Map<string, Record<string, unknown>>();
+    // The shared WorkflowState that flows through every node.
+    const state: WorkflowState = {
+      workflowRun: workflowRun!,
+      request,
+      agentOutputs: {},
+      metadata: { startedAt },
+    };
 
     let synthesisResult: NodeResult | undefined;
     const liveMode = getLlmMode() === "live";
@@ -193,16 +264,15 @@ export class WorkflowEngine {
           await sleep(LIVE_INTER_STEP_DELAY_MS);
         }
         const node = PIPELINE[i]!;
+        // Refresh the workflowRun on the state in case prior step updated it.
+        state.workflowRun = workflowRun!;
         const ctx: NodeContext = {
-          workflowRun,
+          state,
+          workflowRun: workflowRun!,
           request,
-          priorSteps,
-          priorOutputs,
-          ...(synthesisResult ? { synthesisOutput: synthesisResult.output } : {}),
         };
-        const { step, result } = await executeNode(node, ctx, i);
-        priorSteps.set(node.agentSlug + ":" + i, step);
-        priorOutputs.set(node.agentSlug + ":" + i, result.output);
+        const { result } = await executeNode(node, ctx, i);
+        state.agentOutputs[node.key] = result.output;
         if (node === synthesisNode) {
           synthesisResult = result;
         }
@@ -213,8 +283,12 @@ export class WorkflowEngine {
         };
         if (result.estimatedCostCents != null) {
           updates.estimatedCostCents = result.estimatedCostCents;
+          state.metadata.estimatedCostCents = result.estimatedCostCents;
         }
-        if (result.riskLevel) updates.riskLevel = result.riskLevel;
+        if (result.riskLevel) {
+          updates.riskLevel = result.riskLevel;
+          state.metadata.riskLevel = result.riskLevel;
+        }
         [workflowRun] = await db
           .update(workflowRunsTable)
           .set(updates)
@@ -227,37 +301,47 @@ export class WorkflowEngine {
         .update(workflowRunsTable)
         .set({ status: "failed", currentStage: "failed", completedAt: new Date() })
         .where(eq(workflowRunsTable.id, workflowRunId));
+      const failedActivity = composeAuditEntry(
+        "workflow_failed",
+        `Pipeline failed: ${String(err)}`,
+        {},
+        { workflowRunId },
+      );
       await db.insert(activityLogsTable).values({
         workflowRunId,
         actor: "system",
         actorType: "system",
-        action: "workflow_failed",
-        message: `Pipeline failed: ${String(err)}`,
+        action: failedActivity.action,
+        message: failedActivity.message,
+        metadata: failedActivity.metadata ?? {},
       });
       throw err;
     }
 
     const fp = fingerprintRequest(request);
     const demoSynthesis = synthesisDemo(request, fp);
-    // Prefer the synthesis step's output (captured by node identity, not by
-    // pipeline position — the pipeline ends with createApprovalNode, not
-    // synthesis), falling back to the deterministic demo synthesis.
-    const liveSynthesis =
-      synthesisResult?.output && typeof synthesisResult.output === "object"
-        ? (synthesisResult.output as Record<string, unknown>)
-        : null;
-    const synthesis = liveSynthesis ?? demoSynthesis;
+    // Prefer the synthesis step's AgentOutput.details (captured by node
+    // identity, since the pipeline ends with createApprovalNode), falling
+    // back to the deterministic demo synthesis.
+    const liveDetails = synthesisResult?.output.details ?? null;
+    const synthesis = liveDetails ?? demoSynthesis;
     const summary =
-      typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0
-        ? (synthesis["summary"] as string)
-        : ((demoSynthesis["summary"] as string) ?? "");
+      synthesisResult?.output.summary && synthesisResult.output.summary.length > 0
+        ? synthesisResult.output.summary
+        : typeof synthesis["summary"] === "string" && synthesis["summary"].length > 0
+          ? (synthesis["summary"] as string)
+          : ((demoSynthesis["summary"] as string) ?? "");
     const recommendation =
       synthesis["recommendedDecision"] === "approve"
         ? `Recommend approve: ${summary}`
         : `Recommend reject based on synthesis findings.`;
-    const nextActions = Array.isArray(synthesis["nextActions"])
-      ? (synthesis["nextActions"] as string[])
-      : ((demoSynthesis["nextActions"] as string[]) ?? []);
+    const nextActions =
+      synthesisResult?.output.recommendedActions &&
+      synthesisResult.output.recommendedActions.length > 0
+        ? synthesisResult.output.recommendedActions
+        : Array.isArray(synthesis["nextActions"])
+          ? (synthesis["nextActions"] as string[])
+          : ((demoSynthesis["nextActions"] as string[]) ?? []);
 
     await db
       .update(workflowRunsTable)
@@ -301,11 +385,18 @@ export class WorkflowEngine {
       .where(eq(agentStepsTable.workflowRunId, workflowRunId));
     const stepIndex = existingSteps.length;
 
-    const ctx: NodeContext = {
+    const agentOutputs = await hydrateAgentOutputs(workflowRunId);
+    const state: WorkflowState = {
       workflowRun,
       request,
-      priorSteps: new Map(),
-      priorOutputs: new Map(),
+      agentOutputs,
+      metadata: { startedAt: workflowRun.startedAt ?? new Date() },
+    };
+
+    const ctx: NodeContext = {
+      state,
+      workflowRun,
+      request,
     };
     await executeNode(FINALIZE_NODE, ctx, stepIndex);
 

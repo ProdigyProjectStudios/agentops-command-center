@@ -1,29 +1,50 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, opsTriageDemo } from "../demo-outputs";
 import { opsTriageSchema } from "../schemas";
-import { generateAgentOutput } from "../../lib/llm";
+import { runAgent } from "../../lib/agents/base-agent";
+import { composeAuditEntry } from "../../lib/audit";
 
 export const opsTriageNode: NodeDefinition = {
+  key: "ops_triage",
   agentSlug: "ops-conductor",
   stepName: "Triage & Routing",
   pendingStatus: "triaged",
   run: async ({ request }) => {
     const fp = fingerprintRequest(request);
-    const demoFallback = opsTriageDemo(request, fp);
-    const output = await generateAgentOutput({
-      agentSlug: "ops-conductor",
-      agentName: "Ops Conductor",
-      systemPrompt:
-        "You are the Ops Conductor agent. Triage the request, decide which downstream agents to route to, and estimate cost.",
-      userPrompt: `${request.title}\n\n${request.description}`,
-      demoFallback,
-      schema: opsTriageSchema,
-    });
+    const demoDetails = opsTriageDemo(request, fp) as Record<string, unknown>;
+
+    const output = await runAgent(
+      {
+        agentSlug: "ops-conductor",
+        agentName: "Ops Conductor",
+        systemPrompt:
+          "You are the Ops Conductor agent. Triage the request, decide which downstream agents to route to, and estimate cost.",
+        detailsSchema: opsTriageSchema,
+        demoDetails,
+        buildEnvelope: (details) => {
+          const routed = (details["routedAgents"] as string[]) ?? [];
+          return {
+            summary: `Routed to ${routed.join(", ")} based on ${fp.category} fingerprint.`,
+            findings: [
+              `Classification: ${details["classification"] ?? fp.category}`,
+              `Initial risk: ${details["initialRiskLevel"] ?? fp.riskLevel}`,
+              `Estimated spend: $${(((details["estimatedCostCents"] as number) ?? fp.costCents) / 100).toLocaleString()}`,
+            ],
+            risks:
+              fp.riskLevel === "high" || fp.riskLevel === "critical"
+                ? [`Scenario fingerprint flags ${fp.riskLevel} risk profile.`]
+                : [],
+            recommendedActions: routed.map((a) => `Dispatch to ${a}`),
+            confidence: 0.95,
+          };
+        },
+      },
+      `${request.title}\n\n${request.description}`,
+    );
+
     return {
       output,
-      reasoningSummary: `Routed to ${(output["routedAgents"] as string[]).join(
-        ", ",
-      )} based on ${fp.category} scenario fingerprint.`,
+      reasoningSummary: output.summary,
       confidence: "0.95",
       riskScore: fp.riskLevel,
       estimatedCostCents: fp.costCents,
@@ -48,11 +69,12 @@ export const opsTriageNode: NodeDefinition = {
         },
       ],
       activity: [
-        {
-          action: "triage_complete",
-          message: `Ops Conductor triaged request as ${fp.category} (${fp.riskLevel} risk).`,
-          metadata: { routedAgents: fp.routedAgents },
-        },
+        composeAuditEntry(
+          "triage_complete",
+          `Ops Conductor triaged request as ${fp.category} (${fp.riskLevel} risk).`,
+          { routedAgents: fp.routedAgents },
+          { agentSlug: "ops-conductor" },
+        ),
       ],
     };
   },

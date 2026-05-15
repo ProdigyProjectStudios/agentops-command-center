@@ -1,31 +1,77 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, financeReviewDemo } from "../demo-outputs";
 import { financeReviewSchema } from "../schemas";
-import { generateAgentOutput } from "../../lib/llm";
+import { runAgent } from "../../lib/agents/base-agent";
+import { composeAuditEntry } from "../../lib/audit";
 
 export const financeReviewNode: NodeDefinition = {
+  key: "finance_review",
   agentSlug: "finance-analyst",
   stepName: "Finance & Budget Review",
   pendingStatus: "finance_review",
   run: async ({ request }) => {
     const fp = fingerprintRequest(request);
-    const demoFallback = financeReviewDemo(request, fp);
-    const output = await generateAgentOutput({
-      agentSlug: "finance-analyst",
-      agentName: "Finance Analyst",
-      systemPrompt:
-        "You are the Finance Analyst agent. Verify spend fits budget, model forecast and ROI.",
-      userPrompt: `${request.title}\n\n${request.description}`,
-      demoFallback,
-      schema: financeReviewSchema,
-    });
-    const budgetCheck = output["budgetCheck"] as { passes: boolean; utilizationPct: number };
+    const demoDetails = financeReviewDemo(request, fp) as Record<
+      string,
+      unknown
+    >;
+
+    const output = await runAgent(
+      {
+        agentSlug: "finance-analyst",
+        agentName: "Finance Analyst",
+        systemPrompt:
+          "You are the Finance Analyst agent. Verify spend fits budget, model forecast and ROI.",
+        detailsSchema: financeReviewSchema,
+        demoDetails,
+        buildEnvelope: (details) => {
+          const bc = details["budgetCheck"] as {
+            passes: boolean;
+            utilizationPct: number;
+            requestedCents: number;
+          };
+          const forecast = details["forecast"] as {
+            paybackPeriodMonths: number;
+            irr: string;
+          };
+          return {
+            summary:
+              (details["recommendation"] as string) ??
+              "Finance review complete.",
+            findings: [
+              `Budget utilization: ${bc?.utilizationPct ?? 0}%`,
+              `12-month payback: ${forecast?.paybackPeriodMonths ?? "?"} months`,
+              `Projected IRR: ${forecast?.irr ?? "n/a"}`,
+            ],
+            risks: bc?.passes
+              ? []
+              : [
+                  `Spend pushes department past 85% quarterly utilization (${bc?.utilizationPct}%).`,
+                ],
+            recommendedActions: bc?.passes
+              ? ["Approve spend within budget envelope"]
+              : [
+                  "Defer or rescope to fit quarterly budget",
+                  "Escalate to CFO for override approval",
+                ],
+            confidence:
+              parseFloat((details["confidence"] as string) ?? "0.88") || 0.88,
+          };
+        },
+      },
+      `${request.title}\n\n${request.description}`,
+    );
+
+    const budgetCheck = output.details["budgetCheck"] as {
+      passes: boolean;
+      utilizationPct: number;
+    };
     return {
       output,
       reasoningSummary: budgetCheck?.passes
         ? `Spend fits within budget at ${budgetCheck.utilizationPct}% quarterly utilization.`
         : `Spend exceeds safe threshold at ${budgetCheck?.utilizationPct}% utilization — defer recommended.`,
-      confidence: (output["confidence"] as string) ?? "0.9",
+      confidence: (output.details["confidence"] as string) ?? "0.9",
       toolsUsed: ["budget_query", "forecast_model", "roi_calculator"],
       toolCalls: [
         {
@@ -40,7 +86,8 @@ export const financeReviewNode: NodeDefinition = {
           toolName: "forecast_model",
           status: "success",
           input: { horizonMonths: 12 },
-          output: (output["forecast"] as Record<string, unknown>) ?? {},
+          output:
+            (output.details["forecast"] as Record<string, unknown>) ?? {},
           outputSummary: "12-month impact forecast generated.",
           durationMs: 718,
         },
@@ -48,18 +95,23 @@ export const financeReviewNode: NodeDefinition = {
           toolName: "roi_calculator",
           status: "success",
           input: { spendCents: fp.costCents },
-          output: { irr: (output["forecast"] as { irr?: string })?.irr ?? "0.15" },
+          output: {
+            irr:
+              (output.details["forecast"] as { irr?: string })?.irr ?? "0.15",
+          },
           outputSummary: "Computed IRR and payback period.",
           durationMs: 158,
         },
       ],
       activity: [
-        {
-          action: "finance_review_complete",
-          message: `Finance Analyst ${
+        composeAuditEntry(
+          "finance_review_complete",
+          `Finance Analyst ${
             budgetCheck?.passes ? "approved" : "deferred"
           } spend at ${budgetCheck?.utilizationPct}% utilization.`,
-        },
+          { passes: budgetCheck?.passes },
+          { agentSlug: "finance-analyst" },
+        ),
       ],
     };
   },

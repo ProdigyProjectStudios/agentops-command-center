@@ -1,29 +1,47 @@
 import type { NodeDefinition } from "../types";
 import { fingerprintRequest, synthesisDemo } from "../demo-outputs";
+import { composeAuditEntry } from "../../lib/audit";
 
 export const createApprovalNode: NodeDefinition = {
+  key: "approval_gate",
   agentSlug: "ops-conductor",
   stepName: "Open Approval Gate",
   pendingStatus: "approval_pending",
-  run: async ({ request, synthesisOutput }) => {
+  run: async ({ request, state }) => {
     const fp = fingerprintRequest(request);
-    // Prefer the live synthesis step output passed in by the engine so the
-    // approval card stays consistent with the workflow-level summary;
-    // fall back to the deterministic demo synthesis if absent.
-    const synthesis: Record<string, unknown> =
-      synthesisOutput && typeof synthesisOutput["summary"] === "string"
-        ? synthesisOutput
-        : synthesisDemo(request, fp);
-    const summary = (synthesis["summary"] as string) ?? "";
+
+    // Pull live synthesis output from the shared WorkflowState; fall back to
+    // a deterministic demo synthesis if (somehow) the synthesis step did not
+    // populate the state.
+    const synthesis = state.agentOutputs["risk_synthesis"];
+    const synthDetails =
+      synthesis?.details ?? synthesisDemo(request, fp);
+    const summary =
+      synthesis?.summary ?? (synthDetails["summary"] as string) ?? "";
+    const recommendedDecision =
+      (synthDetails["recommendedDecision"] as string) ?? "approve";
+    const recommendation =
+      recommendedDecision === "approve"
+        ? `Recommend approve: ${summary}`
+        : `Recommend reject: blocking concerns identified during synthesis.`;
+
     return {
       output: {
-        gate: "operator_approval",
-        riskLevel: fp.riskLevel,
-        summary,
-        recommendation:
-          synthesis["recommendedDecision"] === "approve"
-            ? `Recommend approve: ${summary}`
-            : `Recommend reject: blocking concerns identified during synthesis.`,
+        summary: `Approval gate opened — ${recommendedDecision === "approve" ? "approval recommended" : "rejection recommended"}.`,
+        findings: synthesis?.findings ?? [],
+        risks: synthesis?.risks ?? [],
+        recommendedActions: [
+          "Operator: review approval card and decide",
+          ...((synthesis?.recommendedActions ?? []).slice(0, 2)),
+        ],
+        toolCallsRequested: [],
+        confidence: 0.95,
+        details: {
+          gate: "operator_approval",
+          riskLevel: fp.riskLevel,
+          summary,
+          recommendation,
+        },
       },
       reasoningSummary:
         "All upstream reviews complete. Workflow paused awaiting human operator decision.",
@@ -40,10 +58,12 @@ export const createApprovalNode: NodeDefinition = {
         },
       ],
       activity: [
-        {
-          action: "approval_opened",
-          message: "Approval card created and added to the operator queue.",
-        },
+        composeAuditEntry(
+          "approval_opened",
+          "Approval card created and added to the operator queue.",
+          { recommendedDecision },
+          { agentSlug: "ops-conductor" },
+        ),
       ],
     };
   },
