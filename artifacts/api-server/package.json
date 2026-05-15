@@ -8,7 +8,9 @@
     "build": "node ./build.mjs",
     "start": "node --enable-source-maps ./dist/index.mjs",
     "seed": "tsx src/seed.ts",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --experimental-test-module-mocks --import tsx 'src/__tests__/*.test.ts'",
+    "check": "pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
     "@workspace/api-zod": "workspace:*",
