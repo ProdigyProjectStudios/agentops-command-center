@@ -60,17 +60,17 @@ export const createApprovalNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced communications_draft → approval_pending. Approval card created and queued for operator decision (recommendation: ${recommendedDecision}).`,
-          {
-            from: "communications_draft",
-            to: "approval_pending",
-            recommendedDecision,
-            approvalStatus: "pending",
-          },
-          { agentSlug: "ops-conductor" },
-        ),
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced communications_draft → approval_pending. Approval card created and queued for operator decision (recommendation: ${recommendedDecision}).`,
+          actor: "ops-conductor",
+          actorType: "agent",
+          agentSlug: "ops-conductor",
+          from: "communications_draft",
+          to: "approval_pending",
+          change: `status: communications_draft → approval_pending; approvalStatus → pending`,
+          metadata: { recommendedDecision, approvalStatus: "pending" },
+        }),
       ],
     };
   },

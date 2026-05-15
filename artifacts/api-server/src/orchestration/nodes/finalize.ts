@@ -55,16 +55,17 @@ export const finalizeNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced ${ctx.workflowRun.status} → ${isApproved ? "finalized" : "rejected"}. Workflow closed by Ops Conductor.`,
-          {
-            from: ctx.workflowRun.status,
-            to: isApproved ? "finalized" : "rejected",
-            outcome: isApproved ? "approved" : "rejected",
-          },
-          { agentSlug: "ops-conductor" },
-        ),
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced ${ctx.workflowRun.status} → ${isApproved ? "finalized" : "rejected"}. Workflow closed by Ops Conductor.`,
+          actor: "ops-conductor",
+          actorType: "agent",
+          agentSlug: "ops-conductor",
+          from: ctx.workflowRun.status,
+          to: isApproved ? "finalized" : "rejected",
+          change: `status: ${ctx.workflowRun.status} → ${isApproved ? "finalized" : "rejected"}; outcome=${isApproved ? "approved" : "rejected"}`,
+          metadata: { outcome: isApproved ? "approved" : "rejected" },
+        }),
       ],
     };
   },

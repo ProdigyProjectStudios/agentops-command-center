@@ -79,16 +79,17 @@ export const communicationsDraftNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced finance_review → communications_draft. Communications Lead drafted internal memo and distribution plan.`,
-          {
-            from: "finance_review",
-            to: "communications_draft",
-            tone: output.details["tone"] ?? "neutral",
-          },
-          { agentSlug: "communications" },
-        ),
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced finance_review → communications_draft. Communications Lead drafted internal memo and distribution plan.`,
+          actor: "communications",
+          actorType: "agent",
+          agentSlug: "communications",
+          from: "finance_review",
+          to: "communications_draft",
+          change: `status: finance_review → communications_draft`,
+          metadata: { tone: output.details["tone"] ?? "neutral" },
+        }),
       ],
     };
   },

@@ -101,19 +101,22 @@ export const financeReviewNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced legal_review → finance_review. Finance Analyst ${
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced legal_review → finance_review. Finance Analyst ${
             budgetCheck?.passes ? "approved" : "deferred"
           } spend at ${budgetCheck?.utilizationPct}% quarterly utilization.`,
-          {
-            from: "legal_review",
-            to: "finance_review",
+          actor: "finance-analyst",
+          actorType: "agent",
+          agentSlug: "finance-analyst",
+          from: "legal_review",
+          to: "finance_review",
+          change: `status: legal_review → finance_review; budgetUtilization=${budgetCheck?.utilizationPct}%`,
+          metadata: {
             passes: budgetCheck?.passes,
             utilizationPct: budgetCheck?.utilizationPct,
           },
-          { agentSlug: "finance-analyst" },
-        ),
+        }),
       ],
     };
   },

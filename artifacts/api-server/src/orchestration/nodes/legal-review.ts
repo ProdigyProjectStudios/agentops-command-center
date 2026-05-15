@@ -94,17 +94,17 @@ export const legalReviewNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced triaged → legal_review. Legal Counsel ran ${checks.length} compliance check(s); ${flagged} flagged for follow-up.`,
-          {
-            from: "triaged",
-            to: "legal_review",
-            checksRun: checks.length,
-            flaggedCount: flagged,
-          },
-          { agentSlug: "legal-counsel" },
-        ),
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced triaged → legal_review. Legal Counsel ran ${checks.length} compliance check(s); ${flagged} flagged for follow-up.`,
+          actor: "legal-counsel",
+          actorType: "agent",
+          agentSlug: "legal-counsel",
+          from: "triaged",
+          to: "legal_review",
+          change: `status: triaged → legal_review; flaggedCount=${flagged}`,
+          metadata: { checksRun: checks.length, flaggedCount: flagged },
+        }),
       ],
     };
   },

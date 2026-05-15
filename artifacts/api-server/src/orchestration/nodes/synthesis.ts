@@ -81,16 +81,21 @@ export const synthesisNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "synthesis_complete",
-          `Ops Conductor synthesized ${upstreamCount} upstream agent report(s) into recommendation: ${output.details["recommendedDecision"]}.`,
-          {
+        composeAuditEntry({
+          action: "synthesis_complete",
+          message: `Ops Conductor synthesized ${upstreamCount} upstream agent report(s) into recommendation: ${output.details["recommendedDecision"]}.`,
+          actor: "ops-conductor",
+          actorType: "agent",
+          agentSlug: "ops-conductor",
+          from: "communications_draft",
+          to: "communications_draft",
+          change: `synthesis.recommendedDecision = ${output.details["recommendedDecision"]}`,
+          metadata: {
             recommendedDecision: output.details["recommendedDecision"],
             upstreamRiskCount: ctx.state.riskFlags.length,
             upstreamAgentCount: upstreamCount,
           },
-          { agentSlug: "ops-conductor" },
-        ),
+        }),
       ],
     };
   },

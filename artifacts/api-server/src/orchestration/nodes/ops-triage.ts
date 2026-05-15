@@ -73,17 +73,20 @@ export const opsTriageNode: NodeDefinition = {
         },
       ],
       activity: [
-        composeAuditEntry(
-          "stage_transition",
-          `Stage advanced submitted → triaged. Ops Conductor classified request as "${fp.category}" (${fp.riskLevel} risk) and dispatched ${fp.routedAgents.length} downstream agents.`,
-          {
-            from: "submitted",
-            to: "triaged",
+        composeAuditEntry({
+          action: "stage_transition",
+          message: `Stage advanced submitted → triaged. Ops Conductor classified request as "${fp.category}" (${fp.riskLevel} risk) and dispatched ${fp.routedAgents.length} downstream agents.`,
+          actor: "ops-conductor",
+          actorType: "agent",
+          agentSlug: "ops-conductor",
+          from: "submitted",
+          to: "triaged",
+          change: `status: submitted → triaged; riskLevel → ${fp.riskLevel}`,
+          metadata: {
             routedAgents: fp.routedAgents,
             riskLevel: fp.riskLevel,
           },
-          { agentSlug: "ops-conductor" },
-        ),
+        }),
       ],
     };
   },
