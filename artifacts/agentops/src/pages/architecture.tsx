@@ -57,7 +57,7 @@ function Hero() {
       className="space-y-5"
     >
       <Eyebrow>Technical architecture</Eyebrow>
-      <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-tight">
+      <h1 className="font-display text-[2.5rem] sm:text-[3.25rem] font-medium tracking-[-0.025em] leading-[1.06]">
         From a TypeScript demo to a{" "}
         <span className="bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
           production Python/LangGraph

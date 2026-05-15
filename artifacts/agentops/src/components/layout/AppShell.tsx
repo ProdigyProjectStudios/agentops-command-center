@@ -248,17 +248,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span
                 data-testid="badge-mode"
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] font-medium uppercase tracking-wide",
-                  mode.mode === "demo"
-                    ? "bg-amber-500/10 text-amber-300 border-amber-500/30"
-                    : "bg-emerald-500/10 text-emerald-300 border-emerald-500/30",
+                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium uppercase tracking-[0.14em] font-mono",
+                  mode.hasApiKey
+                    ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
+                    : "bg-amber-500/10 text-amber-300 border-amber-500/30",
                 )}
               >
                 <span className={cn(
                   "size-1.5 rounded-full",
-                  mode.mode === "demo" ? "bg-amber-400" : "bg-emerald-400",
+                  mode.hasApiKey ? "bg-emerald-400" : "bg-amber-400",
                 )} />
-                {mode.mode === "demo" ? "Demo Mode" : "Live Mode"}
+                {mode.hasApiKey ? "Live Pilot" : "Demo Mode"}
               </span>
             )}
           </div>

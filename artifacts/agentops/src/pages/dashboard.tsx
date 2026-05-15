@@ -82,7 +82,7 @@ export default function DashboardPage() {
               {PRODUCT.tagline}
             </div>
             <h2
-              className="text-4xl sm:text-5xl font-semibold tracking-tight leading-[1.05] bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent"
+              className="font-display text-[2.625rem] sm:text-[3.25rem] font-medium tracking-[-0.025em] leading-[1.04] bg-gradient-to-br from-foreground via-foreground to-foreground/70 bg-clip-text text-transparent"
               data-testid="text-page-title"
             >
               {PAGE.dashboard.title}

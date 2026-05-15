@@ -79,7 +79,7 @@ export default function OverviewPage() {
           <div className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-medium">
             {PRODUCT.tagline}
           </div>
-          <h1 className="text-4xl sm:text-5xl font-semibold tracking-tight leading-tight">
+          <h1 className="font-display text-[2.5rem] sm:text-[3.25rem] font-medium tracking-[-0.025em] leading-[1.06]">
             A reference architecture for{" "}
             <span className="bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
               multi-agent enterprise ops.
