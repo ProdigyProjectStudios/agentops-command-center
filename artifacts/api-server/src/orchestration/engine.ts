@@ -104,11 +104,11 @@ const STEP_NAME_TO_KEY: Map<string, string> = new Map(
  * (with `status="completed"`) are loaded; legacy / pending / failed rows are
  * silently skipped so the engine can re-execute them.
  */
-async function hydrateState(
-  workflowRunId: number,
-): Promise<{
+async function hydrateState(workflowRunId: number): Promise<{
   agentOutputs: Record<string, AgentOutput>;
   completedSteps: AgentStep[];
+  retrievedMemory: import("../lib/agents/types").RetrievedMemoryItem[];
+  toolCallResults: import("../lib/agents/types").RecordedToolCallResult[];
 }> {
   const steps = await db
     .select()
@@ -116,6 +116,8 @@ async function hydrateState(
     .where(eq(agentStepsTable.workflowRunId, workflowRunId));
   const agentOutputs: Record<string, AgentOutput> = {};
   const completedSteps: AgentStep[] = [];
+  const completedStepIds = new Set<number>();
+  const stepIdToAgentSlug = new Map<number, string>();
   for (const s of steps) {
     if (s.status !== "completed") continue;
     if (!isAgentOutput(s.output)) continue;
@@ -123,8 +125,68 @@ async function hydrateState(
     if (!key) continue;
     agentOutputs[key] = s.output;
     completedSteps.push(s);
+    completedStepIds.add(s.id);
   }
-  return { agentOutputs, completedSteps };
+
+  // Map agent_step_id -> agent slug so we can attribute tool-call results
+  // when we reconstruct toolCallResults.
+  if (completedSteps.length > 0) {
+    const agentRows = await db.select().from(agentsTable);
+    const agentIdToSlug = new Map(agentRows.map((a) => [a.id, a.slug]));
+    for (const s of completedSteps) {
+      const slug = agentIdToSlug.get(s.agentId);
+      if (slug) stepIdToAgentSlug.set(s.id, slug);
+    }
+  }
+
+  // Pull persisted tool_calls to rebuild toolCallResults + retrievedMemory.
+  const toolCallResults: import("../lib/agents/types").RecordedToolCallResult[] =
+    [];
+  const retrievedMemory: import("../lib/agents/types").RetrievedMemoryItem[] =
+    [];
+  if (completedStepIds.size > 0) {
+    const persistedToolCalls = await db
+      .select()
+      .from(toolCallsTable)
+      .where(eq(toolCallsTable.workflowRunId, workflowRunId));
+    for (const tc of persistedToolCalls) {
+      if (tc.agentStepId == null || !completedStepIds.has(tc.agentStepId))
+        continue;
+      const agentSlug = stepIdToAgentSlug.get(tc.agentStepId) ?? "unknown";
+      toolCallResults.push({
+        agentSlug,
+        toolName: tc.toolName,
+        status: tc.status,
+        outputSummary: tc.outputSummary,
+        durationMs: tc.durationMs,
+      });
+      // memory_search tool-call output payload carries the canonical memory
+      // hits with snippets; rehydrate them onto state.retrievedMemory so
+      // resumed downstream nodes see the same context.
+      if (tc.toolName === "memory_search") {
+        const out = tc.output as {
+          hits?: Array<{
+            documentId: number;
+            title: string;
+            category: string;
+            snippet: string;
+            score: number;
+          }>;
+        };
+        for (const h of out.hits ?? []) {
+          retrievedMemory.push({
+            documentId: h.documentId,
+            title: h.title,
+            category: h.category,
+            snippet: h.snippet,
+            score: h.score,
+          });
+        }
+      }
+    }
+  }
+
+  return { agentOutputs, completedSteps, retrievedMemory, toolCallResults };
 }
 
 async function executeNode(
@@ -251,7 +313,12 @@ export class WorkflowEngine {
     // Hydrate any work that completed on a previous attempt — true resume.
     // We do NOT wipe completed agent_steps / tool_calls / activity_logs:
     // those rows are durable evidence and the timeline reads from them.
-    const { agentOutputs, completedSteps } = await hydrateState(workflowRunId);
+    const {
+      agentOutputs,
+      completedSteps,
+      retrievedMemory: hydratedMemory,
+      toolCallResults: hydratedToolCalls,
+    } = await hydrateState(workflowRunId);
     const completedKeys = new Set(Object.keys(agentOutputs));
 
     // Clean up artifacts that didn't reach a "completed" state from a prior
@@ -341,8 +408,8 @@ export class WorkflowEngine {
       ...(portfolioCompany ? { portfolioCompany } : {}),
       currentStage: workflowRun!.currentStage,
       agentOutputs: { ...agentOutputs },
-      retrievedMemory: [],
-      toolCallResults: [],
+      retrievedMemory: [...hydratedMemory],
+      toolCallResults: [...hydratedToolCalls],
       riskFlags: [],
       finalNextActions: [],
       metadata: { startedAt },
@@ -510,7 +577,12 @@ export class WorkflowEngine {
       return;
     }
 
-    const { agentOutputs, completedSteps } = await hydrateState(workflowRunId);
+    const {
+      agentOutputs,
+      completedSteps,
+      retrievedMemory: hydratedMemory,
+      toolCallResults: hydratedToolCalls,
+    } = await hydrateState(workflowRunId);
     const stepIndex = completedSteps.length;
 
     const state: WorkflowState = {
@@ -519,8 +591,8 @@ export class WorkflowEngine {
       ...(portfolioCompany ? { portfolioCompany } : {}),
       currentStage: workflowRun.currentStage,
       agentOutputs,
-      retrievedMemory: [],
-      toolCallResults: [],
+      retrievedMemory: hydratedMemory,
+      toolCallResults: hydratedToolCalls,
       riskFlags: Object.values(agentOutputs).flatMap((o) => o.risks),
       approvalStatus: workflowRun.status as "approved" | "rejected",
       finalNextActions: [],
