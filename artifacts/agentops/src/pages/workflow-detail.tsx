@@ -995,25 +995,41 @@ function ToolCallRow({
       : tc.status === "failed"
         ? "bg-rose-500/15 text-rose-300 border-rose-500/30"
         : "bg-sky-500/15 text-sky-300 border-sky-500/30";
+  const inputPreview = useMemo(() => {
+    try {
+      const s = JSON.stringify(tc.input ?? {});
+      return s.length > 80 ? s.slice(0, 77) + "…" : s;
+    } catch {
+      return "";
+    }
+  }, [tc.input]);
   return (
     <div className="border border-border rounded bg-card/60" data-testid={`tool-call-${tc.id}`}>
       <button
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left hover-elevate rounded"
+        className="w-full flex flex-col gap-1 px-3 py-2 text-left hover-elevate rounded"
       >
-        {open ? (
-          <ChevronDown className="size-3 text-muted-foreground shrink-0" />
-        ) : (
-          <ChevronRight className="size-3 text-muted-foreground shrink-0" />
+        <div className="flex items-center gap-2 w-full">
+          {open ? (
+            <ChevronDown className="size-3 text-muted-foreground shrink-0" />
+          ) : (
+            <ChevronRight className="size-3 text-muted-foreground shrink-0" />
+          )}
+          <Wrench className="size-3 text-primary shrink-0" />
+          <code className="text-xs font-mono shrink-0">{tc.toolName}</code>
+          {agentName && !compact && (
+            <span className="text-[11px] text-muted-foreground truncate">{agentName}</span>
+          )}
+          <span className="flex-1 text-xs text-muted-foreground truncate">{tc.outputSummary}</span>
+          <StatusBadge className={statusClass}>{tc.status}</StatusBadge>
+          <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{tc.durationMs}ms</span>
+        </div>
+        {!open && inputPreview && (
+          <div className="pl-6 pr-2 flex items-center gap-2 text-[11px] text-muted-foreground/80 font-mono w-full">
+            <span className="uppercase tracking-wider text-[9px] shrink-0">in</span>
+            <span className="truncate">{inputPreview}</span>
+          </div>
         )}
-        <Wrench className="size-3 text-primary shrink-0" />
-        <code className="text-xs font-mono shrink-0">{tc.toolName}</code>
-        {agentName && !compact && (
-          <span className="text-[11px] text-muted-foreground truncate">{agentName}</span>
-        )}
-        <span className="flex-1 text-xs text-muted-foreground truncate">{tc.outputSummary}</span>
-        <StatusBadge className={statusClass}>{tc.status}</StatusBadge>
-        <span className="text-[11px] text-muted-foreground tabular-nums shrink-0">{tc.durationMs}ms</span>
       </button>
       {open && (
         <div className="px-3 pb-3 pt-1 space-y-2 border-t border-border">
