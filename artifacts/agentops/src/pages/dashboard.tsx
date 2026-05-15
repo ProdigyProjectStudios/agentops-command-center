@@ -72,30 +72,8 @@ export default function DashboardPage() {
         transition={{ duration: 0.4, ease: "easeOut" }}
         className="relative overflow-hidden rounded-2xl border border-card-border bg-[radial-gradient(120%_120%_at_0%_0%,hsl(252_87%_67%/0.18)_0%,transparent_55%),radial-gradient(80%_80%_at_100%_100%,hsl(190_95%_60%/0.12)_0%,transparent_60%)] bg-card p-6 sm:p-9"
       >
-        {/* Animated grid backdrop */}
-        <div
-          aria-hidden="true"
-          className="absolute inset-0 opacity-[0.07] pointer-events-none"
-          style={{
-            backgroundImage:
-              "linear-gradient(to right, hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--foreground)) 1px, transparent 1px)",
-            backgroundSize: "44px 44px",
-            maskImage:
-              "radial-gradient(ellipse 70% 60% at 30% 30%, black 30%, transparent 80%)",
-          }}
-        />
-        <motion.div
-          aria-hidden="true"
-          className="absolute -top-32 -right-32 size-[420px] rounded-full bg-primary/15 blur-3xl pointer-events-none"
-          animate={{ scale: [1, 1.08, 1], opacity: [0.7, 1, 0.7] }}
-          transition={{ duration: 8, repeat: Infinity, ease: "easeInOut" }}
-        />
-        <motion.div
-          aria-hidden="true"
-          className="absolute -bottom-32 -left-24 size-[360px] rounded-full bg-chart-2/10 blur-3xl pointer-events-none"
-          animate={{ scale: [1.05, 1, 1.05], opacity: [0.6, 0.9, 0.6] }}
-          transition={{ duration: 10, repeat: Infinity, ease: "easeInOut" }}
-        />
+        {/* Drifting grid + light beams */}
+        <HeroGridBackdrop />
 
         <div className="relative flex flex-col lg:flex-row lg:items-end justify-between gap-8">
           <div className="max-w-2xl">
@@ -497,5 +475,94 @@ function MetricCard({
       </div>
     </Card>
     </motion.div>
+  );
+}
+
+function HeroGridBackdrop() {
+  return (
+    <div
+      aria-hidden="true"
+      className="absolute inset-0 overflow-hidden pointer-events-none"
+      style={{
+        maskImage:
+          "radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 85%)",
+        WebkitMaskImage:
+          "radial-gradient(ellipse 80% 70% at 50% 40%, black 35%, transparent 85%)",
+      }}
+    >
+      {/* Drifting grid */}
+      <motion.div
+        className="absolute -inset-[44px] opacity-[0.09]"
+        style={{
+          backgroundImage:
+            "linear-gradient(to right, hsl(var(--foreground)) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--foreground)) 1px, transparent 1px)",
+          backgroundSize: "44px 44px",
+        }}
+        animate={{ backgroundPositionX: ["0px", "44px"], backgroundPositionY: ["0px", "44px"] }}
+        transition={{ duration: 14, ease: "linear", repeat: Infinity }}
+      />
+
+      {/* Horizontal light dashes */}
+      <HeroBeam orientation="horizontal" top="22%" length={180} duration={3.4} delay={0} colorVar="--primary" />
+      <HeroBeam orientation="horizontal" top="58%" length={140} duration={4.2} delay={1.6} colorVar="--chart-2" />
+      <HeroBeam orientation="horizontal" top="80%" length={200} duration={3.8} delay={0.8} colorVar="--primary" />
+
+      {/* Vertical light dashes */}
+      <HeroBeam orientation="vertical" left="18%" length={160} duration={4.6} delay={1.2} colorVar="--chart-2" />
+      <HeroBeam orientation="vertical" left="62%" length={120} duration={3.6} delay={0.4} colorVar="--primary" />
+      <HeroBeam orientation="vertical" left="86%" length={150} duration={5.0} delay={2.2} colorVar="--chart-2" />
+    </div>
+  );
+}
+
+function HeroBeam({
+  orientation,
+  top,
+  left,
+  length,
+  duration,
+  delay,
+  colorVar,
+}: {
+  orientation: "horizontal" | "vertical";
+  top?: string;
+  left?: string;
+  length: number;
+  duration: number;
+  delay: number;
+  colorVar: string;
+}) {
+  const isH = orientation === "horizontal";
+  const color = `hsl(var(${colorVar}))`;
+  const gradient = isH
+    ? `linear-gradient(to right, transparent 0%, ${color} 45%, ${color} 55%, transparent 100%)`
+    : `linear-gradient(to bottom, transparent 0%, ${color} 45%, ${color} 55%, transparent 100%)`;
+
+  return (
+    <motion.div
+      className="absolute"
+      style={{
+        top: isH ? top : `-${length}px`,
+        left: isH ? `-${length}px` : left,
+        width: isH ? `${length}px` : "1px",
+        height: isH ? "1px" : `${length}px`,
+        background: gradient,
+        filter: "blur(0.4px)",
+        boxShadow: `0 0 8px ${color}`,
+      }}
+      animate={
+        isH
+          ? { x: ["0%", "calc(100vw + 200px)"], opacity: [0, 1, 1, 0] }
+          : { y: ["0%", "calc(100vh + 200px)"], opacity: [0, 1, 1, 0] }
+      }
+      transition={{
+        duration,
+        delay,
+        repeat: Infinity,
+        repeatDelay: 1.4,
+        ease: "easeInOut",
+        times: [0, 0.15, 0.85, 1],
+      }}
+    />
   );
 }
