@@ -229,26 +229,33 @@ function Sparkline({ metric }: { metric: Metric }) {
 
 function useRollingSeries(metric: Metric): number[] {
   const seedRef = useRef(Math.random() * 1000);
-  const [tick, setTick] = useState(0);
+  const [t, setT] = useState(0);
   useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1200);
-    return () => clearInterval(id);
+    let raf = 0;
+    const start = performance.now();
+    const loop = (now: number) => {
+      setT((now - start) / 1000);
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
   }, []);
   return useMemo(() => {
-    const n = 32;
+    const n = 48;
     const seed = seedRef.current;
+    const speed = 0.55;
     const arr: number[] = [];
     for (let i = 0; i < n; i++) {
-      const x = (tick + i) * 0.45 + seed;
+      const x = i * 0.32 + t * speed + seed;
       const v =
         metric.base +
         Math.sin(x) * metric.amp * 0.6 +
         Math.cos(x * 1.7 + seed) * metric.amp * 0.35 +
-        (Math.sin(x * 0.31) * metric.amp) * 0.1;
+        Math.sin(x * 0.31) * metric.amp * 0.1;
       arr.push(v);
     }
     return arr;
-  }, [tick, metric]);
+  }, [t, metric]);
 }
 
 function buildPath(points: number[]): string {
