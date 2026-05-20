@@ -18,7 +18,6 @@ export function TelemetryStrip({ className }: { className?: string }) {
       )}
     >
       <GridBackdrop />
-      <ScanBeam />
       <div className="relative grid grid-cols-1 lg:grid-cols-[auto_1fr_auto] items-stretch gap-px bg-card-border/40">
         <LiveSignal />
         <SparklineRow />
