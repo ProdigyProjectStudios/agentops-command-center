@@ -390,8 +390,8 @@ function VectorMemory() {
         adapter swap, not a rewrite.
       </p>
       <Card className="p-4 bg-card/50 border-card-border">
-        <div className="flex items-start gap-3">
-          <div className="mt-0.5 inline-flex h-6 items-center rounded-md bg-emerald-500/15 px-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
+        <div className="flex items-start gap-3 flex-wrap sm:flex-nowrap">
+          <div className="mt-0.5 inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-md bg-emerald-500/15 px-2 text-[11px] font-semibold uppercase tracking-wider text-emerald-300">
             Phase 1C · shipped
           </div>
           <div className="text-sm text-muted-foreground leading-relaxed">

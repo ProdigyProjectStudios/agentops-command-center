@@ -29,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
 import { MetricNumber } from "@/components/MetricNumber";
+import { TelemetryStrip } from "@/components/TelemetryStrip";
 import {
   formatCurrencyCents,
   formatRelative,
@@ -134,6 +135,14 @@ export default function DashboardPage() {
           </div>
         </div>
       </motion.section>
+
+      <motion.div
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={FADE}
+      >
+        <TelemetryStrip />
+      </motion.div>
 
       {(metricsError || workflowsError) && (
         <ErrorState
