@@ -33,6 +33,38 @@ const APPROVALS_SEED_PATH = resolve(
   __dirname,
   "../fixtures/seed-approvals-queue.sql",
 );
+const DASHBOARD_SEED_PATH = resolve(
+  __dirname,
+  "../fixtures/seed-dashboard.sql",
+);
+
+export type DashboardMetricKey =
+  | "activeWorkflows"
+  | "pendingApprovals"
+  | "agentActionsToday"
+  | "complianceRisksFlagged"
+  | "estimatedCostImpactCents";
+
+// Mirrors the contributions in fixtures/seed-dashboard.sql. Keep these in
+// lockstep with the seed: the spec computes
+// expected_value = baseline + delta and asserts exactly.
+export const DASHBOARD_DELTAS: Record<DashboardMetricKey, number> = {
+  activeWorkflows: 2,
+  pendingApprovals: 1,
+  agentActionsToday: 3,
+  complianceRisksFlagged: 1,
+  estimatedCostImpactCents: 950000,
+};
+
+export type DashboardFixtures = {
+  baseline: Record<DashboardMetricKey, number>;
+  deltas: Record<DashboardMetricKey, number>;
+  workflowIds: number[];
+  workflowTitles: string[];
+  activityIds: number[];
+  activityMessages: string[];
+  prefix: string;
+};
 
 export async function seedFixtures(): Promise<FixtureMap> {
   if (!process.env.DATABASE_URL) {
@@ -109,9 +141,85 @@ export async function seedApprovalsFixtures(): Promise<ApprovalFixtureMap> {
   }
 }
 
+export async function seedDashboardFixtures(): Promise<DashboardFixtures> {
+  if (!process.env.DATABASE_URL) {
+    throw new Error(
+      "DATABASE_URL must be set to run the dashboard e2e tests.",
+    );
+  }
+  const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
+  await client.connect();
+  try {
+    const sql = readFileSync(DASHBOARD_SEED_PATH, "utf8");
+    await client.query(sql);
+    const { rows } = await client.query<{
+      key: string;
+      num_value: string | null;
+      text_value: string | null;
+    }>(`
+      SELECT key, num_value, text_value FROM _e2e_dashboard_fixtures
+    `);
+
+    const byKey = new Map(rows.map((r) => [r.key, r]));
+    const num = (key: string): number => {
+      const row = byKey.get(key);
+      if (!row || row.num_value === null) {
+        throw new Error(`Dashboard fixture row missing numeric value: ${key}`);
+      }
+      return Number(row.num_value);
+    };
+    const text = (key: string): string => {
+      const row = byKey.get(key);
+      if (!row || row.text_value === null) {
+        throw new Error(`Dashboard fixture row missing text value: ${key}`);
+      }
+      return row.text_value;
+    };
+
+    return {
+      baseline: {
+        activeWorkflows: num("baseline_active_workflows"),
+        pendingApprovals: num("baseline_pending_approvals"),
+        agentActionsToday: num("baseline_agent_actions_today"),
+        complianceRisksFlagged: num("baseline_compliance_risks"),
+        estimatedCostImpactCents: num("baseline_cost_impact_cents"),
+      },
+      deltas: { ...DASHBOARD_DELTAS },
+      workflowIds: [
+        num("seeded_workflow_1"),
+        num("seeded_workflow_2"),
+        num("seeded_workflow_3"),
+      ],
+      workflowTitles: [
+        text("seeded_workflow_1"),
+        text("seeded_workflow_2"),
+        text("seeded_workflow_3"),
+      ],
+      activityIds: [
+        num("seeded_activity_1"),
+        num("seeded_activity_2"),
+        num("seeded_activity_3"),
+      ],
+      activityMessages: [
+        text("seeded_activity_1"),
+        text("seeded_activity_2"),
+        text("seeded_activity_3"),
+      ],
+      prefix: text("prefix"),
+    };
+  } finally {
+    await client.end();
+  }
+}
+
 export default async function globalSetup() {
   const fixtures = await seedFixtures();
   process.env.E2E_FIXTURES = JSON.stringify(fixtures);
   const approvals = await seedApprovalsFixtures();
   process.env.E2E_APPROVAL_FIXTURES = JSON.stringify(approvals);
+  // Note: the dashboard fixture is intentionally NOT seeded here. Its
+  // baseline+delta assertions depend on the DB state at the moment the
+  // dashboard spec runs, and other specs mutate that shared state (e.g.
+  // approvals.spec.ts flips a pending approval to approved). The dashboard
+  // spec reseeds inside its own beforeAll to capture an accurate baseline.
 }
