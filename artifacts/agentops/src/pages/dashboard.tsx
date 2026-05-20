@@ -1,6 +1,7 @@
 import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { PageTransition } from "@/components/PageTransition";
+import { FADE } from "@/lib/motion";
 import {
   Activity,
   AlertTriangle,
@@ -70,7 +71,7 @@ export default function DashboardPage() {
       <motion.section
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4, ease: "easeOut" }}
+        transition={FADE}
         className="relative overflow-hidden rounded-2xl border border-card-border bg-[radial-gradient(120%_120%_at_0%_0%,hsl(252_87%_67%/0.18)_0%,transparent_55%),radial-gradient(80%_80%_at_100%_100%,hsl(190_95%_60%/0.12)_0%,transparent_60%)] bg-card p-6 sm:p-9"
       >
         {/* Drifting grid + light beams */}
@@ -207,7 +208,7 @@ export default function DashboardPage() {
       <motion.div
         initial={{ opacity: 0, y: 8 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, delay: 0.1, ease: "easeOut" }}
+        transition={FADE}
       >
         <Card
           className="p-6 bg-gradient-to-br from-primary/8 via-card to-card border-primary/30"
@@ -260,8 +261,9 @@ export default function DashboardPage() {
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="font-semibold text-sm">Recent Workflows</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {metrics?.totalWorkflows ?? 0} total · {metrics?.completedWorkflows ?? 0} completed
+              <p className="text-xs text-muted-foreground mt-0.5 tnum">
+                <MetricNumber value={metrics?.totalWorkflows} /> total ·{" "}
+                <MetricNumber value={metrics?.completedWorkflows} /> completed
               </p>
             </div>
             <Link
@@ -401,7 +403,7 @@ export default function DashboardPage() {
               </div>
               <div className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
                 <CheckCircle2 className="size-3" />
-                {agent.recentActionCount} actions today
+                <MetricNumber value={agent.recentActionCount} className="tnum" /> actions today
               </div>
             </div>
           ))}
@@ -444,7 +446,7 @@ function MetricCard({
     <motion.div
       variants={{
         hidden: { opacity: 0, y: 8 },
-        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 0.61, 0.36, 1] } },
+        show: { opacity: 1, y: 0, transition: FADE },
       }}
     >
     <Card

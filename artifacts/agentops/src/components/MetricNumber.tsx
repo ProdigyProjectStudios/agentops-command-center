@@ -8,7 +8,7 @@ export function MetricNumber({
   value,
   format,
   className,
-  durationMs = 700,
+  durationMs = 200,
   prefix,
   suffix,
   testId,

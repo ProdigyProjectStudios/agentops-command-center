@@ -162,7 +162,7 @@ function FeatureRow({
       initial={{ opacity: 0, y: 16 }}
       whileInView={{ opacity: 1, y: 0 }}
       viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+      transition={{ duration: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
       className={cn(
         "grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center",
       )}

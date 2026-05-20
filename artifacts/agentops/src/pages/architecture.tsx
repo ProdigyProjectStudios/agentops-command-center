@@ -54,7 +54,7 @@ function Hero() {
     <motion.section
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: "easeOut" }}
+      transition={{ duration: 0.2, ease: [0.22, 0.61, 0.36, 1] }}
       className="space-y-5"
     >
       <Eyebrow>Technical architecture</Eyebrow>
@@ -349,7 +349,7 @@ function AgentGraph() {
                 initial={{ opacity: 0, y: 8 }}
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, amount: 0.2 }}
-                transition={{ duration: 0.3, delay: i * 0.04, ease: "easeOut" }}
+                transition={{ duration: 0.18, delay: i * 0.04, ease: [0.22, 0.61, 0.36, 1] }}
                 className="rounded-lg border border-card-border bg-background/40 p-4"
               >
                 <div className="flex items-center gap-2 mb-2">
@@ -669,7 +669,7 @@ function Security() {
               initial={{ opacity: 0, y: 8 }}
               whileInView={{ opacity: 1, y: 0 }}
               viewport={{ once: true, amount: 0.2 }}
-              transition={{ duration: 0.3, delay: i * 0.05, ease: "easeOut" }}
+              transition={{ duration: 0.18, delay: i * 0.05, ease: [0.22, 0.61, 0.36, 1] }}
             >
               <Card className="p-5 bg-card border-card-border h-full">
                 <div className="flex items-start gap-3">
