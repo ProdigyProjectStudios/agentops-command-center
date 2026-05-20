@@ -15,7 +15,7 @@ import {
   Workflow,
   Search,
 } from "lucide-react";
-import { useListWorkflows } from "@workspace/api-client-react";
+import { useListWorkflows, useListAgents } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
 import { workflowStatusLabel } from "@/lib/format";
 
@@ -49,10 +49,25 @@ export function CommandPalette({
   const [, setLocation] = useLocation();
   const [search, setSearch] = useState("");
   const { data: workflows } = useListWorkflows();
+  const { data: agents } = useListAgents();
 
   useEffect(() => {
     if (!open) setSearch("");
   }, [open]);
+
+  // Explicit Escape-to-close. Listen at window so the handler still fires
+  // whether focus is in the cmdk input, a list item, or the scrim.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        onOpenChange(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, onOpenChange]);
 
   const go = (href: string) => {
     onOpenChange(false);
@@ -123,6 +138,39 @@ export function CommandPalette({
               );
             })}
           </Command.Group>
+
+          {(agents ?? []).length > 0 && (
+            <Command.Group
+              heading="Agents"
+              className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/60 font-mono px-2 pt-3 pb-1 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1"
+            >
+              {(agents ?? []).map((a) => (
+                <Command.Item
+                  key={a.id}
+                  value={`agent ${a.name} ${a.slug} ${a.role ?? ""}`}
+                  onSelect={() => go(`/agents#${a.slug}`)}
+                  className={cn(
+                    "flex items-center gap-3 px-2.5 py-2 rounded-md cursor-pointer text-sm",
+                    "aria-selected:bg-sidebar-accent/70 aria-selected:text-sidebar-accent-foreground",
+                  )}
+                  data-testid={`command-agent-${a.slug}`}
+                >
+                  <Bot className="size-3.5 text-primary" />
+                  <div className="flex-1 min-w-0">
+                    <div className="truncate">{a.name}</div>
+                    {a.role && (
+                      <div className="text-[11px] text-muted-foreground truncate">
+                        {a.role}
+                      </div>
+                    )}
+                  </div>
+                  <span className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground font-mono">
+                    {a.slug}
+                  </span>
+                </Command.Item>
+              ))}
+            </Command.Group>
+          )}
 
           {(workflows ?? []).length > 0 && (
             <Command.Group

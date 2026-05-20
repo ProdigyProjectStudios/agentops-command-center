@@ -27,6 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { MetricNumber } from "@/components/MetricNumber";
 import {
   formatCurrencyCents,
   formatRelative,
@@ -194,9 +195,8 @@ export default function DashboardPage() {
         <MetricCard
           icon={DollarSign}
           label="Cost Impact"
-          value={
-            metrics ? formatCurrencyCents(metrics.estimatedCostImpactCents) : undefined
-          }
+          value={metrics?.estimatedCostImpactCents}
+          formatNumber={(n) => formatCurrencyCents(Math.round(n))}
           loading={isLoading}
           accent="text-emerald-300"
           testId="metric-cost-impact"
@@ -427,13 +427,15 @@ function MetricCard({
   icon: Icon,
   label,
   value,
+  formatNumber,
   loading,
   accent,
   testId,
 }: {
   icon: typeof Activity;
   label: string;
-  value: number | string | undefined;
+  value: number | undefined;
+  formatNumber?: (n: number) => string;
   loading: boolean;
   accent: string;
   testId: string;
@@ -442,7 +444,7 @@ function MetricCard({
     <motion.div
       variants={{
         hidden: { opacity: 0, y: 8 },
-        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: "easeOut" } },
+        show: { opacity: 1, y: 0, transition: { duration: 0.3, ease: [0.22, 0.61, 0.36, 1] } },
       }}
     >
     <Card
@@ -462,15 +464,13 @@ function MetricCard({
         </span>
       </div>
       <div
-        className="mt-4 text-3xl font-semibold tabular-nums tracking-tight"
+        className="mt-4 text-3xl font-display font-medium tnum tracking-tight"
         data-testid={`${testId}-value`}
       >
         {loading ? (
           <Skeleton className="h-8 w-24" />
-        ) : value !== undefined ? (
-          value
         ) : (
-          "—"
+          <MetricNumber value={value} format={formatNumber} />
         )}
       </div>
     </Card>
