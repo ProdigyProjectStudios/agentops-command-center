@@ -7,30 +7,345 @@ import {
   Bot,
   CheckCircle2,
   Flag,
-  GitBranch,
   Layers,
-  Megaphone,
   PlusCircle,
-  Scale,
-  ShieldCheck,
   Sparkles,
   Wrench,
 } from "lucide-react";
 import { PageTransition } from "@/components/PageTransition";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
+import { PipelineFlow, PIPELINE_NODES } from "@/components/PipelineFlow";
 import { PRODUCT } from "@/lib/copy";
+import { FADE_UP, STAGGER_CHILDREN } from "@/lib/motion";
+import { cn } from "@/lib/utils";
 
-const PIPELINE = [
-  { key: "triage", label: "Triage", icon: GitBranch, blurb: "Ops Conductor classifies the request and routes it to the right specialists." },
-  { key: "memory", label: "Memory", icon: BookOpen, blurb: "Memory agent grounds the run in policy docs and prior decisions." },
-  { key: "legal", label: "Legal", icon: Scale, blurb: "Legal Counsel checks contract terms, compliance, and red flags." },
-  { key: "finance", label: "Finance", icon: ShieldCheck, blurb: "Finance fits cost into the operating plan and forecasts impact." },
-  { key: "comms", label: "Comms", icon: Megaphone, blurb: "Communications drafts internal and external messaging." },
-  { key: "synthesis", label: "Synthesis", icon: Sparkles, blurb: "Risk Synthesis composes the final executive brief." },
-  { key: "approval", label: "Approval", icon: Flag, blurb: "A human signs off — approve, conditionally approve, or reject." },
+const FEATURES: Array<{
+  eyebrow: string;
+  title: string;
+  body: string;
+  bullets: string[];
+  mock: "dashboard" | "workflow" | "approvals";
+}> = [
+  {
+    eyebrow: "01 · Cockpit",
+    title: "A live cockpit, not a wall of tickets.",
+    body: "Every operational request crossing the portfolio is triaged, reviewed, and routed by a coordinated crew of specialist agents — visible in one screen.",
+    bullets: [
+      "Active workflows, pending approvals, agent actions today, compliance risks, cost impact — all at a glance.",
+      "Recent runs are one click from the full audit trail.",
+      "Agent health surfaces idle, active, and offline crew members.",
+    ],
+    mock: "dashboard",
+  },
+  {
+    eyebrow: "02 · Briefing",
+    title: "Every run is an executive briefing.",
+    body: "Open a workflow and the right column reads like a memo: headline decision, confidence, top risks, drafted comms, and the human approval gate.",
+    bullets: [
+      "Synthesized brief at the top — headline, decision, confidence, risks.",
+      "Risk, cost, drafted comms, and next actions as standalone panels in reading order.",
+      "Sticky left rail timeline of all seven nodes with status and duration.",
+    ],
+    mock: "workflow",
+  },
+  {
+    eyebrow: "03 · Approvals",
+    title: "Nothing executes without a human.",
+    body: "Approvals are first-class. Each card shows the agents' recommendation, the supporting evidence, the risk read, and the explicit decide / reject / request-revision controls.",
+    bullets: [
+      "Approve, reject, or request a revision — every decision is signed and timestamped.",
+      "Recommendations carry the confidence and the dissenting risks, side by side.",
+      "Audit log captures who, what, when, and why.",
+    ],
+    mock: "approvals",
+  },
 ];
+
+export default function OverviewPage() {
+  return (
+    <PageTransition>
+      <div className="px-4 sm:px-6 lg:px-8 py-10 space-y-24 max-w-[1200px] mx-auto">
+        <Hero />
+
+        {/* Alternating feature rows */}
+        <section className="space-y-24">
+          {FEATURES.map((f, i) => (
+            <FeatureRow key={f.eyebrow} feature={f} reverse={i % 2 === 1} />
+          ))}
+        </section>
+
+        <HowItWorks />
+
+        <TechnicalDepth />
+
+        <BottomCTA />
+
+        <footer className="pt-8 border-t border-border text-xs text-muted-foreground">
+          {PRODUCT.name} · Portfolio reference implementation · Built on Replit.
+        </footer>
+      </div>
+    </PageTransition>
+  );
+}
+
+/* -------------------- Hero -------------------- */
+
+function Hero() {
+  return (
+    <motion.section
+      initial="hidden"
+      animate="show"
+      variants={STAGGER_CHILDREN}
+      className="surface-hero p-8 sm:p-12 lg:p-14 overflow-hidden"
+    >
+      <motion.div variants={FADE_UP} className="eyebrow eyebrow-accent">
+        <span className="inline-flex items-center gap-2">
+          <span className="size-1.5 rounded-full bg-primary animate-pulse" />
+          {PRODUCT.tagline}
+        </span>
+      </motion.div>
+      <motion.h1
+        variants={FADE_UP}
+        className="font-display text-[2.75rem] sm:text-[3.75rem] lg:text-[4.25rem] font-medium tracking-[-0.03em] leading-[1.02] mt-5 max-w-4xl"
+      >
+        A reference architecture for{" "}
+        <span className="bg-gradient-to-br from-primary via-foreground to-chart-2 bg-clip-text text-transparent">
+          multi-agent enterprise operations.
+        </span>
+      </motion.h1>
+      <motion.p
+        variants={FADE_UP}
+        className="text-lg sm:text-xl text-muted-foreground mt-6 max-w-3xl leading-relaxed"
+      >
+        Seven specialized agents triage, review, and route every operational request —
+        grounded in shared memory, instrumented end-to-end, and landing at a human gate
+        with a clear recommendation, risk read, and full audit trail.
+      </motion.p>
+      <motion.div variants={FADE_UP} className="mt-8 flex flex-wrap gap-3">
+        <Link href="/requests/new">
+          <Button size="lg" data-testid="overview-cta-demo" asChild>
+            <span className="cursor-pointer">
+              <PlusCircle className="size-4" />
+              Run the demo
+            </span>
+          </Button>
+        </Link>
+        <Link href="/">
+          <Button size="lg" variant="outline" data-testid="overview-cta-dashboard" asChild>
+            <span className="cursor-pointer">
+              Open the cockpit <ArrowRight className="size-4" />
+            </span>
+          </Button>
+        </Link>
+      </motion.div>
+
+      {/* Hero pipeline */}
+      <motion.div variants={FADE_UP} className="mt-12">
+        <PipelineFlow ambient height={130} testId="overview-hero-pipeline" />
+      </motion.div>
+    </motion.section>
+  );
+}
+
+/* -------------------- Feature rows -------------------- */
+
+function FeatureRow({
+  feature,
+  reverse,
+}: {
+  feature: (typeof FEATURES)[number];
+  reverse?: boolean;
+}) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 16 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, amount: 0.3 }}
+      transition={{ duration: 0.45, ease: [0.22, 0.61, 0.36, 1] }}
+      className={cn(
+        "grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center",
+      )}
+    >
+      <div className={cn(reverse ? "lg:order-2" : "")}>
+        <div className="eyebrow eyebrow-accent">{feature.eyebrow}</div>
+        <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-[-0.02em] mt-3 leading-[1.1]">
+          {feature.title}
+        </h2>
+        <p className="text-muted-foreground mt-4 leading-relaxed">{feature.body}</p>
+        <ul className="mt-5 space-y-2.5">
+          {feature.bullets.map((b) => (
+            <li key={b} className="flex items-start gap-2.5 text-sm">
+              <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+              <span className="text-foreground/90">{b}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+      <div className={cn(reverse ? "lg:order-1" : "")}>
+        <BrowserMock variant={feature.mock} />
+      </div>
+    </motion.div>
+  );
+}
+
+function BrowserMock({ variant }: { variant: "dashboard" | "workflow" | "approvals" }) {
+  return (
+    <div
+      className="relative surface-raised p-0 overflow-hidden"
+      style={{ transform: "perspective(1200px) rotateY(-4deg) rotateX(2deg)" }}
+    >
+      {/* chrome */}
+      <div className="flex items-center gap-1.5 px-3 py-2 border-b border-card-border bg-card/60">
+        <span className="size-2.5 rounded-full bg-rose-400/70" />
+        <span className="size-2.5 rounded-full bg-amber-400/70" />
+        <span className="size-2.5 rounded-full bg-emerald-400/70" />
+        <span className="ml-3 text-[10px] font-mono text-muted-foreground/70 tracking-wider">
+          agentops.app{variant === "workflow" ? "/workflows/1" : variant === "approvals" ? "/approvals" : "/"}
+        </span>
+      </div>
+      {/* body */}
+      <div className="p-4 sm:p-5 bg-background/50">
+        {variant === "dashboard" && <MockDashboard />}
+        {variant === "workflow" && <MockWorkflow />}
+        {variant === "approvals" && <MockApprovals />}
+      </div>
+    </div>
+  );
+}
+
+function MockDashboard() {
+  return (
+    <div className="space-y-3">
+      <div className="grid grid-cols-5 gap-2">
+        {["12", "4", "187", "3", "$48K"].map((v, i) => (
+          <div key={i} className="surface-raised p-2.5">
+            <div className="eyebrow" style={{ fontSize: 8 }}>KPI</div>
+            <div className="tnum text-lg font-semibold mt-1">{v}</div>
+          </div>
+        ))}
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <div className="col-span-2 surface-raised p-3 space-y-2">
+          <div className="text-[11px] font-semibold">Recent Workflows</div>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="flex items-center justify-between text-[10px] py-1 border-b border-card-border/60 last:border-0">
+              <span className="truncate text-foreground/80">Acme HQ · roof repair</span>
+              <span className="text-primary/80 font-mono tracking-wider">PENDING</span>
+            </div>
+          ))}
+        </div>
+        <div className="surface-raised p-3">
+          <div className="text-[11px] font-semibold mb-2">Activity</div>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex items-start gap-1.5 mb-1.5">
+              <span className="size-1.5 rounded-full bg-primary/70 mt-1" />
+              <span className="text-[9px] text-muted-foreground leading-tight">Ops triaged a new request</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MockWorkflow() {
+  return (
+    <div className="grid grid-cols-5 gap-3">
+      <div className="col-span-2 surface-raised p-3 space-y-2">
+        <div className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">Timeline</div>
+        {PIPELINE_NODES.map((n, i) => (
+          <div key={n.key} className="flex items-center gap-2 text-[10px]">
+            <span className={cn("size-2 rounded-full", i < 3 ? "bg-primary" : i === 3 ? "bg-primary animate-pulse" : "bg-muted-foreground/30")} />
+            <span className="flex-1 truncate">{n.label}</span>
+            <span className="tnum text-muted-foreground">{i < 4 ? `${(i + 1) * 320}ms` : "—"}</span>
+          </div>
+        ))}
+      </div>
+      <div className="col-span-3 space-y-2">
+        <div className="surface-raised p-3">
+          <div className="eyebrow" style={{ fontSize: 8 }}>Executive Brief</div>
+          <div className="text-[11px] font-semibold mt-1">Recommend conditional approval — capex within plan.</div>
+          <div className="text-[9px] text-muted-foreground mt-1.5">Confidence 78% · 2 risks · 1 mitigation</div>
+        </div>
+        <div className="surface-raised p-3 space-y-1.5">
+          <div className="text-[10px] font-semibold">Risk &amp; Compliance</div>
+          <div className="h-1 rounded bg-amber-400/60 w-2/3" />
+          <div className="h-1 rounded bg-rose-400/40 w-1/3" />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MockApprovals() {
+  return (
+    <div className="space-y-2.5">
+      {[0, 1, 2].map((i) => (
+        <div key={i} className="surface-raised p-3">
+          <div className="flex items-center justify-between mb-1.5">
+            <div className="text-[11px] font-semibold truncate">Vendor renewal · CloudCo · $24K</div>
+            <span className="text-[9px] font-mono tracking-wider text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded px-1.5 py-0.5">
+              MEDIUM
+            </span>
+          </div>
+          <div className="text-[9px] text-muted-foreground mb-2">Recommended: approve · confidence 82%</div>
+          <div className="flex gap-1.5">
+            <span className="text-[9px] bg-primary/90 text-primary-foreground rounded px-2 py-0.5">Approve</span>
+            <span className="text-[9px] border border-card-border rounded px-2 py-0.5 text-muted-foreground">Reject</span>
+            <span className="text-[9px] border border-card-border rounded px-2 py-0.5 text-muted-foreground">Revise</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* -------------------- How it works -------------------- */
+
+function HowItWorks() {
+  const STORY: Array<{ label: string; copy: string }> = [
+    { label: "Intake", copy: "A request enters with title, category, dollar amount, and context." },
+    { label: "Operations", copy: "Ops Conductor classifies the request and routes it to the right specialists." },
+    { label: "Memory", copy: "Memory agent grounds the run in policy docs and prior decisions." },
+    { label: "Legal", copy: "Legal Counsel checks contract terms, compliance, and red flags." },
+    { label: "Finance", copy: "Finance fits cost into the operating plan and forecasts impact." },
+    { label: "Comms", copy: "Communications drafts the internal and external messaging." },
+    { label: "Approval", copy: "A human signs off — approve, conditionally approve, or reject." },
+  ];
+  return (
+    <section className="space-y-6">
+      <div className="eyebrow eyebrow-accent">How it works</div>
+      <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-[-0.02em] max-w-3xl">
+        Seven nodes. One record. Zero black boxes.
+      </h2>
+      <Card className="surface-raised p-6 sm:p-8">
+        <PipelineFlow ambient height={140} testId="overview-howit-pipeline" />
+      </Card>
+      <div className="overflow-x-auto -mx-4 px-4 pb-2">
+        <div className="flex gap-3 min-w-max">
+          {STORY.map((s, i) => (
+            <div
+              key={s.label}
+              className="surface-raised p-4 w-[240px] shrink-0"
+              data-testid={`overview-story-${s.label.toLowerCase()}`}
+            >
+              <div className="flex items-center gap-2 mb-1.5">
+                <span className="size-5 rounded-full bg-primary/15 text-primary text-[10px] font-mono tnum flex items-center justify-center">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <span className="text-sm font-semibold">{s.label}</span>
+              </div>
+              <p className="text-xs text-muted-foreground leading-relaxed">{s.copy}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+/* -------------------- Technical depth -------------------- */
 
 const PILLARS: Array<{ icon: typeof Bot; title: string; body: string }> = [
   {
@@ -41,7 +356,7 @@ const PILLARS: Array<{ icon: typeof Bot; title: string; body: string }> = [
   {
     icon: Flag,
     title: "Human-in-the-loop approvals",
-    body: "Nothing executes without a human sign-off. The approval card shows the recommendation, key evidence, risks, and an explicit decide / reject / request-revision flow.",
+    body: "Nothing executes without a human sign-off. Each approval surfaces the recommendation, evidence, and an explicit decide / reject / revise flow.",
   },
   {
     icon: BookOpen,
@@ -65,239 +380,99 @@ const PILLARS: Array<{ icon: typeof Bot; title: string; body: string }> = [
   },
 ];
 
-export default function OverviewPage() {
+function TechnicalDepth() {
   return (
-    <PageTransition>
-      <div className="px-4 sm:px-6 lg:px-8 py-10 space-y-12 max-w-[1100px] mx-auto">
-        {/* Hero */}
-        <motion.section
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="space-y-5"
-        >
-          <div className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-medium">
-            {PRODUCT.tagline}
-          </div>
-          <h1 className="font-display text-[2.5rem] sm:text-[3.25rem] font-medium tracking-[-0.025em] leading-[1.06]">
-            A reference architecture for{" "}
-            <span className="bg-gradient-to-r from-primary to-chart-2 bg-clip-text text-transparent">
-              multi-agent enterprise ops.
-            </span>
-          </h1>
-          <p className="text-lg text-muted-foreground max-w-3xl leading-relaxed">
-            AgentOps Command Center is a working demo of how a small crew of specialized AI
-            agents can triage incoming operational requests, run them through legal, finance,
-            and communications review, ground their reasoning in a knowledge base, and land
-            at a human approval gate — with a clear recommendation, risk level, and full
-            audit trail.
-          </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Link href="/requests/new">
-              <Button size="lg" data-testid="overview-cta-demo" asChild>
-                <span className="cursor-pointer">
-                  <PlusCircle className="size-4" />
-                  Run the demo
-                </span>
-              </Button>
-            </Link>
-            <Link href="/">
-              <Button size="lg" variant="outline" data-testid="overview-cta-dashboard" asChild>
-                <span className="cursor-pointer">
-                  Open the cockpit <ArrowRight className="size-4" />
-                </span>
-              </Button>
-            </Link>
-          </div>
-        </motion.section>
-
-        {/* Problem */}
-        <section className="space-y-4">
-          <SectionEyebrow>The problem</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Operations teams drown in approval queues.
-          </h2>
-          <p className="text-muted-foreground max-w-3xl leading-relaxed">
-            Vendor contracts, ad spend, hiring asks, facilities work, legal reviews —
-            every one of them needs a quick risk read, a budget check, a draft comms
-            note, and a paper trail. A modern operating company files dozens of these
-            a week. Most of the work is not the decision; it's the assembly of evidence
-            that lets a human make the decision quickly and defensibly. AgentOps wires
-            that assembly into a single deterministic pipeline you can audit step by step.
-          </p>
-        </section>
-
-        {/* Pipeline */}
-        <section className="space-y-5">
-          <SectionEyebrow>The core workflow</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">Seven nodes, one record.</h2>
-          <p className="text-muted-foreground max-w-3xl leading-relaxed">
-            Every request flows through the same pipeline. Each node persists a typed
-            agent_step, the tools it called, the activity it generated, and a confidence
-            score. Nothing is hidden — the workflow detail page lets you expand every
-            step's input, output, and tool calls.
-          </p>
-          <Card className="p-6 bg-card border-card-border">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3">
-              {PIPELINE.map((n, i) => {
-                const Icon = n.icon;
-                return (
-                  <div key={n.key} className="relative">
-                    <div className="rounded-lg border border-card-border bg-background/40 p-3 h-full">
-                      <div className="flex items-center gap-2 mb-2">
-                        <div className="size-7 rounded-md bg-primary/15 text-primary flex items-center justify-center">
-                          <Icon className="size-3.5" />
-                        </div>
-                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground tabular-nums">
-                          {String(i + 1).padStart(2, "0")}
-                        </span>
-                      </div>
-                      <div className="text-sm font-medium">{n.label}</div>
-                      <p className="text-[11px] text-muted-foreground mt-1 leading-snug">
-                        {n.blurb}
-                      </p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </Card>
-        </section>
-
-        {/* Pillars */}
-        <section className="space-y-5">
-          <SectionEyebrow>What's inside</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">Six pillars, one platform.</h2>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {PILLARS.map((p, i) => {
-              const Icon = p.icon;
-              return (
-                <motion.div
-                  key={p.title}
-                  initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true, amount: 0.3 }}
-                  transition={{ duration: 0.3, delay: i * 0.05, ease: "easeOut" }}
-                >
-                  <Card className="p-5 bg-card border-card-border h-full">
-                    <div className="flex items-start gap-3">
-                      <div className={cn(
-                        "size-10 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0",
-                      )}>
-                        <Icon className="size-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold">{p.title}</h3>
-                        <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
-                          {p.body}
-                        </p>
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-          </div>
-        </section>
-
-        {/* Modular by design */}
-        <section className="space-y-4">
-          <SectionEyebrow>Modular by design</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Built to swap orchestration runtimes.
-          </h2>
-          <Card className="p-6 bg-gradient-to-br from-primary/10 via-card to-chart-2/10 border-primary/30">
-            <p className="text-sm sm:text-base leading-relaxed text-foreground/90 italic">
-              AgentOps is intentionally designed as a modular agent
-              orchestration platform. The current demo uses a TypeScript
-              LangGraph-style state machine for rapid visualization and product
-              validation. In production, the orchestration layer can be swapped
-              or extended with Python/LangGraph while preserving the same
-              workflow state, approval, memory, and audit-log architecture.
-            </p>
-          </Card>
-          <div className="pt-1">
-            <Link href="/architecture">
-              <Button variant="outline" size="sm" data-testid="overview-cta-architecture" asChild>
-                <span className="cursor-pointer">
-                  See the technical architecture <ArrowRight className="size-4" />
-                </span>
-              </Button>
-            </Link>
-          </div>
-        </section>
-
-        {/* Stack */}
-        <section className="space-y-4">
-          <SectionEyebrow>The stack</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">Boring on purpose.</h2>
-          <Card className="p-6 bg-card border-card-border">
-            <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
-              {[
-                ["TypeScript monorepo", "pnpm workspaces, single toolchain front-to-back"],
-                ["API contract", "OpenAPI → React Query hooks + Zod validators (orval)"],
-                ["Backend", "Express 5 + Drizzle + PostgreSQL"],
-                ["Frontend", "React + Vite + TanStack Query + shadcn/ui"],
-                ["Orchestrator", "Deterministic state machine; LLM-optional"],
-                ["Demo mode", "Always works without an API key"],
-              ].map(([k, v]) => (
-                <li key={k} className="flex items-start gap-2">
-                  <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
-                  <div>
-                    <span className="font-medium">{k}</span>
-                    <span className="text-muted-foreground"> — {v}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </Card>
-        </section>
-
-        {/* Why it matters */}
-        <section className="space-y-4">
-          <SectionEyebrow>Why it matters</SectionEyebrow>
-          <h2 className="text-2xl font-semibold tracking-tight">
-            Enterprise AI lives or dies on auditability.
-          </h2>
-          <p className="text-muted-foreground max-w-3xl leading-relaxed">
-            "Magic" agents that produce a single black-box answer don't survive procurement,
-            legal, or risk review at a real company. AgentOps treats every agent action as a
-            first-class record: typed output, retrieved evidence, tool calls, confidence,
-            and the human decision that closed the loop. The result is an architecture you
-            could plausibly ship to an operating company tomorrow — same shape, different
-            agent prompts, real data sources swapped in.
-          </p>
-          <div className="flex flex-wrap gap-3 pt-2">
-            <Link href="/requests/new">
-              <Button size="lg" data-testid="overview-bottom-cta" asChild>
-                <span className="cursor-pointer">
-                  <Sparkles className="size-4" />
-                  Try a sample request
-                </span>
-              </Button>
-            </Link>
-            <Link href="/workflows">
-              <Button size="lg" variant="outline" asChild>
-                <span className="cursor-pointer">
-                  Browse workflows <ArrowRight className="size-4" />
-                </span>
-              </Button>
-            </Link>
-          </div>
-        </section>
-
-        <footer className="pt-6 border-t border-border text-xs text-muted-foreground">
-          AgentOps Command Center · Portfolio reference implementation · Built on Replit.
-        </footer>
+    <section className="space-y-8">
+      <div>
+        <div className="eyebrow eyebrow-accent">The depth underneath</div>
+        <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-[-0.02em] max-w-3xl mt-3">
+          Architecture, shared memory, and audit — built for procurement.
+        </h2>
+        <p className="text-muted-foreground mt-4 max-w-3xl leading-relaxed">
+          "Magic" agents that produce a single black-box answer don't survive procurement,
+          legal, or risk review at a real company. AgentOps treats every agent action as a
+          first-class record: typed output, retrieved evidence, tool calls, confidence,
+          and the human decision that closed the loop.
+        </p>
       </div>
-    </PageTransition>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {PILLARS.map((p) => {
+          const Icon = p.icon;
+          return (
+            <Card key={p.title} className="surface-raised p-5">
+              <div className="flex items-start gap-3">
+                <div className="size-10 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                  <Icon className="size-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold tracking-tight">{p.title}</h3>
+                  <p className="text-sm text-muted-foreground mt-1 leading-relaxed">{p.body}</p>
+                </div>
+              </div>
+            </Card>
+          );
+        })}
+      </div>
+      <Card className="surface-raised p-6">
+        <div className="eyebrow mb-3">The stack</div>
+        <ul className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+          {[
+            ["TypeScript monorepo", "pnpm workspaces, single toolchain front-to-back"],
+            ["API contract", "OpenAPI → React Query hooks + Zod validators (orval)"],
+            ["Backend", "Express 5 + Drizzle + PostgreSQL"],
+            ["Frontend", "React + Vite + TanStack Query + shadcn/ui"],
+            ["Orchestrator", "Deterministic state machine; LLM-optional"],
+            ["Demo mode", "Always works without an API key"],
+          ].map(([k, v]) => (
+            <li key={k} className="flex items-start gap-2">
+              <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+              <div>
+                <span className="font-medium">{k}</span>
+                <span className="text-muted-foreground"> — {v}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </Card>
+      <div>
+        <Link href="/architecture">
+          <Button variant="outline" size="sm" data-testid="overview-cta-architecture" asChild>
+            <span className="cursor-pointer">
+              See the technical architecture <ArrowRight className="size-4" />
+            </span>
+          </Button>
+        </Link>
+      </div>
+    </section>
   );
 }
 
-function SectionEyebrow({ children }: { children: React.ReactNode }) {
+/* -------------------- Bottom CTA -------------------- */
+
+function BottomCTA() {
   return (
-    <div className="text-[11px] uppercase tracking-[0.2em] text-primary/80 font-medium">
-      {children}
-    </div>
+    <section className="surface-hero p-8 sm:p-12 text-center">
+      <div className="eyebrow eyebrow-accent">One run is worth a thousand decks</div>
+      <h2 className="font-display text-3xl sm:text-4xl font-medium tracking-[-0.02em] mt-3 max-w-2xl mx-auto">
+        File a sample request and watch the crew light up.
+      </h2>
+      <div className="mt-6 flex flex-wrap gap-3 justify-center">
+        <Link href="/requests/new">
+          <Button size="lg" data-testid="overview-bottom-cta" asChild>
+            <span className="cursor-pointer">
+              <Sparkles className="size-4" />
+              Try a sample request
+            </span>
+          </Button>
+        </Link>
+        <Link href="/workflows">
+          <Button size="lg" variant="outline" asChild>
+            <span className="cursor-pointer">
+              Browse workflows <ArrowRight className="size-4" />
+            </span>
+          </Button>
+        </Link>
+      </div>
+    </section>
   );
 }

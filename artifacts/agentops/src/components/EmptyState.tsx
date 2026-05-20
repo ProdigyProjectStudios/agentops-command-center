@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 export function EmptyState({
   icon: Icon,
+  illustration,
   title,
   description,
   action,
@@ -13,7 +14,8 @@ export function EmptyState({
   variant = "card",
   tone = "primary",
 }: {
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  illustration?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -28,19 +30,24 @@ export function EmptyState({
       : tone === "muted"
         ? "bg-muted text-muted-foreground"
         : "bg-primary/10 text-primary";
+
   const body = (
     <div className="text-center" data-testid={testId}>
-      <div
-        className={cn(
-          "inline-flex size-12 rounded-full items-center justify-center mb-3",
-          toneRing,
-        )}
-      >
-        <Icon className="size-6" />
-      </div>
-      <h3 className="text-base font-semibold mb-1">{title}</h3>
+      {illustration ? (
+        <div className="mx-auto mb-4 w-[180px] max-w-full">{illustration}</div>
+      ) : Icon ? (
+        <div
+          className={cn(
+            "inline-flex size-12 rounded-full items-center justify-center mb-3",
+            toneRing,
+          )}
+        >
+          <Icon className="size-6" />
+        </div>
+      ) : null}
+      <h3 className="text-base font-semibold mb-1 tracking-tight">{title}</h3>
       {description && (
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+        <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
           {description}
         </p>
       )}
@@ -53,7 +60,7 @@ export function EmptyState({
   return (
     <Card
       className={cn(
-        "p-10 bg-card border-card-border border-dashed",
+        "p-10 surface-raised border-dashed",
         className,
       )}
     >

@@ -3,6 +3,7 @@ import { AlertTriangle, RotateCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { IllError } from "@/components/illustrations";
 
 export function ErrorState({
   title = "Something went sideways",
@@ -12,6 +13,7 @@ export function ErrorState({
   testId = "error-state",
   className,
   variant = "card",
+  illustration,
 }: {
   title?: string;
   description?: string;
@@ -20,15 +22,28 @@ export function ErrorState({
   testId?: string;
   className?: string;
   variant?: "card" | "bare";
+  illustration?: ReactNode | "default" | "none";
 }) {
+  const illEl =
+    illustration === "none"
+      ? null
+      : illustration && illustration !== "default"
+        ? illustration
+        : (
+          <div className="mx-auto mb-4 w-[180px] max-w-full text-muted-foreground/70">
+            <IllError />
+          </div>
+        );
   const body = (
     <div className="text-center" data-testid={testId}>
-      <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-3">
-        <AlertTriangle className="size-6" />
-      </div>
-      <h3 className="text-base font-semibold mb-1">{title}</h3>
+      {illEl ?? (
+        <div className="inline-flex size-12 rounded-full bg-rose-500/15 text-rose-300 items-center justify-center mb-3">
+          <AlertTriangle className="size-6" />
+        </div>
+      )}
+      <h3 className="text-base font-semibold mb-1 tracking-tight">{title}</h3>
       {description && (
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
+        <p className="text-sm text-muted-foreground max-w-md mx-auto leading-relaxed">
           {description}
         </p>
       )}
@@ -53,7 +68,7 @@ export function ErrorState({
   return (
     <Card
       className={cn(
-        "p-10 bg-card border-card-border border-dashed",
+        "p-10 surface-raised border-dashed",
         className,
       )}
     >

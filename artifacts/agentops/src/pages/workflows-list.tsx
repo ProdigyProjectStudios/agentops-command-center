@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { IllNoWorkflows } from "@/components/illustrations";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import {
@@ -112,7 +113,7 @@ export default function WorkflowsListPage() {
         ))}
         {data && data.length === 0 && (
           <EmptyState
-            icon={ListChecks}
+            illustration={<IllNoWorkflows />}
             title="No workflows yet"
             description="File the first operational request and the agent crew will spin up a run in seconds."
             action={

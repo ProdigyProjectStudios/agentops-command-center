@@ -45,7 +45,13 @@ const NAV: NavItem[] = [
   { href: "/architecture", label: "Architecture", icon: Network, testId: "nav-architecture" },
 ];
 
-export function AppShell({ children }: { children: ReactNode }) {
+export function AppShell({
+  children,
+  onOpenPalette,
+}: {
+  children: ReactNode;
+  onOpenPalette?: () => void;
+}) {
   const [location] = useLocation();
   const { data: mode } = useGetSystemMode();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
@@ -243,7 +249,25 @@ export function AppShell({ children }: { children: ReactNode }) {
               Multi-Agent Enterprise Operations
             </span>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {onOpenPalette && (
+              <button
+                type="button"
+                onClick={onOpenPalette}
+                data-testid="button-open-command-palette"
+                aria-label="Open command palette"
+                className="hidden md:inline-flex items-center gap-2 px-2.5 py-1.5 rounded-md border border-card-border bg-card/60 text-[11px] text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.3-4.3" />
+                </svg>
+                <span>Jump to…</span>
+                <kbd className="ml-1 font-mono text-[10px] tracking-wider border border-card-border rounded px-1 py-px">
+                  ⌘K
+                </kbd>
+              </button>
+            )}
             {mode && (
               <span
                 data-testid="badge-mode"

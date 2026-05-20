@@ -36,6 +36,7 @@ import {
 } from "@/components/ui/tabs";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { IllNoApprovals } from "@/components/illustrations";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { PAGE } from "@/lib/copy";
@@ -112,7 +113,7 @@ export default function ApprovalsPage() {
 
       {!error && !isLoading && data && data.length === 0 && (
         <EmptyState
-          icon={Inbox}
+          illustration={<IllNoApprovals />}
           title="Inbox zero"
           description="No approvals match this filter. The agents have nothing waiting on you right now."
           testId="empty-approvals"

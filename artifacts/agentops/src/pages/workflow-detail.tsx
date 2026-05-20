@@ -64,6 +64,7 @@ import {
   stepStatusBadge,
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { PipelineFlow } from "@/components/PipelineFlow";
 
 // Pipeline graph: seven user-visible nodes. Synthesis is hidden and rolled
 // into the Final Executive Brief.
@@ -392,9 +393,39 @@ export default function WorkflowDetailPage() {
 
   const isFinalized = workflow.status === "finalized";
 
+  // Build per-node aggregated envelope info for the right-column panels.
+  const allRisks: string[] = [];
+  const allNextActions: string[] = [];
+  for (const step of workflow.steps) {
+    const env = asEnvelope(step.output);
+    if (env.risks) allRisks.push(...env.risks);
+    if (env.recommendedActions) allNextActions.push(...env.recommendedActions);
+  }
+  const dedupedRisks = Array.from(new Set(allRisks)).slice(0, 8);
+  const dedupedActions = Array.from(new Set(allNextActions)).slice(0, 8);
+
+  const commsStep = workflow.steps.find(
+    (s) => s.agentSlug === "communications" || /comms|communication/i.test(s.name),
+  );
+  const commsEnv = commsStep ? asEnvelope(commsStep.output) : null;
+  const commsDraft =
+    (commsEnv?.details?.["draftMessage"] as string | undefined) ||
+    (commsEnv?.details?.["draft"] as string | undefined) ||
+    commsEnv?.summary;
+
+  const briefingActiveIdx = (() => {
+    let last = -1;
+    for (let i = 0; i < PIPELINE_NODES.length; i++) {
+      const st = nodeStateByKey.get(PIPELINE_NODES[i].key)!.status;
+      if (st === "completed") last = i;
+      if (st === "running") return i;
+    }
+    return last >= 0 ? Math.min(last + 1, PIPELINE_NODES.length - 1) : 0;
+  })();
+
   return (
     <PageTransition>
-      <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+      <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-8 max-w-[1400px] mx-auto">
         {/* Header */}
         <div>
           <Link
@@ -406,7 +437,11 @@ export default function WorkflowDetailPage() {
           </Link>
           <div className="flex items-start justify-between gap-6">
             <div className="min-w-0">
-              <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-workflow-title">
+              <div className="eyebrow mb-2">Workflow Run · #{workflow.id}</div>
+              <h2
+                className="font-display text-3xl sm:text-4xl font-medium tracking-[-0.02em] leading-tight"
+                data-testid="text-workflow-title"
+              >
                 {workflow.request.title}
               </h2>
               <div className="mt-2 flex items-center gap-2 flex-wrap text-sm text-muted-foreground">
@@ -419,7 +454,7 @@ export default function WorkflowDetailPage() {
                 <span>{formatRelative(workflow.createdAt)}</span>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
               <StatusBadge className={priorityBadge(workflow.request.priority)} testId="badge-priority">
                 {workflow.request.priority.toUpperCase()}
               </StatusBadge>
@@ -429,137 +464,394 @@ export default function WorkflowDetailPage() {
               <StatusBadge className={workflowStatusBadge(workflow.status)} testId="badge-status">
                 {workflowStatusLabel(workflow.status)}
               </StatusBadge>
+              {canRun && (
+                <Button
+                  onClick={handleRun}
+                  disabled={runWorkflow.isPending || polling}
+                  data-testid="button-run-workflow"
+                  size="sm"
+                >
+                  {runWorkflow.isPending || polling ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" /> Running…
+                    </>
+                  ) : (
+                    <>
+                      <Play className="size-3.5" /> Run Workflow
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           </div>
         </div>
 
-        {/* Executive brief — shown once Risk Synthesis has actually completed */}
-        {(synthesisStep?.status === "completed" || isFinalized) && (
-          <FinalExecutiveBrief workflow={workflow} synthesis={synthesisEnvelope} />
-        )}
+        {/* Executive briefing — sticky left rail + right column */}
+        <div className="grid grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)] gap-6 lg:gap-8">
+          <aside className="lg:sticky lg:top-6 self-start">
+            <LeftRailTimeline
+              nodes={PIPELINE_NODES}
+              state={nodeStateByKey}
+              onSelect={expandNode}
+              currentStage={workflow.currentStage}
+            />
+          </aside>
 
-        {/* Graph timeline */}
-        <Card className="p-5 bg-card border-card-border" data-testid="graph-timeline">
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h3 className="text-sm font-semibold">Agent Graph</h3>
-              <p className="text-[11px] text-muted-foreground mt-0.5">
-                Current stage: <span className="text-foreground">{workflow.currentStage}</span>
-              </p>
-            </div>
-            {canRun && (
-              <Button
-                onClick={handleRun}
-                disabled={runWorkflow.isPending || polling}
-                data-testid="button-run-workflow"
-              >
-                {runWorkflow.isPending || polling ? (
-                  <>
-                    <Loader2 className="size-4 animate-spin" /> Running agents…
-                  </>
-                ) : (
-                  <>
-                    <Play className="size-4" /> Run Workflow
-                  </>
-                )}
-              </Button>
+          <div className="space-y-6 min-w-0">
+            {/* Executive brief — synthesized */}
+            {(synthesisStep?.status === "completed" || isFinalized) && (
+              <FinalExecutiveBrief workflow={workflow} synthesis={synthesisEnvelope} />
             )}
-          </div>
-          <GraphTimeline nodes={PIPELINE_NODES} state={nodeStateByKey} onSelect={expandNode} />
-        </Card>
 
-        {/* Two-column layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-2 space-y-6">
-            {/* Request brief */}
-            <Card className="p-5 bg-card border-card-border">
-              <h3 className="text-sm font-semibold mb-2">Request Brief</h3>
-              <p className="text-sm text-muted-foreground whitespace-pre-wrap" data-testid="text-description">
+            {/* Request brief — short context summary */}
+            <Card className="surface-raised p-5">
+              <div className="eyebrow mb-2">Request brief</div>
+              <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed" data-testid="text-description">
                 {workflow.request.description}
               </p>
             </Card>
 
-            {/* Agent panels */}
-            <div className="space-y-3">
-              <h3 className="text-sm font-semibold px-1">Agent Outputs</h3>
-              {workflow.steps.length === 0 && (
-                <Card className="p-8 text-center text-sm text-muted-foreground bg-card border-card-border border-dashed" data-testid="empty-agents">
-                  No agents have run yet. Click <span className="text-foreground font-medium">Run Workflow</span> to start the pipeline.
-                </Card>
-              )}
-              <AnimatePresence initial={false}>
-                {PIPELINE_NODES.map((node, idx) => {
-                  const entry = nodeStateByKey.get(node.key)!;
-                  return (
-                    <motion.div
-                      key={node.key}
-                      id={`agent-${node.key}`}
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.28, ease: "easeOut", delay: idx * 0.04 }}
-                    >
-                      <AgentPanel
-                        node={node}
-                        step={entry.step}
-                        status={entry.status}
-                        toolCalls={workflow.toolCalls}
-                        expanded={expanded.has(node.key)}
-                        onToggle={() => toggleNode(node.key)}
-                      />
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
+            {/* Risk & Compliance */}
+            <RiskCompliancePanel
+              riskLevel={workflow.riskLevel}
+              risks={dedupedRisks}
+            />
 
-            {/* Retrieved Memory */}
-            <RetrievedMemorySection hits={memoryHits} />
+            {/* Cost / Payment */}
+            <CostPanel workflow={workflow} memoryHits={memoryHits.length} />
 
-            {/* Tool Calls */}
-            <ToolCallsSection toolCalls={workflow.toolCalls} steps={workflow.steps} />
+            {/* Drafted Communication */}
+            {commsDraft && <DraftedCommsPanel draft={commsDraft} agentName={commsStep?.agentName} />}
 
             {/* Approval Decision */}
             {workflow.approval && (
               <ApprovalDecisionSection workflow={workflow} queryKey={queryKey} />
             )}
-          </div>
 
-          <div className="space-y-6">
-            {/* Estimated impact */}
-            <Card className="p-5 bg-card border-card-border">
-              <h3 className="text-sm font-semibold mb-3">Estimated Impact</h3>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Cost</span>
-                  <span className="font-medium tabular-nums" data-testid="text-cost">
-                    {formatCurrencyCents(workflow.estimatedCostCents)}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Risk Level</span>
-                  <StatusBadge className={riskBadge(workflow.riskLevel)}>{workflow.riskLevel}</StatusBadge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Agent Steps</span>
-                  <span className="tabular-nums">{workflow.steps.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tool Calls</span>
-                  <span className="tabular-nums">{workflow.toolCalls.length}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Memory Hits</span>
-                  <span className="tabular-nums">{memoryHits.length}</span>
-                </div>
-              </div>
-            </Card>
-
-            {/* Audit log */}
-            <AuditLogSidebar activity={workflow.activity} />
+            {/* Final Next Actions */}
+            {dedupedActions.length > 0 && (
+              <NextActionsPanel actions={dedupedActions} />
+            )}
           </div>
         </div>
+
+        {/* Forensic depth — agent graph, per-node outputs, memory, tools, audit */}
+        <section className="space-y-6 pt-4 border-t border-border">
+          <div className="flex items-baseline justify-between flex-wrap gap-2">
+            <div>
+              <div className="eyebrow">Forensic depth</div>
+              <h3 className="text-lg font-semibold tracking-tight mt-1">Per-agent outputs, tool calls, audit trail</h3>
+            </div>
+            <p className="text-xs text-muted-foreground max-w-md">
+              Everything below is what the agents actually wrote and called — the full ledger behind the brief above.
+            </p>
+          </div>
+
+          {/* Agent Graph */}
+          <Card className="surface-raised p-5" data-testid="graph-timeline">
+            <div className="flex items-center justify-between mb-5">
+              <div>
+                <h3 className="text-sm font-semibold">Agent Graph</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Current stage: <span className="text-foreground">{workflow.currentStage}</span>
+                </p>
+              </div>
+            </div>
+            <GraphTimeline nodes={PIPELINE_NODES} state={nodeStateByKey} onSelect={expandNode} />
+            <div className="mt-6">
+              <PipelineFlow
+                nodes={PIPELINE_NODES.map((n) => ({ key: n.key, label: n.label }))}
+                activeIndex={briefingActiveIdx}
+                completedUntil={
+                  PIPELINE_NODES.findIndex(
+                    (n) => nodeStateByKey.get(n.key)!.status !== "completed",
+                  ) === -1
+                    ? PIPELINE_NODES.length
+                    : PIPELINE_NODES.findIndex(
+                        (n) => nodeStateByKey.get(n.key)!.status !== "completed",
+                      )
+                }
+                showLabels={false}
+                ambient={!isFinalized}
+                height={70}
+                testId="workflow-pipeline-flow"
+              />
+            </div>
+          </Card>
+
+          {/* Two-column forensic */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-6">
+              <div className="space-y-3">
+                <h3 className="text-sm font-semibold px-1">Agent Outputs</h3>
+                {workflow.steps.length === 0 && (
+                  <Card className="p-8 text-center text-sm text-muted-foreground surface-raised border-dashed" data-testid="empty-agents">
+                    No agents have run yet. Click <span className="text-foreground font-medium">Run Workflow</span> to start the pipeline.
+                  </Card>
+                )}
+                <AnimatePresence initial={false}>
+                  {PIPELINE_NODES.map((node, idx) => {
+                    const entry = nodeStateByKey.get(node.key)!;
+                    return (
+                      <motion.div
+                        key={node.key}
+                        id={`agent-${node.key}`}
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.22, ease: [0.22, 0.61, 0.36, 1], delay: idx * 0.03 }}
+                      >
+                        <AgentPanel
+                          node={node}
+                          step={entry.step}
+                          status={entry.status}
+                          toolCalls={workflow.toolCalls}
+                          expanded={expanded.has(node.key)}
+                          onToggle={() => toggleNode(node.key)}
+                        />
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
+
+              <RetrievedMemorySection hits={memoryHits} />
+              <ToolCallsSection toolCalls={workflow.toolCalls} steps={workflow.steps} />
+            </div>
+
+            <div className="space-y-6">
+              <Card className="surface-raised p-5">
+                <div className="eyebrow mb-3">Run snapshot</div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Cost</span>
+                    <span className="font-medium tnum" data-testid="text-cost">
+                      {formatCurrencyCents(workflow.estimatedCostCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Risk level</span>
+                    <StatusBadge className={riskBadge(workflow.riskLevel)}>{workflow.riskLevel}</StatusBadge>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Agent steps</span>
+                    <span className="tnum">{workflow.steps.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Tool calls</span>
+                    <span className="tnum">{workflow.toolCalls.length}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Memory hits</span>
+                    <span className="tnum">{memoryHits.length}</span>
+                  </div>
+                </div>
+              </Card>
+
+              <AuditLogSidebar activity={workflow.activity} />
+            </div>
+          </div>
+        </section>
       </div>
     </PageTransition>
+  );
+}
+
+/* ---------- Briefing-layout helpers ---------- */
+
+function stepDurationMs(step: AgentStep | undefined): number | null {
+  if (!step?.startedAt || !step?.completedAt) return null;
+  const a = new Date(step.startedAt).getTime();
+  const b = new Date(step.completedAt).getTime();
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  return Math.max(0, b - a);
+}
+
+function formatDurationMs(ms: number | null): string {
+  if (ms === null) return "—";
+  if (ms < 1000) return `${ms}ms`;
+  return `${(ms / 1000).toFixed(1)}s`;
+}
+
+function LeftRailTimeline({
+  nodes,
+  state,
+  onSelect,
+  currentStage,
+}: {
+  nodes: typeof PIPELINE_NODES;
+  state: Map<NodeKey, { step?: AgentStep; status: NodeStatus }>;
+  onSelect: (k: NodeKey) => void;
+  currentStage: string;
+}) {
+  return (
+    <div className="surface-raised p-4" data-testid="left-rail-timeline">
+      <div className="eyebrow mb-3">Run timeline</div>
+      <ol className="relative">
+        <span
+          aria-hidden="true"
+          className="absolute left-[8px] top-2 bottom-2 w-px bg-border"
+        />
+        {nodes.map((node) => {
+          const entry = state.get(node.key)!;
+          const c = nodeColor(entry.status);
+          const dur = stepDurationMs(entry.step);
+          const isActive = entry.status === "running";
+          return (
+            <li key={node.key} className="relative pl-6 py-1.5">
+              <button
+                type="button"
+                onClick={() => {
+                  onSelect(node.key);
+                  const el = document.getElementById(`agent-${node.key}`);
+                  el?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+                className="w-full text-left flex items-start gap-2 group"
+                data-testid={`rail-node-${node.key}`}
+              >
+                <span
+                  className={cn(
+                    "absolute left-[2px] top-2.5 size-3 rounded-full border-2 border-background",
+                    isActive
+                      ? "bg-primary shadow-[0_0_0_3px_hsl(var(--primary)/0.25)]"
+                      : entry.status === "completed"
+                        ? "bg-primary/80"
+                        : entry.status === "failed"
+                          ? "bg-rose-400"
+                          : entry.status === "skipped"
+                            ? "bg-muted"
+                            : "bg-muted-foreground/40",
+                  )}
+                />
+                <div className="flex-1 min-w-0">
+                  <div className="text-[13px] font-medium text-foreground group-hover:text-primary transition-colors truncate">
+                    {node.label}
+                  </div>
+                  <div className="text-[10px] font-mono uppercase tracking-[0.12em] text-muted-foreground/80 mt-0.5 truncate">
+                    {entry.step?.agentName ?? "—"}
+                  </div>
+                </div>
+                <span className={cn("text-[10px] font-mono tnum shrink-0 mt-0.5", c.dot)}>
+                  {formatDurationMs(dur)}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ol>
+      <div className="mt-4 pt-3 border-t border-card-border text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+        Stage · <span className="text-foreground">{currentStage}</span>
+      </div>
+    </div>
+  );
+}
+
+function RiskCompliancePanel({
+  riskLevel,
+  risks,
+}: {
+  riskLevel: WorkflowRunDetail["riskLevel"];
+  risks: string[];
+}) {
+  return (
+    <Card className="surface-raised p-5" data-testid="panel-risk-compliance">
+      <div className="flex items-center justify-between mb-3">
+        <div className="eyebrow">Risk &amp; Compliance</div>
+        <StatusBadge className={riskBadge(riskLevel)}>{riskLevel}</StatusBadge>
+      </div>
+      {risks.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No risks flagged by the crew.</p>
+      ) : (
+        <ul className="space-y-2">
+          {risks.map((r, i) => (
+            <li
+              key={i}
+              className="text-sm flex items-start gap-2"
+              data-testid={`risk-item-${i}`}
+            >
+              <AlertTriangle className="size-3.5 text-amber-300 shrink-0 mt-0.5" />
+              <span className="text-foreground/90 leading-relaxed">{r}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+}
+
+function CostPanel({
+  workflow,
+  memoryHits,
+}: {
+  workflow: WorkflowRunDetail;
+  memoryHits: number;
+}) {
+  return (
+    <Card className="surface-raised p-5" data-testid="panel-cost">
+      <div className="eyebrow mb-3">Cost &amp; Payment</div>
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground mb-1">
+            Estimated impact
+          </div>
+          <div className="text-2xl font-display font-medium tnum">
+            {formatCurrencyCents(workflow.estimatedCostCents)}
+          </div>
+        </div>
+        <div>
+          <div className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground mb-1">
+            Evidence reviewed
+          </div>
+          <div className="text-2xl font-display font-medium tnum">{memoryHits}</div>
+          <div className="text-[10px] text-muted-foreground mt-0.5">policy chunks</div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function DraftedCommsPanel({
+  draft,
+  agentName,
+}: {
+  draft: string;
+  agentName?: string;
+}) {
+  return (
+    <Card className="surface-raised p-5" data-testid="panel-drafted-comms">
+      <div className="flex items-center justify-between mb-3">
+        <div className="eyebrow">Drafted communication</div>
+        {agentName && (
+          <span className="text-[10px] font-mono uppercase tracking-[0.14em] text-muted-foreground">
+            via {agentName}
+          </span>
+        )}
+      </div>
+      <div className="rounded-md border border-card-border bg-background/40 p-4">
+        <p className="text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed">
+          {draft}
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function NextActionsPanel({ actions }: { actions: string[] }) {
+  return (
+    <Card className="surface-raised p-5" data-testid="panel-next-actions">
+      <div className="eyebrow mb-3">Final next actions</div>
+      <ul className="space-y-2">
+        {actions.map((a, i) => (
+          <li
+            key={i}
+            className="text-sm flex items-start gap-2"
+            data-testid={`next-action-${i}`}
+          >
+            <CheckCircle2 className="size-4 text-primary shrink-0 mt-0.5" />
+            <span className="text-foreground/90 leading-relaxed">{a}</span>
+          </li>
+        ))}
+      </ul>
+    </Card>
   );
 }
 

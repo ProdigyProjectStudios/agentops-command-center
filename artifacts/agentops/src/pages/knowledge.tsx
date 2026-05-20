@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatRelative } from "@/lib/format";
 import { EmptyState } from "@/components/EmptyState";
+import { IllNoKnowledge } from "@/components/illustrations";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { PAGE } from "@/lib/copy";
@@ -153,7 +154,7 @@ export default function KnowledgePage() {
             ))}
             {!isLoading && filtered.length === 0 && (
               <EmptyState
-                icon={Search}
+                illustration={<IllNoKnowledge />}
                 title="No matches"
                 description={
                   query

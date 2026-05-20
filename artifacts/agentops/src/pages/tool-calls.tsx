@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/select";
 import { StatusBadge } from "@/components/StatusBadge";
 import { EmptyState } from "@/components/EmptyState";
+import { IllNoToolCalls } from "@/components/illustrations";
 import { ErrorState } from "@/components/ErrorState";
 import { LoadingState } from "@/components/LoadingState";
 import { formatTimestamp } from "@/lib/format";
@@ -168,7 +169,7 @@ export default function ToolCallsPage() {
 
         {!isLoading && rows.length === 0 && (
           <EmptyState
-            icon={Wrench}
+            illustration={<IllNoToolCalls />}
             title="No tool calls match"
             description="Try clearing the search or switching the status filter."
             variant="bare"

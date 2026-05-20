@@ -80,48 +80,50 @@
 
 :root,
 .dark {
-  --button-outline: rgba(255, 255, 255, 0.10);
+  --button-outline: rgba(255, 255, 255, 0.08);
   --badge-outline: rgba(255, 255, 255, 0.05);
   --opaque-button-border-intensity: 9;
-  --elevate-1: rgba(255, 255, 255, 0.04);
-  --elevate-2: rgba(255, 255, 255, 0.09);
+  --elevate-1: rgba(255, 255, 255, 0.035);
+  --elevate-2: rgba(255, 255, 255, 0.075);
 
-  --background: 224 47% 6%;
-  --foreground: 210 20% 96%;
-  --border: 217 19% 17%;
-  --input: 217 19% 22%;
+  /* Warm neutral charcoal — near-black, not slate-blue.
+     Three deliberate surface tiers: base (background) → raised (card) → hero (gradient). */
+  --background: 240 6% 5%;
+  --foreground: 0 0% 96%;
+  --border: 240 4% 14%;
+  --input: 240 4% 18%;
   --ring: 252 87% 67%;
 
-  --card: 222 40% 9%;
-  --card-foreground: 210 20% 96%;
-  --card-border: 217 19% 17%;
+  --card: 240 5% 8%;
+  --card-foreground: 0 0% 96%;
+  --card-border: 240 4% 13%;
 
-  --popover: 222 40% 9%;
-  --popover-foreground: 210 20% 96%;
-  --popover-border: 217 19% 17%;
+  --popover: 240 5% 9%;
+  --popover-foreground: 0 0% 96%;
+  --popover-border: 240 4% 14%;
 
   --primary: 252 87% 67%;
   --primary-foreground: 0 0% 100%;
 
-  --secondary: 217 19% 16%;
-  --secondary-foreground: 210 20% 96%;
+  --secondary: 240 4% 14%;
+  --secondary-foreground: 0 0% 96%;
 
-  --muted: 217 19% 14%;
-  --muted-foreground: 215 16% 65%;
+  --muted: 240 4% 12%;
+  --muted-foreground: 240 5% 64%;
 
-  --accent: 252 80% 24%;
+  --accent: 252 70% 20%;
   --accent-foreground: 252 100% 92%;
 
   --destructive: 0 72% 60%;
   --destructive-foreground: 0 0% 100%;
 
-  --sidebar: 224 47% 4%;
-  --sidebar-foreground: 215 16% 70%;
-  --sidebar-border: 217 19% 14%;
+  --sidebar: 240 7% 4%;
+  --sidebar-foreground: 240 5% 70%;
+  --sidebar-border: 240 4% 12%;
   --sidebar-primary: 252 87% 67%;
   --sidebar-primary-foreground: 0 0% 100%;
-  --sidebar-accent: 217 19% 13%;
-  --sidebar-accent-foreground: 210 20% 96%;
+  --sidebar-accent: 240 4% 11%;
+  --sidebar-accent-foreground: 0 0% 96%;
   --sidebar-ring: 252 87% 67%;
 
   --chart-1: 252 87% 67%;
@@ -244,5 +246,90 @@
   .border.active-elevate-2:not(.no-active-interaction-elevate)::after,
   .border.hover-elevate:not(.no-hover-interaction-elevate)::after {
     inset: -1px;
+  }
+
+  /* Tabular numerals for any KPI / metric / currency render. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum", "cv11";
+  }
+
+  /* Premium hero surface: 1px conic-gradient border + soft inner radial wash.
+     Use as a single outer wrapper around hero cards (no nested borders). */
+  .surface-hero {
+    position: relative;
+    isolation: isolate;
+    border-radius: var(--radius-xl);
+    background:
+      radial-gradient(120% 120% at 0% 0%, hsl(var(--primary) / 0.10) 0%, transparent 55%),
+      radial-gradient(80% 80% at 100% 100%, hsl(var(--chart-2) / 0.06) 0%, transparent 60%),
+      hsl(var(--card));
+  }
+  .surface-hero::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    padding: 1px;
+    border-radius: inherit;
+    background: conic-gradient(
+      from 140deg at 50% 50%,
+      hsl(var(--primary) / 0.35),
+      hsl(var(--chart-2) / 0.25),
+      hsl(var(--primary) / 0.05),
+      hsl(var(--primary) / 0.35)
+    );
+    -webkit-mask:
+      linear-gradient(#000 0 0) content-box,
+      linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+            mask-composite: exclude;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .surface-hero > * { position: relative; z-index: 2; }
+
+  /* Raised card with hairline border + subtle inner highlight (1px top). */
+  .surface-raised {
+    background: hsl(var(--card));
+    border: 1px solid hsl(var(--card-border));
+    border-radius: var(--radius-lg);
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.025);
+  }
+
+  /* Shimmer skeleton — animated gradient sweep. */
+  .skeleton-shimmer {
+    position: relative;
+    overflow: hidden;
+    background: hsl(var(--muted) / 0.55);
+    border-radius: 6px;
+  }
+  .skeleton-shimmer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      hsl(0 0% 100% / 0.045) 50%,
+      transparent 100%
+    );
+    animation: shimmer 1.6s ease-in-out infinite;
+  }
+  @keyframes shimmer {
+    100% { transform: translateX(100%); }
+  }
+
+  /* Eyebrow label — uppercase mono, tight tracking. Centralized utility. */
+  .eyebrow {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 500;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: hsl(var(--muted-foreground));
+  }
+  .eyebrow-accent {
+    color: hsl(var(--primary));
   }
 }

@@ -16,6 +16,8 @@ import OverviewPage from "@/pages/overview";
 import ArchitecturePage from "@/pages/architecture";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { useState } from "react";
+import { CommandPalette, useCommandPaletteShortcut } from "@/components/CommandPalette";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -46,15 +48,18 @@ function Router() {
 }
 
 function App() {
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  useCommandPaletteShortcut(() => setPaletteOpen((v) => !v));
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppShell>
+          <AppShell onOpenPalette={() => setPaletteOpen(true)}>
             <ErrorBoundary>
               <Router />
             </ErrorBoundary>
           </AppShell>
+          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

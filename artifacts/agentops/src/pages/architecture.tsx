@@ -25,6 +25,7 @@ import {
 import { PageTransition } from "@/components/PageTransition";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { PipelineFlow } from "@/components/PipelineFlow";
 
 export default function ArchitecturePage() {
   return (
@@ -73,6 +74,13 @@ function Hero() {
         production Python/LangGraph worker without changing the UI, the
         database, or the API surface.
       </p>
+      <div className="pt-4">
+        <PipelineFlow
+          height={150}
+          ambient
+          testId="architecture-pipeline-flow"
+        />
+      </div>
     </motion.section>
   );
 }
