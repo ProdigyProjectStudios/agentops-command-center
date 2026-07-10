@@ -7,7 +7,7 @@ id = "3B4_FFSkEVBkAeYMFRJ2e"
 [[services]]
 localPort = 8080
 name = "API Server"
-paths = ["/api"]
+paths = ["/api", "/api-python"]
 
 [services.development]
 run = "pnpm --filter @workspace/api-server run dev"
@@ -21,8 +21,9 @@ args = ["pnpm", "--filter", "@workspace/api-server", "run", "build"]
 NODE_ENV = "production"
 
 [services.production.run]
-# we don't run through pnpm to make startup faster in production
-args = ["node", "--enable-source-maps", "artifacts/api-server/dist/index.mjs"]
+# Runs both the Python FastAPI service (background) and the Node API server
+# (foreground). The deployment health monitor watches the Node process.
+args = ["sh", "scripts/start-production.sh"]
 
 [services.production.run.env]
 PORT = "8080"
