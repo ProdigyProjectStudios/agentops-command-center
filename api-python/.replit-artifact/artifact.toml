@@ -1,0 +1,20 @@
+kind = "api"
+previewPath = "/api-python"
+title = "Python API"
+version = "1.0.0"
+
+[[services]]
+localPort = 8008
+name = "Python API"
+paths = ["/api-python"]
+
+[services.development]
+run = "uv run python main.py"
+
+[services.production]
+
+[services.production.run]
+args = ["uv", "run", "python", "main.py"]
+
+[services.production.run.env]
+PORT = "8008"
