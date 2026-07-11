@@ -323,21 +323,23 @@ export default function DashboardPage() {
                 key={w.id}
                 href={`/workflows/${w.id}`}
                 data-testid={`row-workflow-${w.id}`}
-                className="flex items-center gap-4 p-3 rounded-md border border-card-border bg-background/40 hover-elevate transition-colors"
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-3 rounded-md border border-card-border bg-background/40 hover-elevate transition-colors"
               >
                 <div className="flex-1 min-w-0">
                   <div className="text-sm font-medium truncate">{w.title}</div>
-                  <div className="text-xs text-muted-foreground mt-0.5 flex items-center gap-2">
-                    <span>{w.portfolioCompanyName}</span>
-                    <span>·</span>
+                  <div className="text-xs text-muted-foreground mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                    <span className="truncate max-w-[140px]">{w.portfolioCompanyName}</span>
+                    <span aria-hidden="true">·</span>
                     <span>{w.department}</span>
-                    <span>·</span>
+                    <span aria-hidden="true">·</span>
                     <span>{formatRelative(w.createdAt)}</span>
                   </div>
                 </div>
-                <StatusBadge className={workflowStatusBadge(w.status)} testId={`badge-status-${w.id}`}>
-                  {workflowStatusLabel(w.status)}
-                </StatusBadge>
+                <div className="shrink-0">
+                  <StatusBadge className={workflowStatusBadge(w.status)} testId={`badge-status-${w.id}`}>
+                    {workflowStatusLabel(w.status)}
+                  </StatusBadge>
+                </div>
               </Link>
             ))}
           </div>

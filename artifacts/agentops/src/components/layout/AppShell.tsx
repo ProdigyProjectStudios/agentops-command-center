@@ -1,5 +1,6 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   PlusCircle,
@@ -13,6 +14,8 @@ import {
   Network,
   PanelLeftClose,
   PanelLeftOpen,
+  Menu,
+  X,
 } from "lucide-react";
 import { useGetSystemMode } from "@workspace/api-client-react";
 import { cn } from "@/lib/utils";
@@ -55,13 +58,17 @@ export function AppShell({
   const [location] = useLocation();
   const { data: mode } = useGetSystemMode();
   const [collapsed, setCollapsed] = useSidebarCollapsed();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
     <TooltipProvider delayDuration={120}>
     <div className="min-h-screen flex bg-background text-foreground">
+
+      {/* ── Desktop sidebar (hidden on mobile) ─────────────────────────── */}
       <aside
         className={cn(
-          "shrink-0 bg-sidebar border-r border-sidebar-border/60 flex flex-col transition-[width] duration-300 ease-out",
+          "shrink-0 bg-sidebar border-r border-sidebar-border/60 flex-col transition-[width] duration-300 ease-out",
+          "hidden md:flex",
           collapsed ? "w-[60px]" : "w-[208px]",
         )}
         data-testid="sidebar"
@@ -107,10 +114,8 @@ export function AppShell({
           )}
         </div>
 
-        {/* Hairline separator under brand */}
         <div className="mx-3 h-px bg-gradient-to-r from-transparent via-sidebar-border/70 to-transparent" />
 
-        {/* When collapsed, show expand button just below brand */}
         {collapsed && (
           <div className="px-2.5 pt-2">
             <Tooltip>
@@ -157,7 +162,6 @@ export function AppShell({
                     : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
                 )}
               >
-                {/* Active indicator rail */}
                 {active && (
                   <span
                     className="absolute left-0 top-1/2 -translate-y-1/2 h-4 w-[2px] rounded-r-full bg-gradient-to-b from-primary to-chart-2"
@@ -207,7 +211,6 @@ export function AppShell({
             collapsed ? "px-2 py-3 text-center" : "px-3.5 py-3 space-y-0.5",
           )}
         >
-          {/* Hairline separator above footer */}
           <div className={cn("h-px bg-gradient-to-r from-transparent via-sidebar-border/70 to-transparent", collapsed ? "mb-2" : "-mx-1 mb-2.5")} />
           {collapsed ? (
             <Tooltip>
@@ -238,9 +241,139 @@ export function AppShell({
         </div>
       </aside>
 
+      {/* ── Mobile full-screen drawer ────────────────────────────────────── */}
+      <AnimatePresence>
+        {mobileOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              key="backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.22 }}
+              className="fixed inset-0 z-40 bg-black/60 backdrop-blur-sm md:hidden"
+              onClick={() => setMobileOpen(false)}
+              aria-hidden="true"
+            />
+
+            {/* Drawer panel */}
+            <motion.div
+              key="drawer"
+              initial={{ x: "-100%" }}
+              animate={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ type: "spring", stiffness: 340, damping: 36, mass: 0.8 }}
+              className="fixed inset-y-0 left-0 z-50 w-72 bg-sidebar border-r border-sidebar-border/60 flex flex-col md:hidden"
+            >
+              {/* Drawer header */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-sidebar-border/40">
+                <Link
+                  href="/"
+                  onClick={() => setMobileOpen(false)}
+                  className="flex items-center gap-3"
+                >
+                  <Logo size={32} />
+                  <div>
+                    <div className="font-semibold text-sidebar-foreground text-sm leading-tight tracking-tight">
+                      AgentOps
+                    </div>
+                    <div className="text-[9px] uppercase tracking-[0.22em] text-muted-foreground/60 leading-tight mt-0.5">
+                      Command Center
+                    </div>
+                  </div>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setMobileOpen(false)}
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/40 transition-colors"
+                  aria-label="Close menu"
+                >
+                  <X className="size-5" />
+                </button>
+              </div>
+
+              {/* Nav links */}
+              <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-0.5">
+                {NAV.map((item, i) => {
+                  const active =
+                    item.href === "/"
+                      ? location === "/"
+                      : location.startsWith(item.href);
+                  const Icon = item.icon;
+                  return (
+                    <motion.div
+                      key={item.href}
+                      initial={{ opacity: 0, x: -12 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: 0.04 + i * 0.03, duration: 0.22, ease: "easeOut" }}
+                    >
+                      <Link
+                        href={item.href}
+                        data-testid={`mobile-${item.testId}`}
+                        onClick={() => setMobileOpen(false)}
+                        className={cn(
+                          "group relative flex items-center gap-3.5 rounded-lg px-3.5 py-2.5 text-sm font-normal transition-colors",
+                          active
+                            ? "bg-sidebar-accent/70 text-sidebar-accent-foreground"
+                            : "text-muted-foreground hover:bg-sidebar-accent/30 hover:text-sidebar-foreground",
+                        )}
+                      >
+                        {active && (
+                          <span
+                            className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-[2.5px] rounded-r-full bg-gradient-to-b from-primary to-chart-2"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <Icon
+                          className={cn(
+                            "size-[17px] shrink-0 transition-[filter,color] duration-300",
+                            active
+                              ? "text-primary [filter:drop-shadow(0_0_6px_hsl(var(--primary)/0.6))]"
+                              : "text-muted-foreground/70 group-hover:text-primary",
+                          )}
+                          strokeWidth={active ? 2.25 : 1.75}
+                        />
+                        <span
+                          className={cn(
+                            "tracking-tight",
+                            active && "font-medium text-sidebar-foreground",
+                          )}
+                        >
+                          {item.label}
+                        </span>
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </nav>
+
+              {/* Drawer footer */}
+              <div className="px-5 py-4 border-t border-sidebar-border/40">
+                <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/50">
+                  v0.1 · Portfolio Demo
+                </div>
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ── Main content column ──────────────────────────────────────────── */}
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-14 shrink-0 bg-card/40 backdrop-blur border-b border-border flex items-center justify-between px-6">
+        <header className="h-14 shrink-0 bg-card/40 backdrop-blur border-b border-border flex items-center justify-between px-4 md:px-6">
           <div className="flex items-center gap-3 min-w-0">
+            {/* Hamburger — mobile only */}
+            <button
+              type="button"
+              onClick={() => setMobileOpen(true)}
+              className="md:hidden p-1.5 -ml-1 rounded-md text-muted-foreground hover:text-foreground hover:bg-sidebar-accent/30 transition-colors"
+              aria-label="Open navigation menu"
+              data-testid="button-mobile-menu"
+            >
+              <Menu className="size-5" />
+            </button>
+
             <h1 className="font-semibold text-foreground text-base tracking-tight truncate">
               AgentOps Command Center
             </h1>
@@ -272,7 +405,7 @@ export function AppShell({
               <span
                 data-testid="badge-mode"
                 className={cn(
-                  "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-medium uppercase tracking-[0.14em] font-mono",
+                  "inline-flex items-center gap-1.5 px-2 py-1 rounded-full border text-[10px] font-medium uppercase tracking-[0.14em] font-mono",
                   mode.hasApiKey
                     ? "bg-emerald-500/10 text-emerald-300 border-emerald-500/30"
                     : "bg-amber-500/10 text-amber-300 border-amber-500/30",
@@ -282,7 +415,8 @@ export function AppShell({
                   "size-1.5 rounded-full",
                   mode.hasApiKey ? "bg-emerald-400" : "bg-amber-400",
                 )} />
-                {mode.hasApiKey ? "Live Pilot" : "Demo Mode"}
+                <span className="hidden sm:inline">{mode.hasApiKey ? "Live Pilot" : "Demo Mode"}</span>
+                <span className="sm:hidden">{mode.hasApiKey ? "Live" : "Demo"}</span>
               </span>
             )}
           </div>

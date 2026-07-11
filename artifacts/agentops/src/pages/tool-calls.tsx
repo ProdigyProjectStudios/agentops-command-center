@@ -94,7 +94,7 @@ export default function ToolCallsPage() {
 
   return (
     <PageTransition>
-    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           {PAGE.toolCalls.title}
@@ -112,18 +112,18 @@ export default function ToolCallsPage() {
       )}
 
       <div className="flex items-center gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-[240px]">
+        <div className="relative flex-1 min-w-0">
           <Search className="size-4 text-muted-foreground absolute left-3 top-1/2 -translate-y-1/2" />
           <Input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tool, workflow, agent, or output…"
+            placeholder="Search tool, workflow, agent…"
             className="pl-9"
             data-testid="input-tool-search"
           />
         </div>
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-          <SelectTrigger className="w-[180px]" data-testid="select-status-filter">
+          <SelectTrigger className="w-[160px] shrink-0" data-testid="select-status-filter">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -133,13 +133,15 @@ export default function ToolCallsPage() {
             <SelectItem value="running">Running</SelectItem>
           </SelectContent>
         </Select>
-        <div className="text-xs text-muted-foreground tabular-nums">
+        <div className="text-xs text-muted-foreground tabular-nums shrink-0">
           {rows.length} call{rows.length !== 1 ? "s" : ""}
         </div>
       </div>
 
       <Card className="bg-card border-card-border overflow-hidden">
-        <div className="grid grid-cols-12 gap-3 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
+
+        {/* ── Desktop table header (hidden on mobile) ──────────────────── */}
+        <div className="hidden md:grid grid-cols-12 gap-3 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
           <SortHeader label="Tool" sortKey="toolName" current={sortKey} asc={sortAsc} onClick={toggleSort} className="col-span-2" />
           <div className="col-span-2">Workflow</div>
           <div className="col-span-3">Input</div>
@@ -209,10 +211,11 @@ function ToolRow({
 }) {
   return (
     <>
+      {/* ── Desktop row (hidden on mobile) ──────────────────────────────── */}
       <button
         onClick={onToggle}
         data-testid={`tool-row-${tc.id}`}
-        className="w-full grid grid-cols-12 gap-3 px-5 py-3 text-sm border-b border-card-border last:border-0 hover-elevate text-left items-center"
+        className="hidden md:grid w-full grid-cols-12 gap-3 px-5 py-3 text-sm border-b border-card-border last:border-0 hover-elevate text-left items-center"
       >
         <div className="col-span-2 flex items-center gap-2 min-w-0">
           {expanded ? (
@@ -250,8 +253,41 @@ function ToolRow({
         </div>
       </button>
 
+      {/* ── Mobile card ─────────────────────────────────────────────────── */}
+      <button
+        onClick={onToggle}
+        data-testid={`tool-row-mobile-${tc.id}`}
+        className="md:hidden w-full flex flex-col gap-2.5 px-4 py-4 border-b border-card-border last:border-0 hover-elevate text-left"
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            {expanded ? (
+              <ChevronDown className="size-3 text-muted-foreground shrink-0" />
+            ) : (
+              <ChevronRight className="size-3 text-muted-foreground shrink-0" />
+            )}
+            <Wrench className="size-3.5 text-primary shrink-0" />
+            <code className="text-sm font-mono truncate">{tc.toolName}</code>
+          </div>
+          <StatusBadge className={statusClass(tc.status)}>{tc.status}</StatusBadge>
+        </div>
+        <div className="text-xs text-muted-foreground truncate pl-5">
+          {tc.workflowTitle}
+          {tc.agentName && <span className="text-muted-foreground/60"> · {tc.agentName}</span>}
+        </div>
+        <div className="text-xs text-muted-foreground truncate font-mono pl-5"
+          data-testid={`tool-input-summary-${tc.id}`}
+        >
+          {summarizeJson(tc.input, 60)}
+        </div>
+        <div className="flex items-center justify-between text-[11px] text-muted-foreground/70 pl-5">
+          <span>{tc.durationMs}ms</span>
+          <span>{formatTimestamp(tc.createdAt)}</span>
+        </div>
+      </button>
+
       {expanded && (
-        <div className="px-5 py-4 border-b border-card-border bg-background/40 space-y-3" data-testid={`tool-detail-${tc.id}`}>
+        <div className="px-4 md:px-5 py-4 border-b border-card-border bg-background/40 space-y-3" data-testid={`tool-detail-${tc.id}`}>
           <div className="flex items-center justify-between text-xs">
             <Link
               href={`/workflows/${tc.workflowRunId}`}

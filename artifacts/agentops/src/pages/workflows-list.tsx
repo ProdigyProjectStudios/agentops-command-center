@@ -26,7 +26,7 @@ export default function WorkflowsListPage() {
 
   return (
     <PageTransition>
-    <div className="px-4 sm:px-6 lg:px-8 py-8 space-y-6 max-w-[1400px] mx-auto">
+    <div className="px-4 sm:px-6 lg:px-8 py-6 sm:py-8 space-y-6 max-w-[1400px] mx-auto">
       <div>
         <h2 className="text-2xl font-semibold tracking-tight" data-testid="text-page-title">
           {PAGE.workflows.title}
@@ -42,93 +42,131 @@ export default function WorkflowsListPage() {
           testId="error-workflows"
         />
       ) : (
-      <Card className="bg-card border-card-border overflow-hidden">
-        <div className="grid grid-cols-12 gap-4 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
-          <div className="col-span-5">Request</div>
-          <div className="col-span-2">Company</div>
-          <div className="col-span-1">Priority</div>
-          <div className="col-span-1">Risk</div>
-          <div className="col-span-1 text-right">Cost</div>
-          <div className="col-span-1">Status</div>
-          <div className="col-span-1 text-right">Created</div>
-        </div>
-        {isLoading && (
-          <div className="p-5">
-            <LoadingState
-              icon={ListChecks}
-              title="Loading workflows"
-              description="Fetching every operational request the crew has triaged…"
-              variant="bare"
-              testId="loading-workflows"
-            >
-              <div className="space-y-2">
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-                <Skeleton className="h-12 w-full" />
-              </div>
-            </LoadingState>
+        <Card className="bg-card border-card-border overflow-hidden">
+
+          {/* ── Desktop table header (hidden on mobile) ─────────────────── */}
+          <div className="hidden md:grid grid-cols-12 gap-4 px-5 py-3 text-[11px] font-medium uppercase tracking-wide text-muted-foreground border-b border-card-border bg-card/60">
+            <div className="col-span-5">Request</div>
+            <div className="col-span-2">Company</div>
+            <div className="col-span-1">Priority</div>
+            <div className="col-span-1">Risk</div>
+            <div className="col-span-1 text-right">Cost</div>
+            <div className="col-span-1">Status</div>
+            <div className="col-span-1 text-right">Created</div>
           </div>
-        )}
-        {(data ?? []).map((w, idx) => (
-          <motion.div
-            key={w.id}
-            initial={{ opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.22, ease: "easeOut", delay: Math.min(idx, 12) * 0.025 }}
-            className="border-b border-card-border last:border-0"
-          >
-          <Link
-            href={`/workflows/${w.id}`}
-            className="grid grid-cols-12 gap-4 px-5 py-3 text-sm hover-elevate"
-            data-testid={`row-workflow-${w.id}`}
-          >
-            <div className="col-span-5 min-w-0">
-              <div className="font-medium truncate">{w.title}</div>
-              <div className="text-xs text-muted-foreground mt-0.5 truncate">
-                {w.department} · {w.currentStage}
-              </div>
+
+          {isLoading && (
+            <div className="p-5">
+              <LoadingState
+                icon={ListChecks}
+                title="Loading workflows"
+                description="Fetching every operational request the crew has triaged…"
+                variant="bare"
+                testId="loading-workflows"
+              >
+                <div className="space-y-2">
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                  <Skeleton className="h-12 w-full" />
+                </div>
+              </LoadingState>
             </div>
-            <div className="col-span-2 text-muted-foreground truncate self-center">
-              {w.portfolioCompanyName}
-            </div>
-            <div className="col-span-1 self-center">
-              <StatusBadge className={priorityBadge(w.priority)}>{w.priority}</StatusBadge>
-            </div>
-            <div className="col-span-1 self-center">
-              <StatusBadge className={riskBadge(w.riskLevel)}>{w.riskLevel}</StatusBadge>
-            </div>
-            <div className="col-span-1 text-right tabular-nums self-center">
-              {formatCurrencyCents(w.estimatedCostCents)}
-            </div>
-            <div className="col-span-1 self-center">
-              <StatusBadge className={workflowStatusBadge(w.status)}>
-                {workflowStatusLabel(w.status)}
-              </StatusBadge>
-            </div>
-            <div className="col-span-1 text-right text-xs text-muted-foreground self-center">
-              {formatRelative(w.createdAt)}
-            </div>
-          </Link>
-          </motion.div>
-        ))}
-        {data && data.length === 0 && (
-          <EmptyState
-            illustration={<IllNoWorkflows />}
-            title="No workflows yet"
-            description="File the first operational request and the agent crew will spin up a run in seconds."
-            action={
-              <Button asChild>
-                <Link href="/requests/new">
-                  <PlusCircle className="size-4" />
-                  New Request
-                </Link>
-              </Button>
-            }
-            variant="bare"
-            testId="empty-workflows"
-          />
-        )}
-      </Card>
+          )}
+
+          {(data ?? []).map((w, idx) => (
+            <motion.div
+              key={w.id}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: "easeOut", delay: Math.min(idx, 12) * 0.025 }}
+              className="border-b border-card-border last:border-0"
+            >
+              {/* ── Desktop row ─────────────────────────────────────────── */}
+              <Link
+                href={`/workflows/${w.id}`}
+                className="hidden md:grid grid-cols-12 gap-4 px-5 py-3 text-sm hover-elevate"
+                data-testid={`row-workflow-${w.id}`}
+              >
+                <div className="col-span-5 min-w-0">
+                  <div className="font-medium truncate">{w.title}</div>
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                    {w.department} · {w.currentStage}
+                  </div>
+                </div>
+                <div className="col-span-2 text-muted-foreground truncate self-center">
+                  {w.portfolioCompanyName}
+                </div>
+                <div className="col-span-1 self-center">
+                  <StatusBadge className={priorityBadge(w.priority)}>{w.priority}</StatusBadge>
+                </div>
+                <div className="col-span-1 self-center">
+                  <StatusBadge className={riskBadge(w.riskLevel)}>{w.riskLevel}</StatusBadge>
+                </div>
+                <div className="col-span-1 text-right tabular-nums self-center">
+                  {formatCurrencyCents(w.estimatedCostCents)}
+                </div>
+                <div className="col-span-1 self-center">
+                  <StatusBadge className={workflowStatusBadge(w.status)}>
+                    {workflowStatusLabel(w.status)}
+                  </StatusBadge>
+                </div>
+                <div className="col-span-1 text-right text-xs text-muted-foreground self-center">
+                  {formatRelative(w.createdAt)}
+                </div>
+              </Link>
+
+              {/* ── Mobile card ─────────────────────────────────────────── */}
+              <Link
+                href={`/workflows/${w.id}`}
+                className="md:hidden flex flex-col gap-3 px-4 py-4 hover-elevate"
+                data-testid={`row-workflow-mobile-${w.id}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-medium text-sm leading-snug">{w.title}</div>
+                    <div className="text-xs text-muted-foreground mt-1">
+                      {w.portfolioCompanyName}
+                    </div>
+                  </div>
+                  <StatusBadge className={workflowStatusBadge(w.status)}>
+                    {workflowStatusLabel(w.status)}
+                  </StatusBadge>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <StatusBadge className={priorityBadge(w.priority)}>{w.priority}</StatusBadge>
+                  <StatusBadge className={riskBadge(w.riskLevel)}>{w.riskLevel} risk</StatusBadge>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{w.department} · {w.currentStage}</span>
+                  <span className="tabular-nums font-medium text-foreground/80">
+                    {formatCurrencyCents(w.estimatedCostCents)}
+                  </span>
+                </div>
+                <div className="text-[11px] text-muted-foreground/70">
+                  {formatRelative(w.createdAt)}
+                </div>
+              </Link>
+            </motion.div>
+          ))}
+
+          {data && data.length === 0 && (
+            <EmptyState
+              illustration={<IllNoWorkflows />}
+              title="No workflows yet"
+              description="File the first operational request and the agent crew will spin up a run in seconds."
+              action={
+                <Button asChild>
+                  <Link href="/requests/new">
+                    <PlusCircle className="size-4" />
+                    New Request
+                  </Link>
+                </Button>
+              }
+              variant="bare"
+              testId="empty-workflows"
+            />
+          )}
+        </Card>
       )}
     </div>
     </PageTransition>
