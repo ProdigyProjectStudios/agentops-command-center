@@ -1,1 +1,1 @@
-- [Shared pythonlibs anyio conflict](anyio-conflict.md) — two uv projects sharing .pythonlibs will fight over anyio version; pin anyio>=4.0 in both.
+- [Shared pythonlibs anyio conflict](anyio-conflict.md) — two uv projects sharing .pythonlibs will fight over anyio version; pin anyio>=4.0 + matching uvicorn in both AND make all FastAPI handlers async def to avoid anyio thread-wrap crash.

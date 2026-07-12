@@ -1,14 +1,11 @@
 """
 End-to-end proof for POST /api-python/assess/{workflow_id}.
 
-Runs two scenarios:
-  A) Auto-complete path  — threshold=0.6 (default).
-     If LLM returns confidence >= 0.6 the workflow is finalized automatically.
-  B) Approval-gate path  — threshold=0.99.
-     Any real LLM response will fall below 0.99, so this always routes to
-     approval_requests regardless of LLM confidence.
-
-At every step this script prints the ACTUAL data — rows, JSON, columns.
+Shows at each step:
+  1. The real worker search response (mode, cosine scores, snippets) — as returned.
+  2. The real LLM verdict with evidence_references tied to retrieved chunks.
+  3. The real agentops_py.assessments row persisted to DB.
+  4. The real approval_requests row when confidence < threshold.
 """
 
 from __future__ import annotations
@@ -19,7 +16,7 @@ import psycopg
 import httpx
 from datetime import datetime, timezone
 
-BASE = "http://localhost:8008/api-python"
+BASE   = "http://localhost:8008/api-python"
 WORKER = "http://localhost:8000"
 
 
@@ -70,33 +67,14 @@ def create_workflow(title: str, description: str, department: str) -> int:
 
 # ═══════════════════════════════════════════════════════════════════════════════
 print("\n" + "═"*72)
-print("  AgentOps — RAG Assessment End-to-End Proof")
+print("  AgentOps — RAG Assessment Proof (clean run, vector retrieval)")
 print(f"  Started: {datetime.now(timezone.utc).isoformat()}")
 print("═"*72)
 
-# ───────────────────────────────────────────────────────────────────────────────
-# Show what is already in the knowledge base (the corpus the LLM will see)
-# ───────────────────────────────────────────────────────────────────────────────
-div("KNOWLEDGE BASE — documents + chunks with embeddings")
-kb_docs = db_rows("""
-    SELECT kd.id, kd.title, kd.category,
-           COUNT(mc.id) FILTER (WHERE mc.embedding IS NOT NULL) AS chunks_with_embedding
-    FROM knowledge_documents kd
-    LEFT JOIN memory_chunks mc ON mc.document_id = kd.id
-    GROUP BY kd.id ORDER BY kd.id
-""")
-print("\n  Documents seeded in knowledge_documents:")
-for d in kb_docs:
-    print(f"    doc {d['id']:2d} | {d['title']:40s} | category={d['category']:15s} | embedded_chunks={d['chunks_with_embedding']}")
-
-chunk_count = db_row("SELECT COUNT(*) AS n FROM memory_chunks WHERE embedding IS NOT NULL", ())
-print(f"\n  Total memory_chunks with embeddings: {chunk_count['n']}")  # type: ignore[index]
-
 # ═══════════════════════════════════════════════════════════════════════════════
-div("SCENARIO A — Auto-complete path (confidence_threshold=0.6)")
+div("SCENARIO A — intake → triage → assess (confidence_threshold=0.6)")
 # ═══════════════════════════════════════════════════════════════════════════════
 
-print("\n  Step A1: intake + triage → new workflow")
 wf_a = create_workflow(
     title="Vendor Onboarding — Acme Logistics Partners LLC",
     description=(
@@ -107,15 +85,44 @@ wf_a = create_workflow(
     ),
     department="procurement",
 )
-print(f"  → workflow_run_id = {wf_a}")
+print(f"\n  workflow_run_id = {wf_a}  (status=triaged, risk=medium)")
 
-row_before_a = db_row(
-    "SELECT id, status, current_stage, risk_level, final_recommendation FROM workflow_runs WHERE id=%s",
-    (wf_a,),
+# ── Step 1: explicit search call with the same query the endpoint will use ──
+query_a = (
+    "Vendor Onboarding — Acme Logistics Partners LLC. "
+    "We need to onboard Acme Logistics Partners LLC as a preferred vendor. "
+    "Engagement value is $85,000 annually. They will provide last-mile delivery "
+    "services for our Northwind Logistics portfolio company. Need COI, W-9, "
+    "sanctions screen, and MSA before contract execution."
 )
-pp("workflow_runs BEFORE assess", row_before_a)
 
-print(f"\n  Step A2: POST /assess/{wf_a}?confidence_threshold=0.6  (calling LLM…)")
+div("STEP 1 — Raw search response from agent-worker (exact JSON as returned)")
+search_r = httpx.post(
+    f"{WORKER}/worker/memory/search-spike",
+    json={"query": query_a, "limit": 6},
+    timeout=15.0,
+)
+search_r.raise_for_status()
+search_a = search_r.json()
+
+print(f"\n  status        : {search_a['status']}")
+print(f"  mode          : {search_a['mode']}")
+print(f"  embeddingMode : {search_a.get('embeddingMode', 'n/a')}")
+print(f"  reason        : {search_a.get('reason')}")
+print(f"  chunks returned: {len(search_a['results'])}")
+print()
+for i, c in enumerate(search_a["results"], 1):
+    print(f"  chunk[{i}]")
+    print(f"    chunkId    = {c['chunkId']}")
+    print(f"    documentId = {c['documentId']}")
+    print(f"    title      = {c['title']!r}")
+    print(f"    category   = {c['category']!r}")
+    print(f"    score      = {c['score']}   ← cosine similarity from pgvector")
+    print(f"    snippet    = {c['snippet']!r}")
+    print()
+
+# ── Step 2: call the assess endpoint ──
+div("STEP 2 — POST /assess/{wf_id}?confidence_threshold=0.6  (real LLM call)")
 resp_a = httpx.post(
     f"{BASE}/assess/{wf_a}",
     params={"confidence_threshold": 0.6},
@@ -124,75 +131,59 @@ resp_a = httpx.post(
 resp_a.raise_for_status()
 assess_a = resp_a.json()
 
-div("SCENARIO A — Retrieved chunks (reported by assess endpoint)")
 print(f"\n  retrieval_mode        : {assess_a['retrieval_mode']}")
 print(f"  retrieval_chunks_used : {assess_a['retrieval_chunks_used']}")
-print()
 
-# Pull the raw chunk rows from DB to show exactly what was retrieved
-chunks_a = db_rows("""
-    SELECT mc.id AS chunk_id, mc.document_id, kd.title, kd.category,
-           LEFT(mc.content, 220) AS snippet,
-           1 - (mc.embedding <=> (
-               SELECT mc2.embedding FROM memory_chunks mc2
-               WHERE mc2.embedding IS NOT NULL LIMIT 1
-           )) AS approx_score
-    FROM memory_chunks mc
-    JOIN knowledge_documents kd ON kd.id = mc.document_id
-    WHERE mc.embedding IS NOT NULL
-    ORDER BY mc.id
-""")
-print("  All embedded chunks available for retrieval:")
-for c in chunks_a:
-    print(f"    chunk_id={c['chunk_id']}  doc={c['document_id']}  [{c['title']}]")
-    print(f"      snippet: {c['snippet']!r}")
+# ── Step 3: show exact LLM verdict ──
+div("STEP 3 — Validated AssessmentVerdict (strict Pydantic schema)")
+v = assess_a["verdict"]
+print(f"\n  recommendation:")
+for line in v["recommendation"].split(". "):
+    if line.strip():
+        print(f"    {line.strip()}.")
+print(f"\n  confidence : {v['confidence']}")
+print(f"\n  risks:")
+for r in v["risks"]:
+    print(f"    - {r}")
+print(f"\n  evidence_references  ← tied to the retrieved chunks above:")
+for e in v["evidence_references"]:
+    print(f"    - {e}")
+print(f"\n  next_actions:")
+for n in v["next_actions"]:
+    print(f"    - {n}")
 
-div("SCENARIO A — Actual LLM response (validated Pydantic AssessmentVerdict)")
-verdict_a = assess_a["verdict"]
-print(f"\n  recommendation     : {verdict_a['recommendation']}")
-print(f"  confidence         : {verdict_a['confidence']}")
-print(f"  risks:")
-for r in verdict_a['risks']:
-    print(f"      - {r}")
-print(f"  evidence_references:")
-for e in verdict_a['evidence_references']:
-    print(f"      - {e}")
-print(f"  next_actions:")
-for n in verdict_a['next_actions']:
-    print(f"      - {n}")
-
-div("SCENARIO A — agentops_py.assessments row written to DB")
-assessment_row_a = db_row("""
+# ── Step 4: show actual DB row ──
+div("STEP 4 — agentops_py.assessments row written to DB")
+arow = db_row("""
     SELECT id, workflow_run_id, recommendation, confidence, risks,
            evidence_refs, next_actions, retrieval_mode, routing,
            approval_request_id, created_at
     FROM agentops_py.assessments WHERE id = %s
 """, (assess_a["assessment_id"],))
-pp("agentops_py.assessments", assessment_row_a)
+pp("agentops_py.assessments", arow)
 
-div("SCENARIO A — workflow_runs row AFTER assess")
-row_after_a = db_row("""
+div("STEP 5 — workflow_runs row after assess")
+wrow = db_row("""
     SELECT id, status, current_stage, risk_level,
            final_recommendation, next_actions, summary, completed_at
     FROM workflow_runs WHERE id=%s
 """, (wf_a,))
-pp("workflow_runs (after)", row_after_a)
+pp("workflow_runs", wrow)
 
-print(f"\n  routing         : {assess_a['routing']}")
+routing_a = assess_a["routing"]
+print(f"\n  routing         : {routing_a}")
 print(f"  workflow_status : {assess_a['workflow_status']}")
 print(f"  approval_req_id : {assess_a['approval_request_id']}")
-
-if assess_a["routing"] == "auto_complete":
-    print(f"\n  ✓  confidence={verdict_a['confidence']:.3f} ≥ 0.6 → auto_complete → workflow finalized")
+if routing_a == "auto_complete":
+    print(f"\n  ✓  confidence={v['confidence']:.3f} ≥ 0.6 → auto_complete → finalized")
 else:
-    print(f"\n  → confidence={verdict_a['confidence']:.3f} < 0.6 → approval_gate triggered (see scenario B for forced gate)")
+    print(f"\n  → confidence={v['confidence']:.3f} < 0.6 → approval_gate (see scenario B)")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-div("SCENARIO B — Approval-gate path (confidence_threshold=0.99, always triggers)")
+div("SCENARIO B — approval-gate path (confidence_threshold=0.99, always triggers)")
 # ═══════════════════════════════════════════════════════════════════════════════
 
-print("\n  Step B1: intake + triage → new workflow")
 wf_b = create_workflow(
     title="Emergency Data-Retention Policy Override",
     description=(
@@ -204,9 +195,37 @@ wf_b = create_workflow(
     ),
     department="legal",
 )
-print(f"  → workflow_run_id = {wf_b}")
+print(f"\n  workflow_run_id = {wf_b}  (status=triaged, risk=high)")
 
-print(f"\n  Step B2: POST /assess/{wf_b}?confidence_threshold=0.99  (calling LLM…)")
+query_b = (
+    "Emergency Data-Retention Policy Override. "
+    "Legal has requested an emergency change to our data retention policy to "
+    "override the standard 7-year retention for financial records due to an ongoing "
+    "regulatory investigation."
+)
+
+div("STEP 1 — Raw search response for scenario B")
+search_r2 = httpx.post(
+    f"{WORKER}/worker/memory/search-spike",
+    json={"query": query_b, "limit": 6},
+    timeout=15.0,
+)
+search_r2.raise_for_status()
+search_b = search_r2.json()
+
+print(f"\n  mode          : {search_b['mode']}")
+print(f"  embeddingMode : {search_b.get('embeddingMode', 'n/a')}")
+print(f"  chunks returned: {len(search_b['results'])}")
+print()
+for i, c in enumerate(search_b["results"], 1):
+    print(f"  chunk[{i}]")
+    print(f"    chunkId = {c['chunkId']}  documentId = {c['documentId']}")
+    print(f"    title   = {c['title']!r}")
+    print(f"    score   = {c['score']}   ← cosine similarity")
+    print(f"    snippet = {c['snippet']!r}")
+    print()
+
+div("STEP 2 — POST /assess/{wf_id}?confidence_threshold=0.99  (real LLM call)")
 resp_b = httpx.post(
     f"{BASE}/assess/{wf_b}",
     params={"confidence_threshold": 0.99},
@@ -215,76 +234,62 @@ resp_b = httpx.post(
 resp_b.raise_for_status()
 assess_b = resp_b.json()
 
-div("SCENARIO B — Actual LLM response")
-verdict_b = assess_b["verdict"]
-print(f"\n  recommendation     : {verdict_b['recommendation']}")
-print(f"  confidence         : {verdict_b['confidence']}")
-print(f"  risks:")
-for r in verdict_b['risks']:
-    print(f"      - {r}")
-print(f"  evidence_references:")
-for e in verdict_b['evidence_references']:
-    print(f"      - {e}")
-print(f"  next_actions:")
-for n in verdict_b['next_actions']:
-    print(f"      - {n}")
+print(f"\n  retrieval_mode        : {assess_b['retrieval_mode']}")
+print(f"  retrieval_chunks_used : {assess_b['retrieval_chunks_used']}")
 
-div("SCENARIO B — agentops_py.assessments row")
-assessment_row_b = db_row("""
+div("STEP 3 — LLM verdict for scenario B")
+vb = assess_b["verdict"]
+print(f"\n  recommendation : {vb['recommendation']}")
+print(f"  confidence     : {vb['confidence']}")
+print(f"\n  risks:")
+for r in vb["risks"]: print(f"    - {r}")
+print(f"\n  evidence_references:")
+for e in vb["evidence_references"]: print(f"    - {e}")
+print(f"\n  next_actions:")
+for n in vb["next_actions"]: print(f"    - {n}")
+
+div("STEP 4 — agentops_py.assessments row for scenario B")
+arow_b = db_row("""
     SELECT id, workflow_run_id, recommendation, confidence, risks,
            evidence_refs, next_actions, retrieval_mode, routing,
            approval_request_id, created_at
     FROM agentops_py.assessments WHERE id = %s
 """, (assess_b["assessment_id"],))
-pp("agentops_py.assessments", assessment_row_b)
+pp("agentops_py.assessments", arow_b)
 
-div("SCENARIO B — approval_requests row created by the approval gate")
+div("STEP 5 — approval_requests row created by approval gate")
 if assess_b["approval_request_id"]:
-    ar_row = db_row("""
+    arrow = db_row("""
         SELECT id, workflow_run_id, status, risk_level, summary,
                recommendation, decided_by, decision_note, decided_at, created_at
         FROM approval_requests WHERE id = %s
     """, (assess_b["approval_request_id"],))
-    pp("approval_requests", ar_row)
-else:
-    print("\n  (no approval_request_id in response — unexpected)")
+    pp("approval_requests", arrow)
 
-div("SCENARIO B — workflow_runs row AFTER assess")
-row_after_b = db_row("""
-    SELECT id, status, current_stage, risk_level,
-           final_recommendation, summary
+div("STEP 6 — workflow_runs row after scenario B assess")
+wrow_b = db_row("""
+    SELECT id, status, current_stage, risk_level, final_recommendation, summary
     FROM workflow_runs WHERE id=%s
 """, (wf_b,))
-pp("workflow_runs (after)", row_after_b)
+pp("workflow_runs", wrow_b)
 
 print(f"\n  routing         : {assess_b['routing']}")
 print(f"  workflow_status : {assess_b['workflow_status']}")
 print(f"  approval_req_id : {assess_b['approval_request_id']}")
-
 if assess_b["routing"] == "approval_gate":
-    print(f"\n  ✓  confidence={verdict_b['confidence']:.3f} < 0.99 threshold → approval_gate")
-    print(f"     approval_requests row id={assess_b['approval_request_id']} created with status=pending")
-
+    print(f"\n  ✓  confidence={vb['confidence']:.3f} < 0.99 → approval_gate → approval_requests id={assess_b['approval_request_id']} (pending)")
 
 # ═══════════════════════════════════════════════════════════════════════════════
-div("FINAL STATE — all agentops_py.assessments rows")
+div("PASS / FAIL")
 # ═══════════════════════════════════════════════════════════════════════════════
-
-all_rows = db_rows("""
-    SELECT id, workflow_run_id, confidence, routing, approval_request_id, created_at
-    FROM agentops_py.assessments
-    ORDER BY id
-""")
-print()
-for r in all_rows:
-    print(f"  id={r['id']}  wf={r['workflow_run_id']}  "
-          f"confidence={r['confidence']:.3f}  routing={r['routing']}  "
-          f"approval_req={r['approval_request_id']}  created_at={r['created_at']}")
-
-a_ok = assess_a["routing"] in ("auto_complete", "approval_gate")
-b_ok = assess_b["routing"] == "approval_gate" and assess_b["approval_request_id"] is not None
+a_vector = assess_a["retrieval_mode"] == "vector"
+a_chunks = assess_a["retrieval_chunks_used"] > 0
+a_real_evidence = any("no relevant" not in e.lower() for e in v["evidence_references"])
+b_gate = assess_b["routing"] == "approval_gate" and assess_b["approval_request_id"] is not None
 
 print()
-print(f"  Scenario A (auto-complete or gate at 0.6)  : {'✓ PASSED' if a_ok else '✗ FAILED'}")
-print(f"  Scenario B (approval gate forced at 0.99)  : {'✓ PASSED' if b_ok else '✗ FAILED'}")
+print(f"  A: retrieval_mode == 'vector'          : {'✓' if a_vector else '✗'}  ({assess_a['retrieval_mode']})")
+print(f"  A: chunks used > 0                     : {'✓' if a_chunks else '✗'}  ({assess_a['retrieval_chunks_used']} chunks)")
+print(f"  A: evidence tied to real chunks        : {'✓' if a_real_evidence else '✗'}")
+print(f"  B: approval_gate triggered             : {'✓' if b_gate else '✗'}  (approval_req_id={assess_b['approval_request_id']})")
 print()

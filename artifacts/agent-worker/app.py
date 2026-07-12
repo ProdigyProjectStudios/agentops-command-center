@@ -254,7 +254,7 @@ async def _startup_db_check() -> None:
 
 
 @app.get("/worker/health", response_model=HealthResponse)
-def health() -> HealthResponse:
+async def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         service=SERVICE_NAME,
@@ -265,7 +265,7 @@ def health() -> HealthResponse:
 
 
 @app.post("/worker/run-spike", response_model=SpikeResponse)
-def run_spike(req: SpikeRequest) -> SpikeResponse:
+async def run_spike(req: SpikeRequest) -> SpikeResponse:
     if COMPILED_GRAPH is None:
         raise RuntimeError(
             f"LangGraph unavailable at startup: {LANGGRAPH_IMPORT_ERROR}"
@@ -322,7 +322,7 @@ class SearchSpikeResponse(BaseModel):
 
 
 @app.post("/worker/memory/embed-spike", response_model=EmbedSpikeResponse)
-def embed_spike(req: EmbedSpikeRequest) -> EmbedSpikeResponse:
+async def embed_spike(req: EmbedSpikeRequest) -> EmbedSpikeResponse:
     emb = embed_text(req.text)
     stored = False
     chunk_id: int | None = None
@@ -378,7 +378,7 @@ class EmbedDocumentResponse(BaseModel):
 
 
 @app.post("/worker/memory/embed-document", response_model=EmbedDocumentResponse)
-def embed_document_endpoint(req: EmbedDocumentRequest) -> EmbedDocumentResponse:
+async def embed_document_endpoint(req: EmbedDocumentRequest) -> EmbedDocumentResponse:
     """Chunk and embed a real knowledge document into memory_chunks."""
     chunks = _chunk_text(req.content)
     cleared = clear_document_chunks(req.documentId)
@@ -409,7 +409,7 @@ class HasEmbeddingsResponse(BaseModel):
 
 
 @app.get("/worker/memory/has-embeddings/{document_id}", response_model=HasEmbeddingsResponse)
-def check_has_embeddings(document_id: int) -> HasEmbeddingsResponse:
+async def check_has_embeddings(document_id: int) -> HasEmbeddingsResponse:
     """Check whether a document already has embeddings stored."""
     import psycopg, os
     url = os.environ.get("DATABASE_URL")
@@ -430,7 +430,7 @@ def check_has_embeddings(document_id: int) -> HasEmbeddingsResponse:
 
 
 @app.post("/worker/memory/search-spike", response_model=SearchSpikeResponse)
-def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
+async def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
     emb = embed_text(req.query)
     # Try vector path first.
     try:
