@@ -22,7 +22,7 @@ from typing import Any, TypedDict
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
-from db import check_connection
+from db import check_connection, verify_schema
 from embedding import embed_text, EMBEDDING_DIMENSIONS
 from memory_store import (
     ensure_spike_document,
@@ -199,25 +199,45 @@ app = FastAPI(title="AgentOps LangGraph Worker (spike)", version="0.1.0")
 
 @app.on_event("startup")
 async def _startup_db_check() -> None:
-    """Confirm the agentops_py async engine can reach the database."""
-    result = await check_connection()
-    if result["status"] == "ok":
+    """Confirm the agentops_py schema exists and the async engine is scoped to it."""
+    # 1 — Verify the schema exists in information_schema.schemata
+    schema_result = await verify_schema()
+    if schema_result["status"] == "ok":
         _logger.info(
-            "agentops_py async DB ready | schema=%s | %s",
-            result["current_schema"],
-            result["pg_version"],
+            "agentops_py schema verified | schema_name=%s | catalog=%s",
+            schema_result["schema_name"],
+            schema_result["owner"],
         )
         print(
-            f"[agentops_py] async DB ready | schema={result['current_schema']} | {result['pg_version']}",
+            f"[agentops_py] schema verified | schema_name={schema_result['schema_name']} | catalog={schema_result['owner']}",
+            flush=True,
+        )
+    elif schema_result["status"] == "missing":
+        _logger.error("agentops_py schema NOT FOUND in information_schema.schemata")
+        print("[agentops_py] schema NOT FOUND in information_schema.schemata", flush=True)
+    else:
+        _logger.error("agentops_py schema check error: %s", schema_result.get("error"))
+        print(f"[agentops_py] schema check error: {schema_result.get('error')}", flush=True)
+
+    # 2 — Confirm search_path puts agentops_py first (current_schema check)
+    conn_result = await check_connection()
+    if conn_result["status"] == "ok":
+        _logger.info(
+            "agentops_py async DB ready | current_schema=%s | %s",
+            conn_result["current_schema"],
+            conn_result["pg_version"],
+        )
+        print(
+            f"[agentops_py] async DB ready | current_schema={conn_result['current_schema']} | {conn_result['pg_version']}",
             flush=True,
         )
     else:
         _logger.error(
             "agentops_py async DB check failed: %s",
-            result.get("error", "unknown"),
+            conn_result.get("error", "unknown"),
         )
         print(
-            f"[agentops_py] async DB check FAILED: {result.get('error', 'unknown')}",
+            f"[agentops_py] async DB check FAILED: {conn_result.get('error', 'unknown')}",
             flush=True,
         )
 
