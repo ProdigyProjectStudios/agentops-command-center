@@ -13,6 +13,8 @@ extension path.
 
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import sys
 from typing import Any, TypedDict
@@ -20,6 +22,7 @@ from typing import Any, TypedDict
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
 
+from db import check_connection
 from embedding import embed_text, EMBEDDING_DIMENSIONS
 from memory_store import (
     ensure_spike_document,
@@ -189,7 +192,34 @@ class HealthResponse(BaseModel):
     langgraph_error: str | None = None
 
 
+_logger = logging.getLogger(__name__)
+
 app = FastAPI(title="AgentOps LangGraph Worker (spike)", version="0.1.0")
+
+
+@app.on_event("startup")
+async def _startup_db_check() -> None:
+    """Confirm the agentops_py async engine can reach the database."""
+    result = await check_connection()
+    if result["status"] == "ok":
+        _logger.info(
+            "agentops_py async DB ready | schema=%s | %s",
+            result["current_schema"],
+            result["pg_version"],
+        )
+        print(
+            f"[agentops_py] async DB ready | schema={result['current_schema']} | {result['pg_version']}",
+            flush=True,
+        )
+    else:
+        _logger.error(
+            "agentops_py async DB check failed: %s",
+            result.get("error", "unknown"),
+        )
+        print(
+            f"[agentops_py] async DB check FAILED: {result.get('error', 'unknown')}",
+            flush=True,
+        )
 
 
 @app.get("/worker/health", response_model=HealthResponse)
