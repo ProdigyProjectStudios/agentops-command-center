@@ -24,6 +24,13 @@ from pydantic import BaseModel, Field
 
 from db import check_connection, verify_schema
 from embedding import embed_text, EMBEDDING_DIMENSIONS
+from worker_loop import (
+    ClaimedJob,
+    enqueue_job,
+    register_handler,
+    start_worker_background,
+    stop_worker_background,
+)
 from memory_store import (
     ensure_spike_document,
     store_chunk,
@@ -240,6 +247,10 @@ async def _startup_db_check() -> None:
             f"[agentops_py] async DB check FAILED: {conn_result.get('error', 'unknown')}",
             flush=True,
         )
+
+    # 3 — Start the durable job worker loop as a background task
+    start_worker_background()
+    print("[agentops_py] durable worker loop started", flush=True)
 
 
 @app.get("/worker/health", response_model=HealthResponse)
@@ -468,6 +479,102 @@ def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
         embeddingMode=emb.mode,
         reason="no_vector_rows",
     )
+
+
+# ---------------------------------------------------------------------------
+# Durable worker endpoints
+# ---------------------------------------------------------------------------
+
+
+class EnqueueRequest(BaseModel):
+    workflow: str = Field(..., min_length=1, max_length=255)
+    stage: str = Field(..., min_length=1, max_length=255)
+
+
+class EnqueueResponse(BaseModel):
+    job_id: int
+    workflow: str
+    stage: str
+    status: str
+
+
+class JobSummary(BaseModel):
+    id: int
+    workflow: str
+    stage: str
+    status: str
+    attempt_count: int
+    last_error: str | None = None
+    next_retry_at: str | None = None
+    created_at: str
+    updated_at: str
+    run_count: int
+
+
+class JobsResponse(BaseModel):
+    jobs: list[JobSummary]
+    total: int
+
+
+@app.post("/worker/enqueue", response_model=EnqueueResponse)
+async def enqueue(req: EnqueueRequest) -> EnqueueResponse:
+    """Insert a new job into agentops_py.jobs with status=queued."""
+    job_id = await enqueue_job(req.workflow, req.stage)
+    return EnqueueResponse(
+        job_id=job_id,
+        workflow=req.workflow,
+        stage=req.stage,
+        status="queued",
+    )
+
+
+@app.get("/worker/jobs", response_model=JobsResponse)
+async def list_jobs(limit: int = 50) -> JobsResponse:
+    """Return recent jobs with their agent_run counts."""
+    from sqlalchemy import func, select
+    from sqlalchemy.orm import selectinload
+    from models import Job, AgentRun
+
+    async with __import__("db").get_async_session() as session:
+        stmt = (
+            select(Job)
+            .order_by(Job.created_at.desc())
+            .limit(min(limit, 200))
+        )
+        rows = (await session.execute(stmt)).scalars().all()
+
+        # Fetch run counts in one query
+        job_ids = [j.id for j in rows]
+        if job_ids:
+            from sqlalchemy import func as sqlfunc
+            counts_rows = (
+                await session.execute(
+                    select(AgentRun.job_id, sqlfunc.count(AgentRun.id).label("n"))
+                    .where(AgentRun.job_id.in_(job_ids))
+                    .group_by(AgentRun.job_id)
+                )
+            ).all()
+            counts = {r.job_id: r.n for r in counts_rows}
+        else:
+            counts = {}
+
+        summaries = [
+            JobSummary(
+                id=j.id,
+                workflow=j.workflow,
+                stage=j.stage,
+                status=j.status,
+                attempt_count=j.attempt_count,
+                last_error=j.last_error,
+                next_retry_at=j.next_retry_at.isoformat() if j.next_retry_at else None,
+                created_at=j.created_at.isoformat(),
+                updated_at=j.updated_at.isoformat(),
+                run_count=counts.get(j.id, 0),
+            )
+            for j in rows
+        ]
+
+    return JobsResponse(jobs=summaries, total=len(summaries))
 
 
 if __name__ == "__main__":
