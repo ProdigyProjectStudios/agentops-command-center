@@ -27,6 +27,8 @@ from memory_store import (
     vector_search,
     keyword_search,
     hit_to_dict,
+    clear_document_chunks,
+    has_embeddings,
 )
 
 try:
@@ -281,6 +283,88 @@ def embed_spike(req: EmbedSpikeRequest) -> EmbedSpikeResponse:
         chunkId=chunk_id,
         documentId=document_id,
         reason=store_reason,
+    )
+
+
+def _chunk_text(content: str, max_chars: int = 800) -> list[str]:
+    """Split on double-newlines first, then hard-cut if a paragraph exceeds max_chars."""
+    paras = [p.strip() for p in content.split("\n\n") if p.strip()]
+    result: list[str] = []
+    for para in paras:
+        if len(para) <= max_chars:
+            result.append(para)
+        else:
+            for i in range(0, len(para), max_chars):
+                part = para[i : i + max_chars].strip()
+                if part:
+                    result.append(part)
+    return result or [content[:max_chars]]
+
+
+class EmbedDocumentRequest(BaseModel):
+    documentId: int
+    content: str = Field(..., min_length=1, max_length=100_000)
+    title: str = Field("", max_length=500)
+
+
+class EmbedDocumentResponse(BaseModel):
+    status: str
+    documentId: int
+    chunksEmbedded: int
+    chunksCleared: int
+    embeddingMode: str
+    reason: str | None = None
+
+
+@app.post("/worker/memory/embed-document", response_model=EmbedDocumentResponse)
+def embed_document_endpoint(req: EmbedDocumentRequest) -> EmbedDocumentResponse:
+    """Chunk and embed a real knowledge document into memory_chunks."""
+    chunks = _chunk_text(req.content)
+    cleared = clear_document_chunks(req.documentId)
+    embedded = 0
+    last_mode = "demo"
+    last_reason: str | None = None
+    for chunk in chunks:
+        emb = embed_text(chunk)
+        last_mode = emb.mode
+        if emb.reason:
+            last_reason = emb.reason
+        store_chunk(req.documentId, chunk, emb.vector)
+        embedded += 1
+    return EmbedDocumentResponse(
+        status="ok",
+        documentId=req.documentId,
+        chunksEmbedded=embedded,
+        chunksCleared=cleared,
+        embeddingMode=last_mode,
+        reason=last_reason,
+    )
+
+
+class HasEmbeddingsResponse(BaseModel):
+    documentId: int
+    hasEmbeddings: bool
+    chunkCount: int
+
+
+@app.get("/worker/memory/has-embeddings/{document_id}", response_model=HasEmbeddingsResponse)
+def check_has_embeddings(document_id: int) -> HasEmbeddingsResponse:
+    """Check whether a document already has embeddings stored."""
+    import psycopg, os
+    url = os.environ.get("DATABASE_URL")
+    count = 0
+    if url:
+        with psycopg.connect(url) as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT COUNT(*) FROM memory_chunks WHERE document_id = %s AND embedding IS NOT NULL",
+                (document_id,),
+            )
+            row = cur.fetchone()
+            count = int(row[0]) if row else 0
+    return HasEmbeddingsResponse(
+        documentId=document_id,
+        hasEmbeddings=count > 0,
+        chunkCount=count,
     )
 
 

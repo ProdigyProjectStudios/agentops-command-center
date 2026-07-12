@@ -14,9 +14,9 @@ type WorkerProxyError = {
   error: "worker_unreachable";
 };
 
-const PROXY_ERROR_BODY: WorkerProxyError = { error: "worker_unreachable" };
+export const PROXY_ERROR_BODY: WorkerProxyError = { error: "worker_unreachable" };
 
-async function callWorker(
+export async function callWorker(
   path: string,
   init: RequestInit,
 ): Promise<{ status: number; body: unknown }> {

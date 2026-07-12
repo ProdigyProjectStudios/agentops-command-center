@@ -185,6 +185,35 @@ def _snippet(content: str, max_len: int = 220) -> str:
     return s if len(s) <= max_len else s[: max_len - 1] + "…"
 
 
+def clear_document_chunks(document_id: int) -> int:
+    """Delete all memory_chunks for a document. Returns count deleted."""
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            "DELETE FROM memory_chunks WHERE document_id = %s",
+            (document_id,),
+        )
+        deleted = cur.rowcount
+        conn.commit()
+        return deleted
+
+
+def has_embeddings(document_id: int) -> bool:
+    """True if the document has at least one chunk with a non-null embedding."""
+    with _conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT EXISTS(
+                SELECT 1 FROM memory_chunks
+                WHERE document_id = %s AND embedding IS NOT NULL
+                LIMIT 1
+            )
+            """,
+            (document_id,),
+        )
+        row = cur.fetchone()
+        return bool(row and row[0])
+
+
 def hit_to_dict(hit: MemoryHit) -> dict[str, Any]:
     return {
         "chunkId": hit.chunk_id,
