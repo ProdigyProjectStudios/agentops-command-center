@@ -11,8 +11,10 @@ from datetime import datetime
 from sqlalchemy import (
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     func,
@@ -121,4 +123,40 @@ class AgentRun(Base):
         return (
             f"<AgentRun id={self.id} job_id={self.job_id} "
             f"outcome={self.outcome!r}>"
+        )
+
+
+class Assessment(Base):
+    """RAG-backed assessment verdict produced by POST /api-python/assess/{workflow_id}.
+
+    Stores the full LLM verdict (recommendation, confidence, risks,
+    evidence_refs, next_actions) alongside routing metadata so every
+    decision is auditable.  workflow_run_id is a plain integer reference
+    to public.workflow_runs — cross-schema FK is valid in Postgres.
+    approval_request_id is populated when confidence < threshold and the
+    workflow is routed into the human-approval gate.
+    """
+
+    __tablename__ = "assessments"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    workflow_run_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    recommendation: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    risks: Mapped[list] = mapped_column(JSON, nullable=False)
+    evidence_refs: Mapped[list] = mapped_column(JSON, nullable=False)
+    next_actions: Mapped[list] = mapped_column(JSON, nullable=False)
+    retrieval_mode: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    retrieval_query: Mapped[str | None] = mapped_column(Text, nullable=True)
+    routing: Mapped[str] = mapped_column(String(50), nullable=False)
+    approval_request_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Assessment id={self.id} workflow_run_id={self.workflow_run_id} "
+            f"confidence={self.confidence:.2f} routing={self.routing!r}>"
         )

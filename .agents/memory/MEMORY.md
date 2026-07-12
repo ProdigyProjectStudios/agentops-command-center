@@ -1,0 +1,1 @@
+- [Shared pythonlibs anyio conflict](anyio-conflict.md) — two uv projects sharing .pythonlibs will fight over anyio version; pin anyio>=4.0 in both.

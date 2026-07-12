@@ -27,6 +27,28 @@ from pydantic import BaseModel, Field
 PRIORITY_VALUES = Literal["low", "medium", "high", "urgent"]
 RISK_LEVEL_VALUES = Literal["low", "medium", "high", "critical"]
 
+CONFIDENCE_THRESHOLD_DEFAULT: float = 0.6
+
+
+class AssessmentVerdict(BaseModel):
+    """Strict schema the LLM response must satisfy."""
+    recommendation: str = Field(..., min_length=1, description="Narrative recommendation")
+    confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0.0–1.0")
+    risks: list[str] = Field(default_factory=list, description="Identified risk factors")
+    evidence_references: list[str] = Field(default_factory=list, description="Chunk IDs / snippets used as evidence")
+    next_actions: list[str] = Field(default_factory=list, description="Recommended next steps")
+
+
+class AssessmentResponse(BaseModel):
+    assessment_id: int
+    workflow_run_id: int
+    routing: str
+    verdict: AssessmentVerdict
+    retrieval_mode: str
+    retrieval_chunks_used: int
+    approval_request_id: Optional[int]
+    workflow_status: str
+
 
 class IntakeRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500, description="Short title for the operational request")

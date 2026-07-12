@@ -1,9 +1,9 @@
 """
 AgentOps Python/FastAPI service — standalone, additive only.
 
-Exposes three endpoints that read/write the SAME Postgres database
-owned by the existing TypeScript api-server.  No schema changes, no
-new tables, no modification of existing TypeScript code.
+Exposes four endpoints that read/write the SAME Postgres database
+owned by the existing TypeScript api-server.  No schema changes to
+the public schema, no modification of existing TypeScript code.
 
 Endpoints
 ---------
@@ -17,6 +17,12 @@ POST  /api-python/triage/{workflow_id}
     Classify the request using a department/request_type signal and
     advance the workflow to status "triaged".
 
+POST  /api-python/assess/{workflow_id}
+    RAG-backed assessment: retrieve relevant knowledge chunks via the
+    agent-worker's vector/keyword search, call an LLM, validate the
+    response against AssessmentVerdict, persist to agentops_py.assessments,
+    and route low-confidence results into the approval_requests gate.
+
 GET   /api-python/workflow/{workflow_id}
     Return the full current state of a workflow run, including
     associated agent_steps and tool_calls ledger entries.
@@ -24,18 +30,24 @@ GET   /api-python/workflow/{workflow_id}
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Optional
 
+import httpx
+import openai
 import psycopg
 import uvicorn
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
 from database import get_conn
 from models import (
+    CONFIDENCE_THRESHOLD_DEFAULT,
     AgentStepSummary,
+    AssessmentResponse,
+    AssessmentVerdict,
     IntakeRequest,
     IntakeResponse,
     ToolCallSummary,
@@ -54,6 +66,27 @@ app = FastAPI(
     version="1.0.0",
     root_path="/api-python",
 )
+
+# ---------------------------------------------------------------------------
+# OpenAI client — uses Replit AI Integrations proxy when env vars are set,
+# falls back to bare openai SDK (requires OPENAI_API_KEY) otherwise.
+# ---------------------------------------------------------------------------
+
+def _build_openai_client() -> openai.OpenAI:
+    base_url = os.environ.get("AI_INTEGRATIONS_OPENAI_BASE_URL")
+    api_key = os.environ.get("AI_INTEGRATIONS_OPENAI_API_KEY")
+    if base_url and api_key:
+        return openai.OpenAI(api_key=api_key, base_url=base_url)
+    return openai.OpenAI()
+
+
+_openai = _build_openai_client()
+
+# ---------------------------------------------------------------------------
+# Agent-worker base URL — the search endpoint lives there
+# ---------------------------------------------------------------------------
+
+_WORKER_BASE = os.environ.get("WORKER_BASE_URL", "http://localhost:8000")
 
 
 # ---------------------------------------------------------------------------
@@ -340,6 +373,294 @@ def triage(workflow_id: int, body: TriageBody = TriageBody()) -> TriageResponse:
         risk_level=routing["risk_level"],
         reviewer_tag=routing["reviewer_tag"],
         routing_rationale=routing["rationale"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /assess/{workflow_id}
+# ---------------------------------------------------------------------------
+
+_ASSESS_SYSTEM_PROMPT = """\
+You are an operational-risk assessor for a private-equity portfolio management platform.
+You will receive:
+  - A workflow request (title, description, department, priority)
+  - Relevant knowledge-base chunks retrieved via vector/keyword search
+
+Your job is to produce a structured JSON assessment object with EXACTLY these fields:
+  "recommendation"     : string — a clear, actionable recommendation (1-3 sentences)
+  "confidence"         : float  — your confidence in this recommendation, 0.0 to 1.0
+                                  Use lower values when evidence is thin, risks are high,
+                                  or the request is ambiguous. Use higher values when the
+                                  request is straightforward and well-supported by policy.
+  "risks"              : array of strings — specific risk factors identified
+  "evidence_references": array of strings — exact quotes or chunk identifiers from the
+                                  knowledge base that informed your assessment
+  "next_actions"       : array of strings — concrete next steps for the operator
+
+Respond with ONLY a valid JSON object matching the schema above. No prose outside the JSON.
+"""
+
+
+def _build_assess_prompt(
+    title: str,
+    description: str,
+    department: str,
+    priority: str,
+    risk_level: str,
+    chunks: list[dict[str, Any]],
+) -> str:
+    lines: list[str] = [
+        "## Workflow Request",
+        f"Title       : {title}",
+        f"Description : {description}",
+        f"Department  : {department}",
+        f"Priority    : {priority}",
+        f"Risk level  : {risk_level}",
+        "",
+        "## Retrieved Knowledge-Base Chunks",
+    ]
+    if chunks:
+        for i, c in enumerate(chunks, 1):
+            lines.append(
+                f"[chunk {i} | doc={c.get('documentId')} score={c.get('score', 0):.3f}]"
+                f" {c.get('snippet', '')}"
+            )
+    else:
+        lines.append("(no relevant chunks found — assess based on general policy)")
+    lines.append("")
+    lines.append("Produce the JSON assessment now.")
+    return "\n".join(lines)
+
+
+@app.post("/assess/{workflow_id}", response_model=AssessmentResponse, tags=["pipeline"])
+def assess(
+    workflow_id: int,
+    confidence_threshold: float = Query(
+        default=CONFIDENCE_THRESHOLD_DEFAULT,
+        ge=0.0,
+        le=1.0,
+        description="Confidence below this value routes to human approval gate",
+    ),
+) -> AssessmentResponse:
+    """
+    RAG-backed assessment for a workflow run.
+
+    Pipeline
+    --------
+    1. Load the workflow_run + operational_request from Postgres.
+    2. Retrieve relevant knowledge chunks by calling the agent-worker's
+       POST /worker/memory/search-spike (reuses the existing retrieval code).
+    3. Build a structured prompt and call the LLM (gpt-5.4 via Replit proxy).
+    4. Validate the response against AssessmentVerdict (strict Pydantic schema).
+    5. Persist the verdict to agentops_py.assessments.
+    6. If confidence < confidence_threshold:
+         - Write an approval_requests row (status=pending).
+         - Advance workflow_runs to approval_pending.
+       Else:
+         - Advance workflow_runs to finalized with final_recommendation.
+
+    The workflow must be in a non-terminal, non-submitted state (e.g. triaged,
+    legal_review, finance_review).  Re-assessment after approval is allowed.
+    """
+    # ------------------------------------------------------------------
+    # 1. Load workflow
+    # ------------------------------------------------------------------
+    with get_conn() as conn, conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT wr.id, wr.status, wr.current_stage, wr.risk_level,
+                   or2.title, or2.description, or2.department, or2.priority
+            FROM workflow_runs wr
+            JOIN operational_requests or2 ON or2.id = wr.request_id
+            WHERE wr.id = %s
+            """,
+            (workflow_id,),
+        )
+        row = cur.fetchone()
+
+    if row is None:
+        raise HTTPException(status_code=404, detail=f"workflow_run {workflow_id} not found")
+
+    _wf_id, wf_status, wf_stage, wf_risk, req_title, req_desc, req_dept, req_priority = row
+
+    TERMINAL = {"approved", "rejected", "finalized"}
+    NEEDS_TRIAGE = {"submitted"}
+    if wf_status in NEEDS_TRIAGE:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"workflow_run {workflow_id} is in status '{wf_status}'. "
+                "Run POST /triage/{workflow_id} first."
+            ),
+        )
+
+    # ------------------------------------------------------------------
+    # 2. Retrieve relevant chunks via agent-worker search endpoint
+    # ------------------------------------------------------------------
+    retrieval_query = f"{req_title}. {req_desc}"
+    try:
+        search_resp = httpx.post(
+            f"{_WORKER_BASE}/worker/memory/search-spike",
+            json={"query": retrieval_query, "limit": 6},
+            timeout=15.0,
+        )
+        search_resp.raise_for_status()
+        search_data = search_resp.json()
+        chunks: list[dict[str, Any]] = search_data.get("results", [])
+        retrieval_mode: str = search_data.get("mode", "unknown")
+    except Exception as exc:
+        # Retrieval failure is non-fatal: assess with empty context
+        chunks = []
+        retrieval_mode = f"retrieval_failed:{type(exc).__name__}"
+
+    # ------------------------------------------------------------------
+    # 3. Call LLM
+    # ------------------------------------------------------------------
+    user_prompt = _build_assess_prompt(
+        title=req_title,
+        description=req_desc,
+        department=req_dept,
+        priority=req_priority,
+        risk_level=wf_risk,
+        chunks=chunks,
+    )
+
+    try:
+        completion = _openai.chat.completions.create(
+            model="gpt-5.4",
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": _ASSESS_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            max_completion_tokens=1024,
+        )
+    except openai.OpenAIError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM call failed: {type(exc).__name__}: {exc}",
+        )
+
+    raw_json = completion.choices[0].message.content or "{}"
+
+    # ------------------------------------------------------------------
+    # 4. Validate strict Pydantic schema
+    # ------------------------------------------------------------------
+    try:
+        parsed_dict = json.loads(raw_json)
+        verdict = AssessmentVerdict.model_validate(parsed_dict)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"LLM response failed schema validation: {exc}. Raw: {raw_json[:400]}",
+        )
+
+    # ------------------------------------------------------------------
+    # 5 + 6. Persist verdict, route workflow
+    # ------------------------------------------------------------------
+    routing = "approval_gate" if verdict.confidence < confidence_threshold else "auto_complete"
+    approval_request_id: Optional[int] = None
+
+    with get_conn() as conn, conn.cursor() as cur:
+        # 5a. Persist to agentops_py.assessments
+        cur.execute(
+            """
+            INSERT INTO agentops_py.assessments
+                (workflow_run_id, recommendation, confidence, risks,
+                 evidence_refs, next_actions, retrieval_mode, retrieval_query, routing)
+            VALUES (%s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb, %s, %s, %s)
+            RETURNING id
+            """,
+            (
+                workflow_id,
+                verdict.recommendation,
+                verdict.confidence,
+                json.dumps(verdict.risks),
+                json.dumps(verdict.evidence_references),
+                json.dumps(verdict.next_actions),
+                retrieval_mode,
+                retrieval_query[:1000],
+                routing,
+            ),
+        )
+        assessment_row = cur.fetchone()
+        if assessment_row is None:
+            raise HTTPException(status_code=500, detail="Failed to insert assessment")
+        assessment_id: int = assessment_row[0]
+
+        if routing == "approval_gate":
+            # 5b. Create approval_requests row
+            cur.execute(
+                """
+                INSERT INTO approval_requests
+                    (workflow_run_id, status, risk_level, summary, recommendation)
+                VALUES (%s, 'pending', %s, %s, %s)
+                RETURNING id
+                """,
+                (
+                    workflow_id,
+                    wf_risk,
+                    f"RAG assessment: confidence={verdict.confidence:.2f} (below threshold {confidence_threshold:.2f}). "
+                    f"Risks: {'; '.join(verdict.risks[:3]) if verdict.risks else 'none identified'}",
+                    verdict.recommendation,
+                ),
+            )
+            ar_row = cur.fetchone()
+            if ar_row:
+                approval_request_id = ar_row[0]
+
+            # Advance workflow to approval_pending
+            cur.execute(
+                """
+                UPDATE workflow_runs
+                SET status = 'approval_pending', current_stage = 'approval_pending'
+                WHERE id = %s
+                """,
+                (workflow_id,),
+            )
+            new_wf_status = "approval_pending"
+
+        else:
+            # 5c. Auto-complete: finalize the workflow
+            cur.execute(
+                """
+                UPDATE workflow_runs
+                SET status               = 'finalized',
+                    current_stage        = 'finalized',
+                    final_recommendation = %s,
+                    next_actions         = %s::jsonb,
+                    summary              = %s,
+                    completed_at         = %s
+                WHERE id = %s
+                """,
+                (
+                    verdict.recommendation,
+                    json.dumps(verdict.next_actions),
+                    f"Auto-completed by assessment. Confidence={verdict.confidence:.2f}.",
+                    datetime.now(tz=timezone.utc),
+                    workflow_id,
+                ),
+            )
+            new_wf_status = "finalized"
+
+        # 5d. Update approval_request_id on the assessment row
+        if approval_request_id:
+            cur.execute(
+                "UPDATE agentops_py.assessments SET approval_request_id = %s WHERE id = %s",
+                (approval_request_id, assessment_id),
+            )
+
+        conn.commit()
+
+    return AssessmentResponse(
+        assessment_id=assessment_id,
+        workflow_run_id=workflow_id,
+        routing=routing,
+        verdict=verdict,
+        retrieval_mode=retrieval_mode,
+        retrieval_chunks_used=len(chunks),
+        approval_request_id=approval_request_id,
+        workflow_status=new_wf_status,
     )
 
 
