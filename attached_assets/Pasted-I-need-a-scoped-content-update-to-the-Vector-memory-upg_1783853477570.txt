@@ -1,0 +1,12 @@
+I need a scoped content update to the "Vector memory upgrade" section only — do not touch any other section of this page, including the hero, the TypeScript/Python architecture framing, the agent graph, or anything about the 7-node orchestration. This is a copy update reflecting real, verified work, not a rewrite.
+
+Replace the current "Phase 1C · shipped" callout box entirely with an updated status reflecting what's now true and verified:
+
+- The pipeline is no longer partial. Chunking, embedding, and pgvector cosine-similarity storage and retrieval are now wired end-to-end: a real "Generate embeddings" action on each document triggers real chunking and storage into memory_chunks (has_embedding: true), and the Knowledge page's search now calls the real backend route, running an actual pgvector <=> cosine-similarity query against the live database — not the old client-side keyword simulation.
+- State plainly that this was tested end-to-end against the live database, with real similarity scores returned and correctly ranked (e.g., a query for budget-related content correctly surfaces the budget-relevant document highest).
+- Keep the existing honest note about demo/fallback mode: without a live OpenAI API key, the system uses a deterministic SHA-256-seeded pseudo-embedding so search behavior stays reproducible; with a real key, it calls text-embedding-3-small directly — same code path, no code change required to go live.
+- Remove the old line "The Node engine still uses keyword search today; this is a foundation, not a swap-in" — this is no longer accurate. The Node engine's Knowledge page now performs real vector search, not keyword search.
+
+Tone: confident and specific, describing a real, tested capability — not speculative or "planned" language. But do not claim this means the full orchestration engine is production Python, and do not touch any language elsewhere on the page describing the current orchestrator as TypeScript with a Python/LangGraph extension path — that framing stays exactly as is.
+
+Show me the updated section text before considering this done.
