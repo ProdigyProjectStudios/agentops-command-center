@@ -13,6 +13,7 @@
     "check": "pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
+    "@replit/connectors-sdk": "^0.4.1",
     "@workspace/api-zod": "workspace:*",
     "@workspace/db": "workspace:*",
     "cookie-parser": "^1.4.7",
