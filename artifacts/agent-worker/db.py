@@ -21,7 +21,6 @@ Usage
 
 from __future__ import annotations
 
-import logging
 import os
 import urllib.parse
 from contextlib import asynccontextmanager
@@ -35,7 +34,9 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-logger = logging.getLogger(__name__)
+from log import get_logger
+
+logger = get_logger(__name__)
 
 _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
@@ -169,7 +170,7 @@ async def verify_schema() -> dict[str, str]:
             "owner": row[1],
         }
     except Exception as exc:
-        logger.error("agentops_py schema verification failed: %s", exc)
+        logger.error("schema verification failed", extra={"error": str(exc)})
         return {
             "status": "error",
             "schema_name": "",
@@ -204,7 +205,7 @@ async def check_connection() -> dict[str, str]:
             "pg_version": pg_version,
         }
     except Exception as exc:
-        logger.error("agentops_py async DB check failed: %s", exc)
+        logger.error("async db check failed", extra={"error": str(exc)})
         return {
             "status": "error",
             "current_schema": "unknown",

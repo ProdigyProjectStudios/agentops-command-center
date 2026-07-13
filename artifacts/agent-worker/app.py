@@ -14,13 +14,17 @@ extension path.
 from __future__ import annotations
 
 import asyncio
-import logging
+import json
 import os
 import sys
+import traceback
 from typing import Any, TypedDict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Query, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+
+from log import get_logger, setup_logging
 
 from db import check_connection, verify_schema
 from embedding import embed_text, EMBEDDING_DIMENSIONS
@@ -199,7 +203,8 @@ class HealthResponse(BaseModel):
     langgraph_error: str | None = None
 
 
-_logger = logging.getLogger(__name__)
+setup_logging()
+_log = get_logger("agent-worker")
 
 app = FastAPI(title="AgentOps LangGraph Worker (spike)", version="0.1.0")
 
@@ -210,47 +215,28 @@ async def _startup_db_check() -> None:
     # 1 — Verify the schema exists in information_schema.schemata
     schema_result = await verify_schema()
     if schema_result["status"] == "ok":
-        _logger.info(
-            "agentops_py schema verified | schema_name=%s | catalog=%s",
-            schema_result["schema_name"],
-            schema_result["owner"],
-        )
-        print(
-            f"[agentops_py] schema verified | schema_name={schema_result['schema_name']} | catalog={schema_result['owner']}",
-            flush=True,
+        _log.info(
+            "schema verified",
+            extra={"schema_name": schema_result["schema_name"], "catalog": schema_result["owner"]},
         )
     elif schema_result["status"] == "missing":
-        _logger.error("agentops_py schema NOT FOUND in information_schema.schemata")
-        print("[agentops_py] schema NOT FOUND in information_schema.schemata", flush=True)
+        _log.error("schema NOT FOUND in information_schema.schemata")
     else:
-        _logger.error("agentops_py schema check error: %s", schema_result.get("error"))
-        print(f"[agentops_py] schema check error: {schema_result.get('error')}", flush=True)
+        _log.error("schema check error", extra={"error": schema_result.get("error")})
 
     # 2 — Confirm search_path puts agentops_py first (current_schema check)
     conn_result = await check_connection()
     if conn_result["status"] == "ok":
-        _logger.info(
-            "agentops_py async DB ready | current_schema=%s | %s",
-            conn_result["current_schema"],
-            conn_result["pg_version"],
-        )
-        print(
-            f"[agentops_py] async DB ready | current_schema={conn_result['current_schema']} | {conn_result['pg_version']}",
-            flush=True,
+        _log.info(
+            "async db ready",
+            extra={"current_schema": conn_result["current_schema"], "pg_version": conn_result["pg_version"]},
         )
     else:
-        _logger.error(
-            "agentops_py async DB check failed: %s",
-            conn_result.get("error", "unknown"),
-        )
-        print(
-            f"[agentops_py] async DB check FAILED: {conn_result.get('error', 'unknown')}",
-            flush=True,
-        )
+        _log.error("async db check failed", extra={"error": conn_result.get("error", "unknown")})
 
     # 3 — Start the durable job worker loop as a background task
     start_worker_background()
-    print("[agentops_py] durable worker loop started", flush=True)
+    _log.info("durable worker loop started")
 
 
 @app.get("/worker/health", response_model=HealthResponse)
@@ -575,6 +561,109 @@ async def list_jobs(limit: int = 50) -> JobsResponse:
         ]
 
     return JobsResponse(jobs=summaries, total=len(summaries))
+
+
+# ---------------------------------------------------------------------------
+# Centralized exception handler
+# ---------------------------------------------------------------------------
+
+async def _write_error_event(
+    endpoint: str,
+    error_type: str,
+    error_message: str,
+    stack_trace: str,
+    context: dict,
+) -> None:
+    """Write to agentops_py.error_events. Never raises."""
+    try:
+        from sqlalchemy import select as _select
+        from models import ErrorEvent
+        async with __import__("db").get_async_session() as session:
+            ev = ErrorEvent(
+                service="agent-worker",
+                endpoint=endpoint,
+                error_type=error_type,
+                error_message=error_message[:4000],
+                stack_trace=stack_trace[:8000],
+                context=context,
+            )
+            session.add(ev)
+            await session.commit()
+    except Exception as db_err:
+        _log.error("failed to persist error_event", extra={"db_error": str(db_err)})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(req: Request, exc: Exception) -> JSONResponse:
+    from fastapi import HTTPException
+    if isinstance(exc, HTTPException):
+        raise exc
+    tb = traceback.format_exc()
+    error_type = type(exc).__name__
+    error_msg = str(exc)
+    context: dict = {
+        "method": req.method,
+        "path": req.url.path,
+        "path_params": dict(req.path_params),
+    }
+    await _write_error_event(
+        endpoint=req.url.path,
+        error_type=error_type,
+        error_message=error_msg,
+        stack_trace=tb,
+        context=context,
+    )
+    _log.error(
+        "unhandled exception",
+        extra={"endpoint": req.url.path, "error_type": error_type, "error": error_msg[:200]},
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "detail": error_type},
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /worker/errors — in-Postgres error monitoring dashboard
+# ---------------------------------------------------------------------------
+
+@app.get("/worker/errors", tags=["ops"])
+async def get_worker_errors(limit: int = Query(default=20, ge=1, le=100)) -> list[dict]:
+    """Return recent error_events for agent-worker, newest first."""
+    from sqlalchemy import select
+    from models import ErrorEvent
+    async with __import__("db").get_async_session() as session:
+        rows = (
+            await session.execute(
+                select(ErrorEvent)
+                .where(ErrorEvent.service == "agent-worker")
+                .order_by(ErrorEvent.created_at.desc())
+                .limit(limit)
+            )
+        ).scalars().all()
+    return [
+        {
+            "id": e.id,
+            "service": e.service,
+            "endpoint": e.endpoint,
+            "error_type": e.error_type,
+            "error_message": e.error_message,
+            "stack_trace": e.stack_trace,
+            "context": e.context,
+            "created_at": e.created_at.isoformat() if e.created_at else None,
+        }
+        for e in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
+# GET /worker/test-error — deliberate trigger for end-to-end proof
+# ---------------------------------------------------------------------------
+
+@app.get("/worker/test-error", tags=["ops"])
+async def trigger_test_error() -> None:
+    """Raise a RuntimeError to prove exception handler → error_events pipeline."""
+    raise RuntimeError("deliberate test error — exception handler + error_events proof")
 
 
 if __name__ == "__main__":

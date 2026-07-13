@@ -19,6 +19,7 @@ from sqlalchemy import (
     Text,
     func,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 SCHEMA = "agentops_py"
@@ -159,4 +160,35 @@ class Assessment(Base):
         return (
             f"<Assessment id={self.id} workflow_run_id={self.workflow_run_id} "
             f"confidence={self.confidence:.2f} routing={self.routing!r}>"
+        )
+
+
+class ErrorEvent(Base):
+    """Unhandled exception captured by the centralized exception handler.
+
+    Written by both api-python (service='api-python') and
+    agent-worker (service='agent-worker') so a single table
+    covers the whole Python tier.  The context JSONB column
+    carries per-request fields (method, path_params, job_id, etc.)
+    that would otherwise be lost.
+    """
+
+    __tablename__ = "error_events"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    service: Mapped[str] = mapped_column(String(100), nullable=False)
+    endpoint: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    error_type: Mapped[str] = mapped_column(String(255), nullable=False)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False)
+    stack_trace: Mapped[str | None] = mapped_column(Text, nullable=True)
+    context: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<ErrorEvent id={self.id} service={self.service!r} "
+            f"error_type={self.error_type!r}>"
         )

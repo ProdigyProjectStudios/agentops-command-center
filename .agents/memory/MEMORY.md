@@ -3,3 +3,5 @@
 - [Docker uv pattern](docker-uv-pattern.md) — slim Dockerfile: COPY uv from ghcr.io/astral-sh/uv:latest, then uv sync --frozen --no-dev --no-install-project, then COPY source.
 - [api-python proxy routing](api-python-proxy.md) — both /healthz and /api-python/healthz reach port 8008; Replit strips prefix for the app but direct port calls also work with full path.
 - [pydantic BaseModel in main.py](pydantic-in-main.md) — models.py owns BaseModel; adding new Pydantic classes directly to main.py requires explicit `from pydantic import BaseModel` import.
+- [Structured JSON logging pattern](json-logging.md) — both Python services share a log.py JSON formatter; application log calls produce structured JSON but uvicorn's own startup lines remain in default format.
+- [error_events table and exception handlers](error-events.md) — agentops_py.error_events (migration b9e2f4a1c5d8, depends on 8b8b949048ec); api-python uses psycopg sync _write_error_event(), agent-worker uses SQLAlchemy async; catch-all re-raises HTTPException to preserve 4xx behaviour.

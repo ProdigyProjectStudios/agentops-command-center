@@ -31,7 +31,9 @@ GET   /api-python/workflow/{workflow_id}
 from __future__ import annotations
 
 import json
+import logging
 import os
+import traceback
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -41,9 +43,11 @@ import psycopg
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from psycopg.rows import dict_row
 from pydantic import BaseModel
 
 from database import get_conn
+from log import get_logger, setup_logging
 from models import (
     CONFIDENCE_THRESHOLD_DEFAULT,
     AgentStepSummary,
@@ -56,6 +60,9 @@ from models import (
     TriageResponse,
     WorkflowStateResponse,
 )
+
+setup_logging()
+log = get_logger("api-python")
 
 app = FastAPI(
     title="AgentOps Python API",
@@ -91,6 +98,39 @@ _WORKER_BASE = os.environ.get("WORKER_BASE_URL", "http://localhost:8000")
 
 
 # ---------------------------------------------------------------------------
+# Error-event persistence helper
+# ---------------------------------------------------------------------------
+
+def _write_error_event(
+    endpoint: str,
+    error_type: str,
+    error_message: str,
+    stack_trace: str,
+    context: dict,
+) -> None:
+    """Insert a row into agentops_py.error_events. Never raises."""
+    try:
+        with get_conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                INSERT INTO agentops_py.error_events
+                    (service, endpoint, error_type, error_message, stack_trace, context)
+                VALUES ('api-python', %s, %s, %s, %s, %s::jsonb)
+                """,
+                (
+                    endpoint,
+                    error_type,
+                    error_message[:4000],
+                    stack_trace[:8000],
+                    json.dumps(context),
+                ),
+            )
+            conn.commit()
+    except Exception as db_err:
+        log.error("failed to persist error_event", extra={"db_error": str(db_err)})
+
+
+# ---------------------------------------------------------------------------
 # Global error handlers — convert psycopg errors to clean 4xx/5xx responses
 # ---------------------------------------------------------------------------
 
@@ -111,10 +151,59 @@ async def unique_violation_handler(_req: Request, exc: psycopg.errors.UniqueViol
 
 
 @app.exception_handler(psycopg.Error)
-async def psycopg_error_handler(_req: Request, exc: psycopg.Error) -> JSONResponse:
+async def psycopg_error_handler(req: Request, exc: psycopg.Error) -> JSONResponse:
+    tb = traceback.format_exc()
+    _write_error_event(
+        endpoint=req.url.path,
+        error_type=type(exc).__name__,
+        error_message=str(exc).split("\n")[0],
+        stack_trace=tb,
+        context={"method": req.method, "path": req.url.path},
+    )
+    log.error(
+        "database error",
+        extra={
+            "endpoint": req.url.path,
+            "error_type": type(exc).__name__,
+            "error": str(exc).split("\n")[0],
+        },
+    )
     return JSONResponse(
         status_code=500,
         content={"error": "database_error", "detail": str(exc).split("\n")[0]},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(req: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, HTTPException):
+        raise exc
+    tb = traceback.format_exc()
+    error_type = type(exc).__name__
+    error_msg = str(exc)
+    context: dict = {
+        "method": req.method,
+        "path": req.url.path,
+        "path_params": dict(req.path_params),
+    }
+    _write_error_event(
+        endpoint=req.url.path,
+        error_type=error_type,
+        error_message=error_msg,
+        stack_trace=tb,
+        context=context,
+    )
+    log.error(
+        "unhandled exception",
+        extra={
+            "endpoint": req.url.path,
+            "error_type": error_type,
+            "error": error_msg[:200],
+        },
+    )
+    return JSONResponse(
+        status_code=500,
+        content={"error": "internal_server_error", "detail": error_type},
     )
 
 
@@ -206,6 +295,15 @@ def intake(body: IntakeRequest) -> IntakeResponse:
 
         conn.commit()
 
+    log.info(
+        "intake accepted",
+        extra={
+            "workflow_run_id": workflow_run_id,
+            "portfolio_company_id": body.portfolio_company_id,
+            "department": body.department,
+            "priority": body.priority,
+        },
+    )
     return IntakeResponse(
         workflow_run_id=workflow_run_id,
         operational_request_id=operational_request_id,
@@ -367,6 +465,15 @@ def triage(workflow_id: int, body: TriageBody = TriageBody()) -> TriageResponse:
         )
         conn.commit()
 
+    log.info(
+        "triage complete",
+        extra={
+            "workflow_run_id": workflow_id,
+            "risk_level": routing["risk_level"],
+            "reviewer_tag": routing["reviewer_tag"],
+            "signal": signal,
+        },
+    )
     return TriageResponse(
         workflow_run_id=workflow_id,
         status="triaged",
@@ -653,6 +760,17 @@ def assess(
 
         conn.commit()
 
+    log.info(
+        "assessment stored",
+        extra={
+            "workflow_run_id": workflow_id,
+            "assessment_id": assessment_id,
+            "confidence": verdict.confidence,
+            "routing": routing,
+            "retrieval_mode": retrieval_mode,
+            "chunks_used": len(chunks),
+        },
+    )
     return AssessmentResponse(
         assessment_id=assessment_id,
         workflow_run_id=workflow_id,
@@ -954,6 +1072,40 @@ def get_pipeline_state(workflow_id: int) -> PipelineStateResponse:
         approval_request=approval_request,
         jobs=jobs,
     )
+
+
+# ---------------------------------------------------------------------------
+# GET /errors — in-Postgres error monitoring dashboard
+# ---------------------------------------------------------------------------
+
+@app.get("/errors", tags=["ops"])
+def get_errors(limit: int = Query(default=20, ge=1, le=100)) -> list[dict]:
+    """Return recent error_events for this service, newest first."""
+    with get_conn() as conn:
+        with conn.cursor(row_factory=dict_row) as cur:
+            cur.execute(
+                """
+                SELECT id, service, endpoint, error_type, error_message,
+                       stack_trace, context, created_at
+                FROM agentops_py.error_events
+                WHERE service = 'api-python'
+                ORDER BY created_at DESC
+                LIMIT %s
+                """,
+                (limit,),
+            )
+            rows = cur.fetchall()
+    return [dict(r) for r in rows]
+
+
+# ---------------------------------------------------------------------------
+# GET /test-error — deliberate trigger for end-to-end proof
+# ---------------------------------------------------------------------------
+
+@app.get("/test-error", tags=["ops"])
+def trigger_test_error() -> None:
+    """Raise a RuntimeError to prove exception handler → error_events pipeline."""
+    raise RuntimeError("deliberate test error — exception handler + error_events proof")
 
 
 # ---------------------------------------------------------------------------

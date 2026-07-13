@@ -27,7 +27,6 @@ On failure:
 from __future__ import annotations
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable
@@ -36,9 +35,10 @@ from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db import get_async_session
+from log import get_logger
 from models import AgentRun, Job
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -191,17 +191,26 @@ async def fail_job(job_id: int, run_id: int, error: str) -> None:
                 if job.attempt_count >= MAX_ATTEMPTS:
                     job.status = "failed"
                     logger.warning(
-                        "job %d permanently failed after %d attempt(s): %s",
-                        job_id, job.attempt_count, error[:200],
+                        "job permanently failed",
+                        extra={
+                            "job_id": job_id,
+                            "attempt_count": job.attempt_count,
+                            "error": error[:200],
+                        },
                     )
                 else:
                     backoff_secs = BASE_BACKOFF_SECS ** job.attempt_count
                     job.status = "queued"
                     job.next_retry_at = now + timedelta(seconds=backoff_secs)
                     logger.info(
-                        "job %d attempt %d/%d failed, retrying in %ds: %s",
-                        job_id, job.attempt_count, MAX_ATTEMPTS - 1,
-                        backoff_secs, error[:200],
+                        "job failed, retrying",
+                        extra={
+                            "job_id": job_id,
+                            "attempt": job.attempt_count,
+                            "max_attempts": MAX_ATTEMPTS - 1,
+                            "backoff_secs": backoff_secs,
+                            "error": error[:200],
+                        },
                     )
             if run:
                 run.outcome = "failure"
@@ -222,7 +231,10 @@ async def poll_once() -> bool:
     handler = get_handler(claimed.workflow, claimed.stage)
     if handler is None:
         err = f"No handler registered for {claimed.workflow}:{claimed.stage}"
-        logger.error(err)
+        logger.error(
+            "no handler for job",
+            extra={"job_id": claimed.job_id, "workflow": claimed.workflow, "stage": claimed.stage},
+        )
         await fail_job(claimed.job_id, claimed.run_id, err)
         return True
 
@@ -230,8 +242,13 @@ async def poll_once() -> bool:
         result = await handler(claimed)
         await complete_job(claimed.job_id, claimed.run_id, result)
         logger.info(
-            "job %d (%s:%s) completed: %s",
-            claimed.job_id, claimed.workflow, claimed.stage, result[:200],
+            "job completed",
+            extra={
+                "job_id": claimed.job_id,
+                "workflow": claimed.workflow,
+                "stage": claimed.stage,
+                "result": result[:200],
+            },
         )
     except Exception as exc:
         await fail_job(claimed.job_id, claimed.run_id, str(exc))
@@ -245,20 +262,24 @@ _worker_task: asyncio.Task | None = None
 async def run_worker_loop() -> None:
     """Continuously poll agentops_py.jobs.  Cancel to stop gracefully."""
     logger.info(
-        "Worker loop started (max_attempts=%d, base_backoff=%ds, poll_interval=%.1fs)",
-        MAX_ATTEMPTS, BASE_BACKOFF_SECS, POLL_INTERVAL_SECS,
+        "worker loop started",
+        extra={
+            "max_attempts": MAX_ATTEMPTS,
+            "base_backoff_secs": BASE_BACKOFF_SECS,
+            "poll_interval_secs": POLL_INTERVAL_SECS,
+        },
     )
     try:
         while True:
             try:
                 processed = await poll_once()
             except Exception as exc:
-                logger.error("Unexpected error in poll_once: %s", exc, exc_info=True)
+                logger.error("unexpected error in poll_once", extra={"error": str(exc)}, exc_info=True)
                 processed = False
             if not processed:
                 await asyncio.sleep(POLL_INTERVAL_SECS)
     except asyncio.CancelledError:
-        logger.info("Worker loop cancelled — stopping")
+        logger.info("worker loop cancelled")
         raise
 
 
