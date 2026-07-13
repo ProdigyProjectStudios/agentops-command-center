@@ -8,10 +8,15 @@ def _client() -> Client:
     return Client(api_key, api_key_secret, account_sid)
 
 def get_account_info() -> dict:
-    """Return basic account info — used to verify credentials work."""
+    """Verify credentials work by listing recent messages (API Keys cannot fetch account details)."""
     c = _client()
-    account = c.api.accounts(os.environ["TWILIO_ACCOUNT_SID"]).fetch()
-    return {"sid": account.sid, "friendly_name": account.friendly_name, "status": account.status}
+    msgs = c.messages.list(limit=1)
+    return {
+        "account_sid": os.environ["TWILIO_ACCOUNT_SID"],
+        "phone_number": os.environ["TWILIO_PHONE_NUMBER"],
+        "credentials": "ok",
+        "recent_message_count": len(msgs),
+    }
 
 def send_sms(to: str, body: str, from_: str | None = None) -> dict:
     """
