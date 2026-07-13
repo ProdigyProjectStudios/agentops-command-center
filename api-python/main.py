@@ -41,6 +41,7 @@ import psycopg
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 
 from database import get_conn
 from models import (
@@ -776,6 +777,182 @@ def get_workflow(workflow_id: int) -> WorkflowStateResponse:
         completed_at=completed_at,
         agent_steps=agent_steps,
         tool_calls=tool_calls,
+    )
+
+
+# ---------------------------------------------------------------------------
+# GET /pipeline-state/{workflow_id}
+# ---------------------------------------------------------------------------
+
+class AssessmentSummary(BaseModel):
+    id: int
+    confidence: float
+    routing: str
+    retrieval_mode: str
+    retrieval_chunks_used: int
+    evidence_refs: list[str]
+    next_actions: list[str]
+    risks: list[str]
+    recommendation: str
+    created_at: datetime
+
+
+class ApprovalSummary(BaseModel):
+    id: int
+    status: str
+    risk_level: str
+    summary: str
+    recommendation: str
+    decided_by: Optional[str]
+    decision_note: Optional[str]
+    decided_at: Optional[datetime]
+    created_at: datetime
+
+
+class JobSummary(BaseModel):
+    id: int
+    workflow: str
+    stage: str
+    status: str
+    attempt_count: int
+    last_error: Optional[str]
+    next_retry_at: Optional[datetime]
+    created_at: datetime
+
+
+class PipelineStateResponse(BaseModel):
+    workflow_run_id: int
+    workflow_status: str
+    assessment_count: int
+    latest_assessment: Optional[AssessmentSummary]
+    approval_request: Optional[ApprovalSummary]
+    jobs: list[JobSummary]
+
+
+@app.get("/pipeline-state/{workflow_id}", response_model=PipelineStateResponse, tags=["query"])
+def get_pipeline_state(workflow_id: int) -> PipelineStateResponse:
+    """
+    Consolidated RAG pipeline state for a workflow run.
+
+    Returns in a single call:
+    - workflow status
+    - number of assessments ever run for this workflow (attempt count)
+    - the latest assessment verdict: confidence, routing, evidence_refs,
+      risks, next_actions, recommendation
+    - approval request record (status, risk, decided_by, etc.) if one exists
+    - any background jobs from agentops_py.jobs whose workflow field matches
+      this workflow_run_id or the pattern "wf:<id>"
+    """
+    with get_conn() as conn, conn.cursor() as cur:
+        # Workflow status
+        cur.execute("SELECT status FROM workflow_runs WHERE id = %s", (workflow_id,))
+        wf_row = cur.fetchone()
+        if wf_row is None:
+            raise HTTPException(status_code=404, detail=f"workflow_run {workflow_id} not found")
+        workflow_status: str = wf_row[0]
+
+        # Latest assessment
+        cur.execute(
+            """
+            SELECT id, confidence, routing, retrieval_mode,
+                   COALESCE(retrieval_query, '')::text,
+                   evidence_refs::text, next_actions::text, risks::text,
+                   recommendation, created_at
+            FROM agentops_py.assessments
+            WHERE workflow_run_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (workflow_id,),
+        )
+        a_row = cur.fetchone()
+
+        # Total assessment count for this workflow
+        cur.execute(
+            "SELECT COUNT(*) FROM agentops_py.assessments WHERE workflow_run_id = %s",
+            (workflow_id,),
+        )
+        assessment_count: int = cur.fetchone()[0]  # type: ignore[index]
+
+        latest_assessment: Optional[AssessmentSummary] = None
+        if a_row:
+            evidence = json.loads(a_row[5]) if isinstance(a_row[5], str) else (a_row[5] or [])
+            next_actions = json.loads(a_row[6]) if isinstance(a_row[6], str) else (a_row[6] or [])
+            risks = json.loads(a_row[7]) if isinstance(a_row[7], str) else (a_row[7] or [])
+            # retrieval_query holds the original query; estimate chunks from evidence length
+            latest_assessment = AssessmentSummary(
+                id=a_row[0],
+                confidence=a_row[1],
+                routing=a_row[2],
+                retrieval_mode=a_row[3],
+                retrieval_chunks_used=len(evidence),
+                evidence_refs=evidence,
+                next_actions=next_actions,
+                risks=risks,
+                recommendation=a_row[8],
+                created_at=a_row[9],
+            )
+
+        # Approval request (most recent)
+        cur.execute(
+            """
+            SELECT id, status, risk_level, summary, recommendation,
+                   decided_by, decision_note, decided_at, created_at
+            FROM approval_requests
+            WHERE workflow_run_id = %s
+            ORDER BY created_at DESC
+            LIMIT 1
+            """,
+            (workflow_id,),
+        )
+        ar_row = cur.fetchone()
+        approval_request: Optional[ApprovalSummary] = None
+        if ar_row:
+            approval_request = ApprovalSummary(
+                id=ar_row[0],
+                status=ar_row[1],
+                risk_level=ar_row[2],
+                summary=ar_row[3],
+                recommendation=ar_row[4],
+                decided_by=ar_row[5],
+                decision_note=ar_row[6],
+                decided_at=ar_row[7],
+                created_at=ar_row[8],
+            )
+
+        # Background jobs associated with this workflow run
+        cur.execute(
+            """
+            SELECT id, workflow, stage, status, attempt_count,
+                   last_error, next_retry_at, created_at
+            FROM agentops_py.jobs
+            WHERE workflow = %s OR workflow = %s
+            ORDER BY created_at DESC
+            LIMIT 10
+            """,
+            (str(workflow_id), f"wf:{workflow_id}"),
+        )
+        jobs = [
+            JobSummary(
+                id=r[0],
+                workflow=r[1],
+                stage=r[2],
+                status=r[3],
+                attempt_count=r[4],
+                last_error=r[5],
+                next_retry_at=r[6],
+                created_at=r[7],
+            )
+            for r in cur.fetchall()
+        ]
+
+    return PipelineStateResponse(
+        workflow_run_id=workflow_id,
+        workflow_status=workflow_status,
+        assessment_count=assessment_count,
+        latest_assessment=latest_assessment,
+        approval_request=approval_request,
+        jobs=jobs,
     )
 
 

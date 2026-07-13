@@ -65,6 +65,7 @@ import {
 } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { PipelineFlow } from "@/components/PipelineFlow";
+import { RagAssessmentPanel } from "@/components/RagAssessmentPanel";
 
 // Pipeline graph: seven user-visible nodes. Synthesis is hidden and rolled
 // into the Final Executive Brief.
@@ -522,6 +523,9 @@ export default function WorkflowDetailPage() {
 
             {/* Drafted Communication */}
             {commsDraft && <DraftedCommsPanel draft={commsDraft} agentName={commsStep?.agentName} />}
+
+            {/* RAG Assessment Panel — live pipeline state from api-python */}
+            <RagAssessmentPanel workflowId={id} />
 
             {/* Approval Decision */}
             {workflow.approval && (

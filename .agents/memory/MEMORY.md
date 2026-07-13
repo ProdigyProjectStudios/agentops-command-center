@@ -1,1 +1,5 @@
 - [Shared pythonlibs anyio conflict](anyio-conflict.md) — two uv projects sharing .pythonlibs will fight over anyio version; pin anyio>=4.0 + matching uvicorn in both AND make all FastAPI handlers async def to avoid anyio thread-wrap crash.
+- [uv run --no-sync alembic](uv-alembic-nosync.md) — --no-sync skips env setup; alembic not found; use plain `uv run alembic` in scripts running outside the dev workflow.
+- [Docker uv pattern](docker-uv-pattern.md) — slim Dockerfile: COPY uv from ghcr.io/astral-sh/uv:latest, then uv sync --frozen --no-dev --no-install-project, then COPY source.
+- [api-python proxy routing](api-python-proxy.md) — both /healthz and /api-python/healthz reach port 8008; Replit strips prefix for the app but direct port calls also work with full path.
+- [pydantic BaseModel in main.py](pydantic-in-main.md) — models.py owns BaseModel; adding new Pydantic classes directly to main.py requires explicit `from pydantic import BaseModel` import.

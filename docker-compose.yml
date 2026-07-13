@@ -1,0 +1,58 @@
+version: "3.9"
+
+# Local-dev compose — the Postgres database is NOT containerised; it is
+# a managed external instance referenced through DATABASE_URL.
+#
+# Copy .env.example to .env and fill in DATABASE_URL before running:
+#   docker compose up --build
+#
+# Services:
+#   agent-worker  — LangGraph worker + vector-memory endpoints (port 8000)
+#   api-python    — FastAPI RAG pipeline (port 8008), depends on agent-worker
+
+services:
+  agent-worker:
+    build:
+      context: ./artifacts/agent-worker
+      dockerfile: Dockerfile
+    image: agentops/agent-worker:local
+    environment:
+      DATABASE_URL:              ${DATABASE_URL}
+      AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
+      AI_INTEGRATIONS_OPENAI_API_KEY:  ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      WORKER_PORT: "8000"
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/worker/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  api-python:
+    build:
+      context: ./api-python
+      dockerfile: Dockerfile
+    image: agentops/api-python:local
+    environment:
+      DATABASE_URL:              ${DATABASE_URL}
+      AI_INTEGRATIONS_OPENAI_BASE_URL: ${AI_INTEGRATIONS_OPENAI_BASE_URL:-}
+      AI_INTEGRATIONS_OPENAI_API_KEY:  ${AI_INTEGRATIONS_OPENAI_API_KEY:-}
+      WORKER_BASE_URL: "http://agent-worker:8000"
+      PORT: "8008"
+    ports:
+      - "8008:8008"
+    depends_on:
+      agent-worker:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8008/healthz')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
