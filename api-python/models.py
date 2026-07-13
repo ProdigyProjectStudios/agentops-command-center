@@ -32,7 +32,7 @@ CONFIDENCE_THRESHOLD_DEFAULT: float = 0.6
 
 class AssessmentVerdict(BaseModel):
     """Strict schema the LLM response must satisfy."""
-    recommendation: str = Field(..., min_length=1, description="Narrative recommendation")
+    recommendation: str = Field(..., min_length=1, max_length=2000, description="Narrative recommendation")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence score 0.0–1.0")
     risks: list[str] = Field(default_factory=list, description="Identified risk factors")
     evidence_references: list[str] = Field(default_factory=list, description="Chunk IDs / snippets used as evidence")
@@ -52,7 +52,7 @@ class AssessmentResponse(BaseModel):
 
 class IntakeRequest(BaseModel):
     title: str = Field(..., min_length=1, max_length=500, description="Short title for the operational request")
-    description: str = Field(..., min_length=1, description="Full description of the request")
+    description: str = Field(..., min_length=1, max_length=5000, description="Full description of the request")
     department: str = Field(..., min_length=1, max_length=100, description="Originating department (e.g. legal, finance, hr)")
     priority: PRIORITY_VALUES = Field(default="medium", description="Request priority")
     requested_by: str = Field(..., min_length=1, max_length=200, description="Name or identifier of the requester")
@@ -76,6 +76,10 @@ class IntakeResponse(BaseModel):
 
 
 class TriageBody(BaseModel):
+    portfolio_company_id: int = Field(
+        ..., gt=0,
+        description="ID of the portfolio company — used to verify workflow ownership (rejects cross-tenant reads)",
+    )
     request_type: Optional[str] = Field(
         default=None,
         max_length=100,

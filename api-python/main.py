@@ -33,8 +33,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import traceback
+import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Any, Optional
 
 import httpx
@@ -74,6 +78,52 @@ app = FastAPI(
     version="1.0.0",
     root_path="/api-python",
 )
+
+# ---------------------------------------------------------------------------
+# Rate limiting — sliding-window per-IP (in-process, no external state)
+# ---------------------------------------------------------------------------
+_rl_counts: dict[str, list[float]] = defaultdict(list)
+_rl_lock = Lock()
+_RL_LIMIT = 60
+_RL_WINDOW = 60.0
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    with _rl_lock:
+        window = _rl_counts[ip]
+        _rl_counts[ip] = [t for t in window if now - t < _RL_WINDOW]
+        if len(_rl_counts[ip]) >= _RL_LIMIT:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "rate_limit_exceeded",
+                    "detail": f"Max {_RL_LIMIT} requests per {int(_RL_WINDOW)}s per IP",
+                },
+                headers={"Retry-After": str(int(_RL_WINDOW))},
+            )
+        _rl_counts[ip].append(now)
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Security headers — applied to every response (outermost middleware)
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def _security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers.setdefault(
+        "X-Request-ID",
+        request.headers.get("X-Request-ID", str(uuid.uuid4())),
+    )
+    return response
 
 # ---------------------------------------------------------------------------
 # OpenAI client — uses Replit AI Integrations proxy when env vars are set,
@@ -398,7 +448,7 @@ def _classify(signal: str) -> dict[str, str]:
 # ---------------------------------------------------------------------------
 
 @app.post("/triage/{workflow_id}", response_model=TriageResponse, tags=["pipeline"])
-def triage(workflow_id: int, body: TriageBody = TriageBody()) -> TriageResponse:
+def triage(workflow_id: int, body: TriageBody) -> TriageResponse:
     """
     Classify the workflow and advance its status to "triaged".
 
@@ -422,9 +472,9 @@ def triage(workflow_id: int, body: TriageBody = TriageBody()) -> TriageResponse:
                    or2.id AS req_id, or2.department
             FROM workflow_runs wr
             JOIN operational_requests or2 ON or2.id = wr.request_id
-            WHERE wr.id = %s
+            WHERE wr.id = %s AND or2.portfolio_company_id = %s
             """,
-            (workflow_id,),
+            (workflow_id, body.portfolio_company_id),
         )
         row = cur.fetchone()
         if row is None:
@@ -543,6 +593,10 @@ def _build_assess_prompt(
 @app.post("/assess/{workflow_id}", response_model=AssessmentResponse, tags=["pipeline"])
 def assess(
     workflow_id: int,
+    portfolio_company_id: int = Query(
+        ..., gt=0,
+        description="Owner portfolio company — rejects cross-tenant reads",
+    ),
     confidence_threshold: float = Query(
         default=CONFIDENCE_THRESHOLD_DEFAULT,
         ge=0.0,
@@ -580,9 +634,9 @@ def assess(
                    or2.title, or2.description, or2.department, or2.priority
             FROM workflow_runs wr
             JOIN operational_requests or2 ON or2.id = wr.request_id
-            WHERE wr.id = %s
+            WHERE wr.id = %s AND or2.portfolio_company_id = %s
             """,
-            (workflow_id,),
+            (workflow_id, portfolio_company_id),
         )
         row = cur.fetchone()
 
@@ -788,7 +842,10 @@ def assess(
 # ---------------------------------------------------------------------------
 
 @app.get("/workflow/{workflow_id}", response_model=WorkflowStateResponse, tags=["query"])
-def get_workflow(workflow_id: int) -> WorkflowStateResponse:
+def get_workflow(
+    workflow_id: int,
+    portfolio_company_id: int = Query(..., gt=0, description="Owner portfolio company — rejects cross-tenant reads"),
+) -> WorkflowStateResponse:
     """
     Return the full current state of a workflow run.
 
@@ -811,9 +868,9 @@ def get_workflow(workflow_id: int) -> WorkflowStateResponse:
                 or2.portfolio_company_id
             FROM workflow_runs wr
             JOIN operational_requests or2 ON or2.id = wr.request_id
-            WHERE wr.id = %s
+            WHERE wr.id = %s AND or2.portfolio_company_id = %s
             """,
-            (workflow_id,),
+            (workflow_id, portfolio_company_id),
         )
         row = cur.fetchone()
         if row is None:
@@ -948,7 +1005,10 @@ class PipelineStateResponse(BaseModel):
 
 
 @app.get("/pipeline-state/{workflow_id}", response_model=PipelineStateResponse, tags=["query"])
-def get_pipeline_state(workflow_id: int) -> PipelineStateResponse:
+def get_pipeline_state(
+    workflow_id: int,
+    portfolio_company_id: int = Query(..., gt=0, description="Owner portfolio company — rejects cross-tenant reads"),
+) -> PipelineStateResponse:
     """
     Consolidated RAG pipeline state for a workflow run.
 
@@ -963,7 +1023,14 @@ def get_pipeline_state(workflow_id: int) -> PipelineStateResponse:
     """
     with get_conn() as conn, conn.cursor() as cur:
         # Workflow status
-        cur.execute("SELECT status FROM workflow_runs WHERE id = %s", (workflow_id,))
+        cur.execute(
+            """
+            SELECT wr.status FROM workflow_runs wr
+            JOIN operational_requests or2 ON or2.id = wr.request_id
+            WHERE wr.id = %s AND or2.portfolio_company_id = %s
+            """,
+            (workflow_id, portfolio_company_id),
+        )
         wf_row = cur.fetchone()
         if wf_row is None:
             raise HTTPException(status_code=404, detail=f"workflow_run {workflow_id} not found")

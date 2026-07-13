@@ -17,7 +17,11 @@ import asyncio
 import json
 import os
 import sys
+import time
 import traceback
+import uuid
+from collections import defaultdict
+from threading import Lock
 from typing import Any, TypedDict
 
 from fastapi import FastAPI, Query, Request
@@ -207,6 +211,52 @@ setup_logging()
 _log = get_logger("agent-worker")
 
 app = FastAPI(title="AgentOps LangGraph Worker (spike)", version="0.1.0")
+
+# ---------------------------------------------------------------------------
+# Rate limiting — sliding-window per-IP (in-process, no external state)
+# ---------------------------------------------------------------------------
+_rl_counts: dict[str, list[float]] = defaultdict(list)
+_rl_lock = Lock()
+_RL_LIMIT = 60
+_RL_WINDOW = 60.0
+
+
+@app.middleware("http")
+async def _rate_limit_middleware(request: Request, call_next):
+    ip = request.client.host if request.client else "unknown"
+    now = time.monotonic()
+    with _rl_lock:
+        window = _rl_counts[ip]
+        _rl_counts[ip] = [t for t in window if now - t < _RL_WINDOW]
+        if len(_rl_counts[ip]) >= _RL_LIMIT:
+            return JSONResponse(
+                status_code=429,
+                content={
+                    "error": "rate_limit_exceeded",
+                    "detail": f"Max {_RL_LIMIT} requests per {int(_RL_WINDOW)}s per IP",
+                },
+                headers={"Retry-After": str(int(_RL_WINDOW))},
+            )
+        _rl_counts[ip].append(now)
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
+# Security headers — applied to every response (outermost middleware)
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def _security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+    response.headers.setdefault(
+        "X-Request-ID",
+        request.headers.get("X-Request-ID", str(uuid.uuid4())),
+    )
+    return response
 
 
 @app.on_event("startup")
@@ -515,7 +565,7 @@ async def enqueue(req: EnqueueRequest) -> EnqueueResponse:
 
 
 @app.get("/worker/jobs", response_model=JobsResponse)
-async def list_jobs(limit: int = 50) -> JobsResponse:
+async def list_jobs(limit: int = Query(default=50, ge=1, le=200)) -> JobsResponse:
     """Return recent jobs with their agent_run counts."""
     from sqlalchemy import func, select
     from sqlalchemy.orm import selectinload
