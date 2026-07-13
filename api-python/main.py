@@ -52,6 +52,7 @@ from pydantic import BaseModel
 
 from database import get_conn
 from log import get_logger, setup_logging
+from voice import router as voice_router
 from models import (
     CONFIDENCE_THRESHOLD_DEFAULT,
     AgentStepSummary,
@@ -124,6 +125,11 @@ async def _security_headers_middleware(request: Request, call_next):
         request.headers.get("X-Request-ID", str(uuid.uuid4())),
     )
     return response
+
+# ---------------------------------------------------------------------------
+# Voice router (Twilio inbound + OpenAI Realtime bridge)
+# ---------------------------------------------------------------------------
+app.include_router(voice_router)
 
 # ---------------------------------------------------------------------------
 # OpenAI client — uses Replit AI Integrations proxy when env vars are set,

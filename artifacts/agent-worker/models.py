@@ -192,3 +192,74 @@ class ErrorEvent(Base):
             f"<ErrorEvent id={self.id} service={self.service!r} "
             f"error_type={self.error_type!r}>"
         )
+
+
+class VoiceCall(Base):
+    """One row per inbound Twilio call — the anchor for the voice audit trail.
+
+    status tracks the lifecycle: ringing → in-progress → completed | failed.
+    ended_at is set when the call closes so duration is computable in SQL.
+    """
+
+    __tablename__ = "voice_calls"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    twilio_call_sid: Mapped[str] = mapped_column(
+        String(64), nullable=False, unique=True, index=True
+    )
+    from_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    to_number: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(32), nullable=False, server_default="ringing"
+    )
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    ended_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    events: Mapped[list[VoiceCallEvent]] = relationship(
+        "VoiceCallEvent", back_populates="call", cascade="all, delete-orphan"
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<VoiceCall id={self.id} sid={self.twilio_call_sid!r} "
+            f"status={self.status!r}>"
+        )
+
+
+class VoiceCallEvent(Base):
+    """Append-only event log for a voice call.
+
+    event_type values: call_start, first_audio_response, openai_error,
+                       barge_in, bridge_error, call_end
+    detail is a free-form JSONB object carrying event-specific fields
+    (e.g. time_to_first_response_ms for first_audio_response).
+    """
+
+    __tablename__ = "voice_call_events"
+    __table_args__ = {"schema": SCHEMA}
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey(f"{SCHEMA}.voice_calls.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    detail: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+
+    call: Mapped[VoiceCall] = relationship("VoiceCall", back_populates="events")
+
+    def __repr__(self) -> str:
+        return (
+            f"<VoiceCallEvent id={self.id} call_id={self.call_id} "
+            f"event_type={self.event_type!r}>"
+        )
