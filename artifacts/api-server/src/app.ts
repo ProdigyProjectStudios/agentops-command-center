@@ -27,12 +27,20 @@ app.use(
   }),
 );
 app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
 
-// Proxy /api-python/* → FastAPI service on port 8008.
-// Express strips the /api-python prefix so req.url inside this handler
-// is the bare path FastAPI expects (e.g. /healthz, /intake, /workflow/1).
+// ---------------------------------------------------------------------------
+// Proxy /api-python/* → FastAPI on port 8008
+//
+// MUST be registered BEFORE express.json() / express.urlencoded() because
+// those body-parser middlewares consume the readable stream.  Once consumed,
+// req.pipe(proxyReq) forwards an empty body — FastAPI hangs waiting for
+// form/JSON bytes that never arrive.  Placing the proxy here ensures the
+// raw Node.js stream is still intact when we pipe it downstream.
+//
+// WebSocket upgrades for /api-python/* (e.g. /voice/ws) are handled in
+// index.ts via server.on('upgrade', ...) — http.request() alone cannot
+// negotiate a 101 Switching Protocols handshake.
+// ---------------------------------------------------------------------------
 app.use("/api-python", (req, res) => {
   const proxyReq = http.request(
     {
@@ -55,6 +63,9 @@ app.use("/api-python", (req, res) => {
     }
   });
 });
+
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 app.use("/api", router);
 
