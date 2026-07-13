@@ -1,9 +1,11 @@
 import { motion } from "framer-motion";
 import {
+  Activity,
   ArrowRight,
   Boxes,
   Brain,
   CheckCircle2,
+  Clock,
   Code2,
   Database,
   FileLock2,
@@ -13,7 +15,11 @@ import {
   Link2,
   Lock,
   MessageSquare,
+  Mic,
   Network,
+  Phone,
+  Radio,
+  RefreshCw,
   Scale,
   ScrollText,
   Server,
@@ -21,6 +27,7 @@ import {
   Sparkles,
   Users,
   Workflow,
+  Zap,
 } from "lucide-react";
 import { PageTransition } from "@/components/PageTransition";
 import { Card } from "@/components/ui/card";
@@ -41,6 +48,7 @@ export default function ArchitecturePage() {
         <ApprovalModel />
         <AuditModel />
         <Security />
+        <PythonHardening />
         <Footer />
       </div>
     </PageTransition>
@@ -702,6 +710,176 @@ function Security() {
             </motion.div>
           );
         })}
+      </div>
+    </section>
+  );
+}
+
+/* ----- Python-layer hardening ----- */
+
+const HARDENING_ITEMS = [
+  {
+    icon: Database,
+    title: "Isolated schema · Alembic migrations",
+    body: "All Python-owned tables live in a dedicated agentops_py Postgres schema — fully isolated from the TypeScript/Drizzle-managed public schema. Schema changes are applied via a versioned Alembic migration chain (head c7f3a2b1d4e5), with explicit down_revision links and a startup guard that blocks the worker from booting against an unrecognised schema version.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Durable job processing · row-lock concurrency",
+    body: "The async worker claims jobs with SELECT FOR UPDATE SKIP LOCKED, making it safe to run multiple worker replicas against the same queue without double-processing. Failed jobs retry with capped exponential backoff; a max-retry ceiling moves exhausted jobs to a dead-letter state rather than looping indefinitely. Tested under real concurrent access with parallel worker processes hitting the same queue simultaneously.",
+  },
+  {
+    icon: Brain,
+    title: "RAG-backed assessment · confidence gating",
+    body: "Every assessment retrieves live context via the shared vector search before calling the LLM. The model returns a structured verdict with an explicit confidence score. Results that clear the confidence threshold auto-complete; results below it are routed directly into the human approval gate rather than auto-completing — the same approval flow used by the TypeScript orchestrator.",
+  },
+  {
+    icon: Activity,
+    title: "Observability · security hardening",
+    body: "Structured JSON log lines (timestamp, service, level, logger, msg, plus per-event fields) are emitted by every Python service. A self-hosted error-event log captures unhandled exceptions without requiring an external monitoring service. Every endpoint enforces tenant isolation. Rate limiting and standard security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy, no-store Cache-Control) are applied globally via middleware. A clean dependency audit with no unresolved CVEs.",
+  },
+];
+
+function PythonHardening() {
+  return (
+    <section className="space-y-6">
+      <Eyebrow>Python-layer hardening</Eyebrow>
+      <h2 className="text-2xl font-semibold tracking-tight">
+        Production-grade Python services running alongside the TypeScript edge.
+      </h2>
+      <p className="text-muted-foreground max-w-3xl leading-relaxed">
+        The FastAPI worker layer ships with the infrastructure patterns that make
+        it safe to operate at scale: isolated schema ownership, concurrent-safe
+        job processing, confidence-gated LLM assessment, and hardened
+        observability across every service.
+      </p>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {HARDENING_ITEMS.map((item, i) => {
+          const Icon = item.icon;
+          return (
+            <motion.div
+              key={item.title}
+              initial={{ opacity: 0, y: 8 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, amount: 0.2 }}
+              transition={{ duration: 0.18, delay: i * 0.05, ease: [0.22, 0.61, 0.36, 1] }}
+            >
+              <Card className="p-5 bg-card border-card-border h-full">
+                <div className="flex items-start gap-3">
+                  <div className="size-10 rounded-md bg-primary/15 text-primary flex items-center justify-center shrink-0">
+                    <Icon className="size-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-semibold">{item.title}</h3>
+                    <p className="text-sm text-muted-foreground mt-1 leading-relaxed">
+                      {item.body}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </div>
+
+      {/* Voice bridge */}
+      <div className="space-y-4 pt-2">
+        <div className="flex items-center gap-3">
+          <div className="size-10 rounded-md bg-chart-2/15 text-chart-2 flex items-center justify-center shrink-0">
+            <Phone className="size-5" />
+          </div>
+          <h3 className="text-lg font-semibold tracking-tight">
+            Real-time voice bridge — end-to-end call tested, AI live
+          </h3>
+        </div>
+
+        <Card className="p-6 bg-gradient-to-br from-chart-2/8 via-card to-primary/8 border-chart-2/25">
+          <div className="flex items-start gap-3 mb-5">
+            <div className="mt-0.5 inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-md bg-chart-2/20 px-2 text-[11px] font-semibold uppercase tracking-wider text-chart-2">
+              Live · call tested · AI responding
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground leading-relaxed mb-5">
+            Inbound calls to the platform's Twilio number connect to a FastAPI
+            WebSocket bridge that streams bidirectional audio directly to
+            OpenAI's Realtime API (<Code>gpt-4o-realtime-preview</Code>).
+            The bridge uses g.711 μ-law encoding — the native format Twilio
+            Media Streams delivers — so no transcoding step is needed. Server-side
+            VAD handles turn detection and interruption; the AI responds in
+            real time, mid-sentence interruptions included.
+            End-to-end tested: a live inbound call reached the AI and received
+            a real spoken response.
+          </p>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+            <Card className="p-4 bg-background/40 border-card-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Radio className="size-4 text-chart-2" />
+                <span className="text-xs font-semibold">Signal path</span>
+              </div>
+              <p className="text-[12px] text-muted-foreground leading-snug">
+                PSTN → Twilio → TwiML webhook → <Code>/voice/incoming</Code> →
+                Media Stream → <Code>/voice/ws</Code> → OpenAI Realtime API
+              </p>
+            </Card>
+            <Card className="p-4 bg-background/40 border-card-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="size-4 text-chart-2" />
+                <span className="text-xs font-semibold">Routing fix</span>
+              </div>
+              <p className="text-[12px] text-muted-foreground leading-snug">
+                The Express proxy is ordered before body-parser middleware so
+                the raw stream reaches FastAPI intact. WebSocket upgrades are
+                tunnelled via <Code>server.on('upgrade')</Code> — HTTP proxy
+                alone cannot negotiate a 101 handshake.
+              </p>
+            </Card>
+            <Card className="p-4 bg-background/40 border-card-border">
+              <div className="flex items-center gap-2 mb-2">
+                <Clock className="size-4 text-chart-2" />
+                <span className="text-xs font-semibold">Latency telemetry</span>
+              </div>
+              <p className="text-[12px] text-muted-foreground leading-snug">
+                Per-call audit log records <Code>call_started</Code>,{" "}
+                <Code>first_response_ms</Code>, and <Code>call_ended</Code>
+                events. Call state and event stream are persisted to{" "}
+                <Code>voice_calls</Code> and <Code>voice_call_events</Code>{" "}
+                in the <Code>agentops_py</Code> schema.
+              </p>
+            </Card>
+          </div>
+
+          <Card className="p-4 bg-card/60 border-card-border overflow-x-auto">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-3">
+              Call flow
+            </div>
+            <div className="min-w-[640px] flex items-stretch gap-2">
+              <FlowStep n="1" label="Inbound call" sub="PSTN → Twilio" />
+              <FlowConnector />
+              <FlowStep n="2" label="TwiML webhook" sub="POST /voice/incoming → 200 XML" highlight />
+              <FlowConnector />
+              <FlowStep n="3" label="Media Stream WS" sub="wss:// → /voice/ws" />
+              <FlowConnector />
+              <FlowStep n="4" label="OpenAI Realtime" sub="gpt-4o-realtime-preview · VAD" />
+            </div>
+          </Card>
+        </Card>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs text-muted-foreground">
+          <Bullet>
+            <Code>gpt-4o-realtime-preview</Code> model · server VAD · g.711 μ-law
+          </Bullet>
+          <Bullet>
+            TwiML endpoint confirmed reachable externally — HTTP 200, 111ms response time
+          </Bullet>
+          <Bullet>
+            <Code>voice_calls</Code> + <Code>voice_call_events</Code> Alembic-managed tables
+          </Bullet>
+          <Bullet>
+            WebSocket tunnel: raw TCP pipe via <Code>server.on('upgrade')</Code> → port 8008
+          </Bullet>
+        </div>
       </div>
     </section>
   );

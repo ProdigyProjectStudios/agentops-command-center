@@ -1,0 +1,17 @@
+I need a scoped content addition to the AgentOps architecture page — do not touch any existing section, including the hero, the TypeScript/Python framing, the agent graph, or the "Vector memory upgrade" section (that one is already accurate and up to date). This is additive only.
+
+Add a new section, styled consistently with the existing page, covering tonight's Python-layer hardening work. Cover, honestly and specifically:
+
+1. Schema and migrations: a dedicated agentops_py Postgres schema, fully isolated from the existing TypeScript/Drizzle-owned tables, managed via Alembic migrations.
+
+2. Durable job processing: an async worker using Postgres row-locking (SELECT FOR UPDATE SKIP LOCKED) for safe concurrent job claiming, with exponential backoff retries and a max-retry ceiling — tested under real concurrent access, not just single-threaded.
+
+3. RAG-backed assessment pipeline: a confidence-gated verdict system — retrieves real context via the existing vector search, produces a structured recommendation via LLM, and automatically routes low-confidence results into the existing human approval gate rather than auto-completing.
+
+4. Observability and security: structured JSON logging across the Python services, a self-hosted error-event log (no external monitoring service required), tenant-isolation enforcement on every endpoint, rate limiting, standard security headers, and a clean dependency audit.
+
+5. Real-time voice bridge: describe this as a real, built capability — Twilio Media Streams connected to OpenAI's Realtime API over a WebSocket bridge, with server-side turn detection and interruption handling, per-call audit logging (call start, first-response latency, call end), and call state persisted to Postgres. Do NOT state or imply that a live phone call has been completed or demonstrated — describe the architecture as built and tested at the code/routing level, not as a proven live conversation. Avoid words like "verified end-to-end" or "confirmed working" for this specific section — use "built" and "tested" instead, consistent with what's actually true.
+
+Tone: same as the rest of the page — confident, specific, technical. No speculative or "planned" language for items 1-4, since those are fully verified. Item 5 should read as real, shipped engineering work without overstating its verification status.
+
+Show me the new section's text before considering this done.
