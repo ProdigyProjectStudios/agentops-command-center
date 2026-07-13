@@ -19,6 +19,7 @@ dependencies = [
   "langsmith>=0.8.18",
   "langgraph-checkpoint>=4.1.1",
   "langgraph-sdk>=0.3.15",
+  "twilio>=9.10.9",
 ]
 
 [tool.uv]
