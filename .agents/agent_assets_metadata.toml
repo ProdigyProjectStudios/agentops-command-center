@@ -1,0 +1,8 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "WSYZ8PgaaC-PjEKZi0fMf"
+uri = "file://.local/technical-audit.md"
+type = "text"
+title = "AgentOps Technical Audit — Complete Report"
