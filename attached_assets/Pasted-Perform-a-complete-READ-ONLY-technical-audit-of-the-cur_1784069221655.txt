@@ -1,0 +1,181 @@
+Perform a complete READ-ONLY technical audit of the current AgentOps Command Center repository at its present commit.
+
+Do not modify any code, configuration, dependencies, database rows, migrations, environment variables or deployment settings.
+
+Do not rely on previous implementation summaries, previous prompts or memory. Inspect the actual current files and, where safe, run non-destructive verification commands.
+
+The purpose is to produce an evidence package for a technical engineering buyer evaluating:
+
+1. Database architecture
+2. Service-layer design
+3. AI/software-engineering harness management
+4. External API management
+5. Security and observability
+6. AWS/GCP deployment portability
+7. What is currently implemented versus planned
+
+For every material claim, provide:
+
+* Exact repository path
+* Relevant symbol, route, class or function
+* Current implementation behavior
+* A short direct code excerpt where helpful
+* Actual command output where verification is possible
+* One of these labels:
+
+  * VERIFIED IN CODE
+  * VERIFIED AT RUNTIME
+  * VERIFIED BY DATABASE QUERY
+  * VERIFIED BY TEST
+  * CONFIGURED BUT NOT EXERCISED END-TO-END
+  * PLANNED / NOT IMPLEMENTED
+
+Audit the following specifically:
+
+A. CURRENT REPOSITORY STATE
+
+* Current commit hash
+* Complete service and application inventory
+* Current ports, start commands and routing
+* Current database schemas and tables
+* Full Alembic migration chain and current revision head
+* Whether Dockerfiles currently exist
+* Whether Docker images can currently be reproduced from the checked-in repository
+* Whether a startup schema-version guard actually blocks startup or only logs a warning
+
+B. DATABASE AND SERVICE OWNERSHIP
+
+* TypeScript/Drizzle-owned public schema
+* Python/SQLAlchemy/Alembic-owned agentops_py schema
+* Cross-schema relationships and missing foreign keys
+* Which service owns orchestration, intake, triage, assessment, retrieval, jobs, approvals, logging and voice
+* Exact communication paths between services
+* Whether there is real-time TypeScript-to-Python RPC coupling
+
+C. DURABLE JOB PROCESSING
+
+* Exact claim query and locking behavior
+* Retry/backoff implementation
+* Maximum attempts
+* Agent-run history
+* Dead-letter or terminal-failure handling
+* Queue monitoring and alerting
+* Whether LangGraph currently contains production LLM-driven agents, deterministic stubs or both
+
+D. AI / RAG HARNESS
+
+* OpenAI client construction and credential precedence
+* Model configuration
+* Timeout and retry behavior
+* Response-format enforcement
+* Pydantic or equivalent validation
+* Vector embedding and retrieval flow
+* Fallback behavior
+* Confidence threshold and approval routing
+* Differences between the TypeScript memory path and Python pgvector path
+* What happens when retrieval, embedding or LLM calls fail
+
+E. SECURITY
+
+* Authentication applied to each externally reachable Python route
+* Whether caller identity is cryptographically established
+* Tenant ownership enforcement
+* Current IDOR/BOLA protection
+* Rate limiting on every service, including whether it is process-local or distributed
+* Real client-IP handling behind the Replit proxy
+* Security headers
+* Secret handling
+* SSRF exposure
+* Dependency-audit state
+* Append-only audit/error behavior
+* Current known security limitations
+
+F. OBSERVABILITY
+
+* Structured logging coverage in each service
+* Request IDs and correlation IDs
+* Central exception handlers
+* error_events persistence
+* /errors endpoints
+* Stack-trace exposure behavior
+* Queue-depth monitoring
+* Failed-job alerting
+* Metrics, tracing and external monitoring, if any
+
+G. TWILIO / OPENAI REALTIME VOICE
+
+* TwiML endpoint
+* Twilio Media Streams WebSocket route
+* OpenAI Realtime WebSocket bridge
+* Bidirectional audio flow
+* server_vad configuration
+* Barge-in/interruption behavior
+* voice_calls and voice_call_events persistence
+* First-response latency measurement
+* API gateway POST proxy behavior
+* WebSocket upgrade tunnel
+* What has been runtime-tested
+* Whether an actual live phone conversation has been completed and logged
+
+H. AUTOMATED TESTS
+
+For every test:
+
+* Exact test name
+* Infrastructure used
+* What is real
+* What is mocked
+* What behavior it proves
+* Current pass/fail result
+* Total runtime
+
+I. AWS AND GCP DEPLOYMENT MAPPING
+
+Map each current component to concrete AWS and GCP deployment options:
+
+* Compute
+* Container runtime
+* Database
+* Secrets
+* Ingress and path routing
+* WebSocket support
+* Static assets
+* Logging
+* Monitoring
+* Distributed rate limiting
+* Connection pooling
+* Autoscaling
+* Health checks
+* CI/CD
+* Network and IAM boundaries
+
+Separate the migration into:
+
+* Portable with configuration only
+* Requires a small code change
+* Requires infrastructure work
+* Requires architecture rework
+
+Do not describe AWS or GCP as currently deployed unless the repository and runtime evidence prove that.
+
+J. DISCREPANCY CHECK
+
+Explicitly verify or correct these previous claims:
+
+* Two working Docker images exist at 319 MB and 391 MB
+* Rate limiting is implemented on both Python services
+* Every endpoint has tenant isolation
+* Python endpoints independently authenticate callers
+* The startup guard blocks unrecognized schemas
+* The LangGraph worker is a production agent graph
+* The voice bridge is proven through a real live phone call
+* All Python-side dependency vulnerabilities are currently at zero
+* Structured logging and persistent error tracking cover both Python services
+
+End with three sections:
+
+1. CLIENT-SAFE VERIFIED CAPABILITIES
+2. CURRENT PRODUCTIONIZATION PATH
+3. CLAIMS THAT SHOULD NOT BE MADE YET
+
+Do not use promotional language. Accuracy and direct evidence are mandatory.
