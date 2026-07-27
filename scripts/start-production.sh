@@ -6,6 +6,10 @@
 
 set -e
 
+# Run agentops_py schema migrations before starting services.
+# Must cd into agent-worker so env.py can import models.py from that directory.
+(cd artifacts/agent-worker && uv run alembic upgrade head)
+
 # Start Python FastAPI service (background).
 # uv picks up api-python/pyproject.toml via the --project flag so the
 # correct virtualenv and dependencies are used regardless of CWD.
