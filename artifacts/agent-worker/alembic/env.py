@@ -16,7 +16,7 @@ import os
 import urllib.parse
 from logging.config import fileConfig
 
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 from sqlalchemy.engine import Connection
 
 from alembic import context
@@ -140,6 +140,13 @@ def run_migrations_online() -> None:
         poolclass=pool.NullPool,
     )
     with connectable.connect() as connection:
+        # Ensure the schema exists before Alembic tries to write its
+        # version table into it. Safe to run on every startup — no-op
+        # if the schema is already there.
+        connection.execute(
+            text("CREATE SCHEMA IF NOT EXISTS agentops_py")
+        )
+        connection.commit()
         do_run_migrations(connection)
     connectable.dispose()
 
