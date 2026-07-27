@@ -186,10 +186,11 @@ function JobRow({ job }: { job: JobSummary }) {
 
 interface RagAssessmentPanelProps {
   workflowId: number;
+  portfolioCompanyId: number;
 }
 
-export function RagAssessmentPanel({ workflowId }: RagAssessmentPanelProps) {
-  const { data, isLoading, error } = useRagPipelineState(workflowId);
+export function RagAssessmentPanel({ workflowId, portfolioCompanyId }: RagAssessmentPanelProps) {
+  const { data, isLoading, error } = useRagPipelineState(workflowId, portfolioCompanyId);
 
   return (
     <Card

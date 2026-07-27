@@ -224,8 +224,10 @@ export const apiPython = {
   getWorkflow: (workflowId: number) =>
     apiFetch<WorkflowStateResponse>(`/workflow/${workflowId}`),
 
-  getPipelineState: (workflowId: number) =>
-    apiFetch<PipelineStateResponse>(`/pipeline-state/${workflowId}`),
+  getPipelineState: (workflowId: number, portfolioCompanyId: number) =>
+    apiFetch<PipelineStateResponse>(
+      `/pipeline-state/${workflowId}?portfolio_company_id=${portfolioCompanyId}`,
+    ),
 };
 
 // ---------------------------------------------------------------------------
@@ -234,12 +236,13 @@ export const apiPython = {
 
 export function useRagPipelineState(
   workflowId: number,
+  portfolioCompanyId: number,
   options?: Omit<UseQueryOptions<PipelineStateResponse>, "queryKey" | "queryFn">,
 ) {
   return useQuery<PipelineStateResponse>({
-    queryKey: ["api-python", "pipeline-state", workflowId],
-    queryFn: () => apiPython.getPipelineState(workflowId),
-    enabled: Number.isFinite(workflowId) && workflowId > 0,
+    queryKey: ["api-python", "pipeline-state", workflowId, portfolioCompanyId],
+    queryFn: () => apiPython.getPipelineState(workflowId, portfolioCompanyId),
+    enabled: Number.isFinite(workflowId) && workflowId > 0 && Number.isFinite(portfolioCompanyId) && portfolioCompanyId > 0,
     staleTime: 15_000,
     retry: 1,
     ...options,

@@ -525,7 +525,7 @@ export default function WorkflowDetailPage() {
             {commsDraft && <DraftedCommsPanel draft={commsDraft} agentName={commsStep?.agentName} />}
 
             {/* RAG Assessment Panel — live pipeline state from api-python */}
-            <RagAssessmentPanel workflowId={id} />
+            <RagAssessmentPanel workflowId={id} portfolioCompanyId={workflow.request.portfolioCompanyId} />
 
             {/* Approval Decision */}
             {workflow.approval && (
