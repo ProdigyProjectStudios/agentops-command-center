@@ -12,29 +12,17 @@ export interface AvailableModel {
 
 export const AVAILABLE_MODELS: readonly AvailableModel[] = [
   {
-    id: "gpt-4o",
-    label: "GPT-4o",
+    id: "gpt-4.1",
+    label: "GPT-4.1",
     description:
       "Strongest general-purpose reasoning. Best for triage and synthesis.",
     tier: "frontier",
   },
   {
-    id: "gpt-4o-mini",
-    label: "GPT-4o mini",
-    description:
-      "Balanced cost and quality. A solid default for every agent.",
-    tier: "balanced",
-  },
-  {
-    id: "gpt-4.1",
-    label: "GPT-4.1",
-    description: "Higher quality reasoning with longer context windows.",
-    tier: "frontier",
-  },
-  {
     id: "gpt-4.1-mini",
     label: "GPT-4.1 mini",
-    description: "Cheaper 4.1 variant — good for drafting comms.",
+    description:
+      "Balanced cost and quality. Recommended default for every agent.",
     tier: "balanced",
   },
   {
@@ -43,9 +31,15 @@ export const AVAILABLE_MODELS: readonly AvailableModel[] = [
     description: "Lowest cost. Use for memory lookups and scaffolding.",
     tier: "fast",
   },
+  {
+    id: "o4-mini",
+    label: "o4-mini",
+    description: "Compact reasoning model. Strong on compliance and legal analysis.",
+    tier: "frontier",
+  },
 ] as const;
 
-export const FALLBACK_DEFAULT_MODEL = "gpt-4o-mini";
+export const FALLBACK_DEFAULT_MODEL = "gpt-4.1-mini";
 
 export function isKnownModel(id: string): boolean {
   return AVAILABLE_MODELS.some((m) => m.id === id);

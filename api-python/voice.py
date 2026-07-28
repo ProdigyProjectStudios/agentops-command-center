@@ -54,7 +54,7 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 log = get_logger("voice")
 
 _OPENAI_REALTIME_URL = (
-    "wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview"
+    "wss://api.openai.com/v1/realtime?model=gpt-4o-mini-realtime-preview"
 )
 
 _SESSION_CONFIG: dict = {

@@ -105,23 +105,23 @@ test("getModelForAgent falls back to env when no DB setting and no override", as
 
 test("getModelForAgent falls back to hardcoded default when no env and no DB", async () => {
   const m = await getModelForAgent("ops-conductor");
-  assert.equal(m, "gpt-4o-mini");
+  assert.equal(m, "gpt-4.1-mini");
 });
 
 test("getModelForAgent uses stored DB default", async () => {
-  settingRows = [{ key: "default_model", value: "gpt-4o" }];
+  settingRows = [{ key: "default_model", value: "gpt-4.1" }];
   const m = await getModelForAgent("ops-conductor");
-  assert.equal(m, "gpt-4o");
+  assert.equal(m, "gpt-4.1");
 });
 
 test("getModelForAgent prefers per-agent override over default", async () => {
-  settingRows = [{ key: "default_model", value: "gpt-4o" }];
+  settingRows = [{ key: "default_model", value: "gpt-4.1" }];
   agentRows = [
     {
       id: 1,
       slug: "ops-conductor",
       name: "Ops Conductor",
-      modelOverride: "gpt-4.1",
+      modelOverride: "o4-mini",
     },
     {
       id: 2,
@@ -130,8 +130,8 @@ test("getModelForAgent prefers per-agent override over default", async () => {
       modelOverride: null,
     },
   ];
-  assert.equal(await getModelForAgent("ops-conductor"), "gpt-4.1");
-  assert.equal(await getModelForAgent("legal-counsel"), "gpt-4o");
+  assert.equal(await getModelForAgent("ops-conductor"), "o4-mini");
+  assert.equal(await getModelForAgent("legal-counsel"), "gpt-4.1");
 });
 
 test("setDefaultModel rejects unknown models", async () => {
@@ -139,8 +139,8 @@ test("setDefaultModel rejects unknown models", async () => {
 });
 
 test("setDefaultModel persists known models and invalidates cache", async () => {
-  await setDefaultModel("gpt-4o");
-  assert.equal(insertSettingCalls.at(-1)?.value, "gpt-4o");
+  await setDefaultModel("gpt-4.1");
+  assert.equal(insertSettingCalls.at(-1)?.value, "gpt-4.1");
 });
 
 test("setAgentModelOverride rejects unknown model id", async () => {
@@ -168,8 +168,8 @@ test("getModelSettings reports source=env when only env var set", async () => {
 });
 
 test("getModelSettings reports source=system_settings when DB row present", async () => {
-  settingRows = [{ key: "default_model", value: "gpt-4o" }];
+  settingRows = [{ key: "default_model", value: "gpt-4.1" }];
   const s = await getModelSettings();
-  assert.equal(s.defaultModel, "gpt-4o");
+  assert.equal(s.defaultModel, "gpt-4.1");
   assert.equal(s.effectiveDefaultSource, "system_settings");
 });

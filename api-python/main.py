@@ -695,7 +695,7 @@ def assess(
 
     try:
         completion = _openai.chat.completions.create(
-            model="gpt-5.4",
+            model="gpt-4.1-mini",
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": _ASSESS_SYSTEM_PROMPT},
