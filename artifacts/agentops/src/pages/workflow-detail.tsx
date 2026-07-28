@@ -929,12 +929,6 @@ function GraphTimeline({
               data-testid={`graph-node-${node.key}`}
               data-status={entry.status}
               initial={false}
-              animate={{ scale: entry.status === "running" ? [1, 1.04, 1] : 1 }}
-              transition={
-                entry.status === "running"
-                  ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" }
-                  : { duration: 0.25 }
-              }
               className={cn(
                 "flex flex-col items-center gap-1.5 px-2 py-2 rounded-lg border transition-colors min-w-0 flex-1 cursor-pointer hover-elevate",
                 c.ring,
