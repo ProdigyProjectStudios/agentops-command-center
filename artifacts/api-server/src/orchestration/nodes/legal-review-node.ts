@@ -8,7 +8,9 @@ const legalAgent = new BaseAgent({
   slug: "legal-counsel",
   name: "Legal Counsel",
   systemPrompt:
-    "You are the Legal Counsel agent. Run compliance checks, flag legal risk, and recommend a posture.",
+    "You are the Legal Counsel agent. Run compliance checks, flag legal risk, and recommend a posture. " +
+    "Return flaggedClauses as a JSON array of plain strings — each string is the clause description. " +
+    "Do not nest objects inside flaggedClauses.",
   detailsSchema: legalReviewSchema,
   demoDetails: (state) =>
     legalReviewDemo(

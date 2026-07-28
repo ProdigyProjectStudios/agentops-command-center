@@ -32,6 +32,27 @@ export const memoryLookupSchema = z.object({
   summary: z.string(),
 });
 
+/**
+ * Newer models (gpt-4.1+) sometimes return flaggedClauses as objects like
+ * {clause, reason} instead of plain strings. Coerce either form to a string
+ * so validation never hard-fails on a well-intentioned but over-structured
+ * response.
+ */
+const flaggedClauseEntry = z.preprocess((val) => {
+  if (typeof val === "string") return val;
+  if (val && typeof val === "object") {
+    const v = val as Record<string, unknown>;
+    return (
+      v["clause"] ??
+      v["text"] ??
+      v["name"] ??
+      v["description"] ??
+      JSON.stringify(val)
+    );
+  }
+  return String(val);
+}, z.string());
+
 export const legalReviewSchema = z.object({
   complianceChecks: z.array(
     z.object({
@@ -39,7 +60,7 @@ export const legalReviewSchema = z.object({
       status: checkStatus,
     }),
   ),
-  flaggedClauses: z.array(z.string()),
+  flaggedClauses: z.array(flaggedClauseEntry),
   recommendation: z.string(),
   riskAssessment: riskLevel,
   confidence: z.string(),
