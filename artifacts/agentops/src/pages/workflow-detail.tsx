@@ -914,7 +914,7 @@ function GraphTimeline({
     });
   }
   return (
-    <div className="flex items-stretch gap-0 overflow-x-auto pb-1">
+    <div className="flex items-stretch gap-0 overflow-x-auto py-2 px-1 -mx-1">
       {nodes.map((node, i) => {
         const entry = state.get(node.key)!;
         const c = nodeColor(entry.status);
