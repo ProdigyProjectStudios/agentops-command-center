@@ -1,362 +1,234 @@
 # AgentOps Command Center
 
-> A working reference architecture for **multi-agent enterprise operations** — a
-> coordinated crew of specialist AI agents that triage incoming operational
-> requests, ground their reasoning in policy, run risk and budget review, draft
-> communications, and land at a human approval gate with a full audit trail.
-
-Built as a portfolio piece on Replit. Single TypeScript monorepo, Express + Drizzle
-+ Postgres on the back, React + Vite + TanStack Query on the front, an OpenAPI
-contract that drives both sides via codegen, and an orchestrator that runs in
-deterministic **demo mode** out of the box (no API key required) and seamlessly
-upgrades to **live mode** when an OpenAI key or the Replit OpenAI integration is
-present.
+An enterprise operations platform that routes business requests through a coordinated crew of specialist AI agents, grounds every decision in policy, and lands at a human approval gate with a complete audit trail.
 
 ---
 
-## Why this exists
+## Overview
 
-Operations teams at modern operating companies drown in approval queues — vendor
-contracts, ad spend, hiring asks, facilities work, legal reviews. Most of the
-work isn't the decision; it's assembling the evidence that lets a human make the
-decision quickly and defensibly. AgentOps wires that assembly into a single
-auditable pipeline of agents you can replay step by step.
+**The problem.** Operations teams at holding companies and scale-ups manage a constant backlog of approval requests — vendor contracts, ad spend, legal reviews, facilities work, hiring approvals. The bottleneck is rarely the decision itself; it is assembling the evidence that lets the right person make that decision quickly and defensibly.
 
-"Magic" agents that produce a single black-box answer don't survive procurement,
-legal, or risk review at a real company. AgentOps treats every agent action as a
-first-class record: typed output, retrieved evidence, tool calls, confidence,
-and the human decision that closed the loop.
+**Who it is for.** Portfolio operators, COOs, and enterprise engineering teams evaluating AI-assisted workflow automation.
+
+**What it delivers.** A fully auditable pipeline where each request is triaged, reviewed by specialist agents (Ops, Legal, Finance, Communications, Memory), synthesised into a recommendation, and routed to a human operator — with every agent action, retrieved evidence, tool call, confidence score, and operator decision stored as a typed, replayable record.
+
+The platform ships with a **deterministic demo mode** that runs without an API key, and upgrades seamlessly to live OpenAI calls when a key is present.
 
 ---
 
-## Core features
+## Live Demo
 
-- **Multi-agent triage** — Ops, Legal, Finance, Communications, and Memory agents
-  review every request in sequence, each producing structured output, risks, and
-  confidence.
-- **Human-in-the-loop approvals** — every run lands at an approval card with the
-  recommendation, key evidence, and an explicit approve / reject / request-revision flow.
-- **Shared memory** — keyword-search retrieval over a knowledge base of policy
-  documents, with retrieved chunks surfaced as evidence on the run.
-- **Tool execution** — every external call an agent makes is captured as a typed
-  `tool_calls` row with input, output, status, and duration.
-- **Traceable audit log** — every state transition, agent decision, and operator
-  action is recorded in `activity_log`.
-- **Portfolio dashboard** — five live KPIs, recent runs, and an agent health grid.
-- **Deterministic demo mode** — the platform always works without an API key.
+**[agent-ops-command-center.replit.app](https://agent-ops-command-center.replit.app)**
+
+The live instance runs in demo mode by default. Submit any request via **New Request** to walk the full pipeline.
 
 ---
 
-## Architecture
+## Key Features
 
-```mermaid
-flowchart LR
-  subgraph Contract
-    A["lib/api-spec/openapi.yaml<br/>(source of truth)"]
-  end
-
-  A -- orval codegen --> B["lib/api-client-react<br/>(React Query hooks)"]
-  A -- orval codegen --> C["lib/api-zod<br/>(Zod schemas)"]
-
-  B --> D["artifacts/agentops<br/>React + Vite UI"]
-  C --> E["artifacts/api-server<br/>Express 5 + Drizzle"]
-
-  E --> F[("PostgreSQL")]
-  E --> G["Orchestrator<br/>(8-node state graph)"]
-  G --> H{{"OpenAI / Replit AI<br/>(optional)"}}
-```
-
-```mermaid
-flowchart LR
-  R[/Operational Request/] --> Ops[Ops Triage]
-  Ops --> Mem[Memory Retrieval]
-  Mem --> Legal[Legal & Compliance]
-  Legal --> Fin[Finance & Budget]
-  Fin --> Comms[Communications Draft]
-  Comms --> Syn[Risk Synthesis]
-  Syn --> App{Approval Gate}
-  App -- approve --> Final[Finalize]
-  App -- reject --> Rej[Closed: Rejected]
-```
-
-| Package                  | Role                                          |
-| ------------------------ | --------------------------------------------- |
-| `lib/api-spec`           | OpenAPI contract + orval config               |
-| `lib/api-client-react`   | Generated React Query hooks                   |
-| `lib/api-zod`            | Generated Zod schemas                         |
-| `lib/db`                 | Drizzle schema, db client, migrations         |
-| `artifacts/api-server`   | Express 5 server, agent orchestrator          |
-| `artifacts/agentops`     | React + Vite Command Center UI                |
-
-The orchestrator lives in `artifacts/api-server/src/orchestration/`. Each agent
-step is its own node (`nodes/*.ts`); the engine walks the pipeline, persists the
-result envelope, and advances `workflow_status` through the state machine
-(`submitted → triaged → legal_review → finance_review → communications_draft →
-approval_pending → approved/rejected → finalized`).
+- **8-node agent state machine** — a directed graph of specialist nodes: Ops Triage → Memory Lookup → Legal Review → Finance Review → Communications Draft → Risk Synthesis → Approval Gate → Finalize
+- **Typed agent output envelopes** — every agent step produces a structured record: summary, findings, risks, recommended actions, confidence score, and raw details
+- **Human-in-the-loop approval queue** — every run surfaces an approval card with the recommendation, key evidence, and an explicit approve / reject / conditional-approve flow
+- **Policy-grounded memory** — keyword retrieval across a knowledge base of policy documents; retrieved chunks are surfaced as evidence on each run
+- **Tool call ledger** — every external action an agent performs is captured as a typed row with input, output, status, and duration
+- **Full activity audit log** — every state transition, agent decision, and operator action is recorded in chronological order
+- **RAG assessment pipeline** — a separate Python service runs retrieval-augmented assessment with LLM verdict and confidence-gated routing
+- **Twilio voice integration** — inbound calls bridge via WebSocket to the OpenAI Realtime API for voice-triggered workflow interactions
+- **Configurable model picker** — operators can swap the default LLM (gpt-4.1-mini, gpt-4.1, o4-mini, gpt-4.1-nano) per-agent from the Settings UI without touching code
+- **OpenAPI contract-first design** — a single `openapi.yaml` drives both the generated React Query client hooks and the server-side Zod validators via orval codegen
 
 ---
 
-## Demo walkthrough
+## Technical Architecture
 
-1. Open the **Dashboard** — five live KPIs, a Demo Story panel, recent runs, and
-   an agent health grid.
-2. Click **Run the demo** (or **New Request**) and submit something like
-   *"Approve $48K roofing contractor for Acme HQ Q2"*. You'll be taken to the
-   workflow detail.
-3. Hit **Run Workflow**. The agent graph lights up node by node; the page polls
-   every 1.2s while the run is in flight.
-4. The **Executive Brief** card synthesizes the headline, recommendation, risk
-   posture, key evidence, and next actions as soon as Risk Synthesis completes.
-5. Expand any agent card to see its summary, findings, risks, recommended actions,
-   tool calls, and raw JSON envelope.
-6. When the run reaches **Approval**, decide from the right rail. The workflow
-   finalizes (or rejects); the audit log captures every transition.
-7. Visit **Approvals**, **Tool Calls**, **Knowledge**, **Agents**, **Settings**,
-   and the public **/overview** case-study page to see the secondary surfaces.
+### Frontend
+React 19 SPA built with Vite 7 and Tailwind CSS 4. Routing via Wouter. Data fetching via TanStack Query 5 with generated hooks from orval. UI components via Radix UI primitives (shadcn). Animations via Framer Motion. TypeScript throughout. Compiled to a static build and served behind the Node API server.
 
----
+### Backend — Node (Orchestration API)
+Express 5 API server written in TypeScript. Owns the primary orchestration logic: runs the 8-node agent state graph, persists all workflow state, manages the approval queue, and proxies `/api-python` requests to the Python service. Drizzle ORM manages the `public` schema.
 
-## Demo mode vs live mode
+### Backend — Python (RAG + Voice)
+FastAPI service running on a separate process. Handles retrieval-augmented assessment (`/api-python/assess`), initial request intake and triage (`/api-python/intake`, `/api-python/triage`), workflow state queries, and a WebSocket bridge between Twilio Media Streams and the OpenAI Realtime API for voice calls. Psycopg3 for database access.
 
-The platform always works without an API key. When no key is configured the
-orchestrator returns deterministic scenario outputs from `orchestration/demo-outputs.ts`
-— a roofing contractor, marketing campaign, or hiring request each produce
-realistic legal, finance, and comms output. This makes it bulletproof for
-portfolio demos.
+### Database
+PostgreSQL 16 with two schema owners:
+- **`public`** — managed by Drizzle ORM (Node side). Tables: `operational_requests`, `workflow_runs`, `agent_steps`, `tool_calls`, `approval_requests`, `agents`, `knowledge_documents`, `memory_chunks`, `activity_logs`, `portfolio_companies`, `system_settings`, `users`
+- **`agentops_py`** — managed by Alembic migrations (Python side). Assessment records, vector memory metadata
 
-When an API key **is** present, the same `generateAgentOutput()` abstraction calls
-OpenAI's chat completions API with a JSON response format and merges the LLM's
-response over the demo defaults — any field the model omits gracefully falls
-back. Any error in the LLM call also falls back to demo output; the pipeline
-never breaks.
+### AI / Automation
+- OpenAI chat completions API via the `openai` Node and Python SDKs
+- Default model: `gpt-4.1-mini` (configurable per-agent; falls back to deterministic demo fixtures when no key is set)
+- OpenAI Realtime API (`gpt-4o-mini-realtime-preview`) for voice interactions
+- LLM responses are validated against Zod schemas with a coercion layer that handles model output variance without hard-failing
 
-The mode badge in the top-right of the app reflects which path is active.
+### External Integrations
+- **Twilio** — inbound/outbound SMS via the Twilio Python SDK; Voice via Twilio Media Streams WebSocket bridge to OpenAI Realtime
+
+### Deployment
+Deployed on Replit Autoscale. A single production startup script (`scripts/start-production.sh`) runs Alembic migrations, starts the Python FastAPI service in the background, then hands the foreground to the Node API server. Health checked at `/api/healthz`.
 
 ---
 
-## Local setup
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Frontend framework | React 19, Vite 7 |
+| Styling | Tailwind CSS 4, Radix UI (shadcn) |
+| State / data fetching | TanStack Query 5, Wouter |
+| Animations | Framer Motion |
+| Node backend | TypeScript, Express 5 |
+| Python backend | Python 3.11, FastAPI, uvicorn |
+| ORM | Drizzle ORM (Node), psycopg3 raw SQL (Python) |
+| Migrations | Drizzle Kit (Node schema), Alembic (Python schema) |
+| Database | PostgreSQL 16 |
+| AI SDK | openai (Node + Python) |
+| Schema validation | Zod (Node), Pydantic v2 (Python) |
+| API contract | OpenAPI 3.1, orval codegen |
+| Telephony | Twilio SDK, Twilio Media Streams |
+| Package manager | pnpm workspaces |
+| Deployment | Replit Autoscale |
+
+---
+
+## How It Works
+
+1. **Submit a request** — an operator submits an operational request (vendor spend, contract review, headcount, etc.) with a title, description, and portfolio company.
+2. **Triage** — the Ops Conductor classifies the request, estimates cost, assigns a risk level, and routes it to the downstream agents.
+3. **Memory lookup** — the Memory Keeper retrieves relevant policy documents from the knowledge base and surfaces them as evidence.
+4. **Specialist review** — Legal Counsel runs compliance checks and contract analysis; Finance Analyst checks budget, utilisation, and 12-month forecast.
+5. **Communications draft** — the Communications agent drafts an internal memo and an external announcement with a distribution list.
+6. **RAG assessment** — the Python service independently runs a retrieval-augmented assessment, produces a confidence score, and routes: high confidence goes to auto-synthesis; lower confidence escalates to the human gate.
+7. **Risk synthesis** — the Ops Conductor aggregates all agent findings into a single recommended decision with blocking issues and next actions.
+8. **Approval gate** — the request lands in the approval queue. The operator sees the recommendation, evidence, and all agent findings, then approves, rejects, or conditionally approves with notes.
+9. **Finalize** — the decision is recorded, the audit log is closed, and the workflow moves to a terminal state.
+
+Every step — agent outputs, tool calls, state transitions, operator actions — is persisted and accessible from the workflow detail view.
+
+---
+
+## Screenshots
+
+*Add screenshots to `docs/screenshots/` and update the paths below.*
+
+| | |
+|---|---|
+| `docs/screenshots/dashboard.png` | Live dashboard with KPIs and agent crew |
+| `docs/screenshots/workflow-detail.png` | Step-by-step pipeline view with agent outputs |
+| `docs/screenshots/approval-queue.png` | Human approval queue with AI recommendations |
+| `docs/screenshots/rag-assessment.png` | RAG assessment panel with confidence and evidence |
+| `docs/screenshots/settings-models.png` | Per-agent model configuration UI |
+
+---
+
+## Local Development
+
+**Prerequisites:** Node.js 20+, pnpm 9+, Python 3.11+, [uv](https://docs.astral.sh/uv/), PostgreSQL 16
 
 ```bash
-# 1. install
+# Clone and install Node dependencies
+git clone https://github.com/your-username/agentops-command-center.git
+cd agentops-command-center
 pnpm install
 
-# 2. create the database schema (DATABASE_URL must be set)
-pnpm --filter @workspace/db run push
+# Configure environment
+cp .env.example .env
+# Edit .env — DATABASE_URL is required; OPENAI_API_KEY is optional (demo mode works without it)
 
-# 3. seed agents, sample companies, and a couple of demo requests
-pnpm --filter @workspace/api-server run seed
+# Apply database migrations (Node schema)
+pnpm --filter @workspace/db run migrate
 
-# 4. run everything (each in its own terminal, or use the provided workflows)
-pnpm --filter @workspace/api-server run dev      # API server
-pnpm --filter @workspace/agentops      run dev   # Frontend
+# Apply Python schema migrations
+cd artifacts/agent-worker
+uv run alembic upgrade head
+cd ../..
+
+# Start all services (three separate terminals)
+pnpm --filter @workspace/api-server run dev   # Node API on :8080
+pnpm --filter @workspace/agentops run dev     # React frontend on :20962
+cd api-python && uv run python main.py        # Python API on :8008
 ```
 
-On Replit the three workflows (`artifacts/agentops: web`,
-`artifacts/api-server: API Server`, `artifacts/mockup-sandbox: Component
-Preview Server`) start automatically.
+Open `http://localhost:20962` for the frontend. The app runs fully in demo mode without an OpenAI key.
 
 ---
 
-## Environment variables
+## Environment Variables
 
-| Variable                            | Required | Description                                                       |
-| ----------------------------------- | :------: | ----------------------------------------------------------------- |
-| `DATABASE_URL`                      | yes      | PostgreSQL connection string                                      |
-| `PORT`                              | yes      | Bound by Replit per artifact; do not hardcode                     |
-| `AI_INTEGRATIONS_OPENAI_BASE_URL`   | optional | Set automatically by the Replit OpenAI integration                |
-| `AI_INTEGRATIONS_OPENAI_API_KEY`    | optional | Set automatically by the Replit OpenAI integration                |
-| `OPENAI_API_KEY`                    | optional | User-provided OpenAI key (alternative to the Replit integration)  |
+Copy `.env.example` and fill in values. Only `DATABASE_URL` is required to run locally in demo mode.
 
-If either the Replit integration env vars **or** `OPENAI_API_KEY` is present,
-live mode is enabled. Otherwise the platform runs in demo mode.
-
-> **Credential precedence:** when both are set, the Replit OpenAI integration is
-> preferred over `OPENAI_API_KEY`. The integration handles billing, rotation, and
-> observability for you, so it's the recommended path on Replit.
+| Variable | Required | Description |
+|---|---|---|
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `OPENAI_API_KEY` | No | Enables live LLM calls; app runs in demo mode without it |
+| `LLM_MODEL` | No | Override default model (default: `gpt-4.1-mini`) |
+| `TWILIO_ACCOUNT_SID` | No | Required for SMS and voice features |
+| `TWILIO_API_KEY` | No | Twilio API key SID |
+| `TWILIO_API_KEY_SECRET` | No | Twilio API key secret |
+| `TWILIO_PHONE_NUMBER` | No | Twilio sender number |
+| `SESSION_SECRET` | No | Session signing secret (Express) |
+| `PORT` | No | Node API port (default: `8080`) |
+| `NODE_ENV` | No | `development` or `production` |
 
 ---
 
-## Useful scripts
+## Project Structure
 
-```bash
-pnpm run typecheck                                   # full repo typecheck
-pnpm run build                                       # typecheck + build all packages
-pnpm --filter @workspace/api-spec run codegen        # regenerate hooks + zod from openapi.yaml
-pnpm --filter @workspace/db      run push            # push schema (dev only)
-pnpm --filter @workspace/api-server run seed         # reseed sample data
+```
+├── artifacts/
+│   ├── agentops/               # React + Vite frontend
+│   │   └── src/
+│   │       ├── components/     # UI components (PipelineFlow, RagAssessmentPanel, etc.)
+│   │       └── pages/          # Route pages (dashboard, workflow-detail, approvals, etc.)
+│   ├── api-server/             # Node.js orchestration API (Express 5 + Drizzle)
+│   │   └── src/
+│   │       ├── orchestration/  # 8-node agent state graph + node definitions
+│   │       ├── lib/            # LLM client, model config, agents, audit
+│   │       └── routes/         # API route handlers
+│   └── agent-worker/           # Python background worker + Alembic migrations
+├── api-python/                 # FastAPI RAG assessment and voice service
+│   ├── main.py                 # FastAPI app + all route handlers
+│   ├── voice.py                # Twilio ↔ OpenAI Realtime WebSocket bridge
+│   └── twilio_client.py        # SMS helper
+├── lib/
+│   ├── db/                     # Drizzle schema + client (shared)
+│   ├── api-spec/               # OpenAPI contract (source of truth)
+│   ├── api-client-react/       # Generated TanStack Query hooks
+│   └── api-zod/                # Generated Zod validators
+├── scripts/
+│   └── start-production.sh     # Production startup (migrations → Python → Node)
+├── .env.example
+└── pnpm-workspace.yaml
 ```
 
 ---
 
-## Where to look first
+## Technical Highlights
 
-- `lib/api-spec/openapi.yaml` — the API contract; everything is generated from here
-- `artifacts/api-server/src/orchestration/engine.ts` — the workflow state machine
-- `artifacts/api-server/src/orchestration/nodes/*.ts` — one file per agent
-- `artifacts/api-server/src/lib/llm.ts` — demo / live mode boundary
-- `artifacts/agentops/src/pages/workflow-detail.tsx` — the marquee UI surface
-- `artifacts/agentops/src/pages/overview.tsx` — the public case-study page
-- `replit.md` — project conventions, gotchas, and architecture decisions
+**Contract-first API with codegen.** A single `openapi.yaml` is the source of truth. orval generates typed React Query hooks (client) and Zod validators (server) from it. Schema drift between frontend and backend is impossible — both sides are compiled from the same file.
 
----
+**Two isolated schema owners on one database.** The Node service owns `public` via Drizzle ORM; the Python service owns `agentops_py` via Alembic. Each can migrate independently without interfering with the other. Migrations run automatically at production startup before either service begins accepting traffic.
 
-## Production extension path: Python / LangGraph worker
+**Demo mode / live mode duality.** Every agent node carries a typed demo fixture. If `OPENAI_API_KEY` is absent or the LLM call fails schema validation, the node falls back to the fixture and marks the output `fallback: "demo"`. The UI surfaces this transparently. The entire pipeline is always runnable.
 
-AgentOps is intentionally designed as a modular agent orchestration platform.
-The current demo uses a TypeScript LangGraph-style state machine for rapid
-visualization and product validation. In production, the orchestration layer
-can be swapped or extended with **Python / LangGraph** while preserving the
-same workflow state, approval, memory, and audit-log architecture.
+**LLM schema coercion layer.** Different model versions return structurally different JSON for the same prompt. Rather than letting Zod hard-fail and fall back to demo, agent schemas use `z.preprocess` to coerce known variance patterns (e.g. `flaggedClauses` returned as objects instead of strings) into the expected shape. Falls back to demo only when the coercion itself fails.
 
-> **Phase 1B capability spike — shipped.** A minimal Python/FastAPI/LangGraph
-> worker lives at [`artifacts/agent-worker/`](artifacts/agent-worker/README.md)
-> and runs alongside the Node API and React UI. It exposes
-> `GET /worker/health` and `POST /worker/run-spike` (a four-node demo
-> StateGraph), and the Express server proxies them at
-> `GET /api/worker/health` and `POST /api/worker/run-spike`. This proves the
-> Replit environment can host the production architecture below — the existing
-> TypeScript orchestrator is unchanged.
->
-> **Phase 1C vector memory foundation — shipped.** `pgvector` (v0.8.0) is
-> enabled on the project Postgres, `memory_chunks` has a nullable
-> `embedding vector(1536)` column sized for OpenAI `text-embedding-3-small`,
-> and the Python worker exposes two new endpoints (proxied at
-> `POST /api/worker/memory/embed-spike` and
-> `POST /api/worker/memory/search-spike`) that embed text, store the vector,
-> and run cosine-similarity search with an automatic keyword fallback when no
-> embeddings exist or the vector path fails. In demo mode (no `OPENAI_API_KEY`)
-> a deterministic SHA-256-seeded pseudo-embedding is used so the search
-> behavior is reproducible without an API key. The Node engine still uses the
-> existing keyword search; the vector path is a foundation, not a swap-in.
+**Confidence-gated routing in the RAG pipeline.** The Python assessment service computes a confidence score from retrieved policy chunks. Scores above the configured threshold are passed directly to synthesis; scores below escalate to the human approval gate. The routing decision is visible in the RAG Assessment panel.
 
-```mermaid
-flowchart LR
-  UI["React + Vite UI<br/>(unchanged)"] --> EDGE["Express edge API<br/>auth · validation · queue"]
-  EDGE --> WORKER["Python FastAPI + LangGraph worker<br/>agent graph · tool runtime"]
-  EDGE --> DB[("PostgreSQL<br/>workflows · agent_steps · approvals · audit")]
-  WORKER --> DB
-  WORKER --> VEC[("Vector store<br/>pgvector · Pinecone · Weaviate")]
-  WORKER --> ADAPT["Integration adapters<br/>CRM · ERP · Finance · HR · Email · Slack · Docs"]
-```
+**Twilio Voice → OpenAI Realtime bridge.** Inbound Twilio calls are received as Media Streams (WebSocket, G.711 µ-law audio). The Python service proxies audio frames bidirectionally to the OpenAI Realtime API and streams responses back to the caller in real time.
 
-The worker reads and writes the same Drizzle-defined tables as the demo
-orchestrator — the UI, the API contract, and the database schema do **not**
-change. Run dispatch happens via a job queue (Postgres `LISTEN/NOTIFY`, Redis,
-SQS) so the edge API stays responsive during long agent runs.
-
-### What stays the same
-
-| Layer                 | Demo (today)                        | Production extension                                |
-| --------------------- | ----------------------------------- | --------------------------------------------------- |
-| UI                    | React + Vite                        | React + Vite (unchanged)                            |
-| API contract          | OpenAPI / Zod / React Query         | OpenAPI / Zod / React Query (unchanged)             |
-| Database              | PostgreSQL + Drizzle                | PostgreSQL + Drizzle (unchanged)                    |
-| Workflow state        | `workflow_runs` + `agent_steps`     | identical schema, same envelopes                    |
-| Audit ledger          | `tool_calls` + `activity_logs`      | identical schema                                    |
-| Approval gate         | `approval_requests` + UI card       | identical                                           |
-| Orchestrator runtime  | TypeScript state machine (Express)  | **Python FastAPI + LangGraph worker**               |
-| Tools                 | Typed adapters in TS                | Typed adapters in Python (LangChain / LiteLLM)      |
-| Memory                | Keyword search over `memory_chunks` | **Vector retrieval** (pgvector / Pinecone / Weaviate) |
-
-### Agent graph nodes
-
-`Ops Conductor → Memory → Legal → Finance → Marketing/Comms → Synthesis →
-Approval (human gate) → Finalization`. Synthesis is the canonical source of the
-final brief; approval pauses the graph; finalization is where downstream
-adapter effects actually fire.
-
-### Vector memory upgrade
-
-The demo's `lib/memory/keyword-search.ts` exposes a single
-`searchMemory(query, k)` contract. In production it's an adapter swap:
-
-- **pgvector** — add a vector column to `memory_chunks`, reuse the existing
-  Postgres connection. Lowest ops overhead, ideal first step.
-- **Pinecone** — managed ANN index with namespaces; natural fit for
-  multi-tenant deployments.
-- **Weaviate** — hybrid search (dense + BM25), built-in re-rankers,
-  GraphQL surface.
-
-### Integration adapter layer
-
-Tools the agents call are typed adapters with a stable interface
-(`execute(input) → output`) and centralised credential injection. Every
-invocation lands in the `tool_calls` table — same row whether the adapter is a
-sandbox stub or a production system of record. Reference adapters: CRM
-(Salesforce, HubSpot), ERP (NetSuite, SAP), Finance (Stripe, QuickBooks,
-Mercury), HR (Workday, Rippling, BambooHR), Email (SendGrid, Postmark, M365),
-Chat (Slack, Teams), Document storage (Drive, SharePoint, S3).
-
-### Human-in-the-loop approval model
-
-Approval is a node, not a callback. Synthesis writes a typed brief into
-workflow state; the engine creates an `approval_requests` row and pauses the
-graph. The UI surfaces brief / evidence / risks / recommendation; an operator
-decides; the engine resumes from finalize with the decision attached to state.
-Configurable thresholds (spend, risk level, agent confidence) escalate
-automatically; multi-party approvals (legal + finance) are first-class;
-out-of-band channels (Slack, email) can post decisions back to the workflow.
-
-### Audit log & tool-call traceability
-
-Three append-only ledgers carry the full audit story:
-
-- `agent_steps` — one row per agent run, typed `AgentOutput` envelope,
-  confidence, risk score, fallback metadata, timing.
-- `tool_calls` — one row per external invocation, linked to the agent_step
-  that issued it; captures input / output / status / duration.
-- `activity_logs` — one row per state transition or operator action, with
-  actor, action verb, message, and structured metadata.
-
-Together they let an operator (or a regulator) reconstruct exactly what each
-agent saw, chose, and did — and which human approved it.
-
-### Security
-
-- **RBAC** — role-scoped access for operators, approvers, auditors, admins;
-  enforced server-side with the UI mirroring the same matrix.
-- **Tenant isolation** — every workflow, document, and adapter credential is
-  scoped to a `portfolio_company_id`, with row-level security in Postgres
-  enforcing the boundary even on raw SQL.
-- **Approval thresholds** — configurable rules on spend, risk level, and
-  agent confidence escalate to higher tiers and require multiple approvers
-  for sensitive bands.
-- **Sensitive action gating** — adapters declare blast radius; high-impact
-  calls (wire transfer, contract sign, PII export) require an approval token
-  issued only after a human decision.
-- **Credential isolation** — adapter credentials live in a secrets manager
-  (Replit Secrets, Vault, AWS Secrets Manager) and are injected per-call. The
-  agent runtime never sees raw API keys.
-
-A live, navigable version of this section ships in the app at
-[`/architecture`](./artifacts/agentops/src/pages/architecture.tsx).
+**Typed agent output envelopes enforced at the boundary.** `BaseAgent` validates every LLM response against `agentOutputSchema` before the result is persisted. No untyped or partially-shaped data reaches the database regardless of which agent produced it.
 
 ---
 
-## Future extensions
+## Author
 
-- Real vector retrieval (pgvector) behind the Memory agent's keyword fallback
-- Multi-tenant auth, scoped to portfolio companies
-- Configurable agent prompts and per-agent model selection
-- Webhook outbound notifications on approval-gate events
-- A "redo with changes" loop that lets the operator nudge the brief and re-run
-  downstream agents without restarting the pipeline
+**Aaron Archer**  
+AI-Native Full-Stack & Systems Engineer  
+[digitalprodigy.dev](https://digitalprodigy.dev)
 
 ---
 
-## Portfolio positioning
+## Licence
 
-AgentOps is the artifact I'd hand a procurement team or an enterprise-AI hiring
-manager to answer the question *"can you build something I'd actually trust to
-run inside an operating company?"*. It demonstrates:
-
-- **Auditability over magic** — typed output envelopes, persisted evidence, and a
-  full activity ledger.
-- **Pragmatic stack choices** — one toolchain, generated contract, a single
-  database, no premature distributed-systems theatre.
-- **Graceful degradation** — works offline-first with deterministic fixtures so
-  every demo lands.
-- **A real product spine** — dashboard, queue, approvals, knowledge base, tool-call
-  ledger, and a public case-study page, all wired through the same contract.
-
-Built on Replit · MIT-style portfolio sample.
+This repository is published as a portfolio sample. You are welcome to read, reference, and learn from the code. Please do not redistribute it as your own work or use it as the basis of a commercial product without permission.
