@@ -1,6 +1,8 @@
 # AgentOps Command Center
 
-An enterprise operations platform that routes business requests through a coordinated crew of specialist AI agents, grounds every decision in policy, and lands at a human approval gate with a complete audit trail.
+A portfolio demonstration of an enterprise operations platform that routes business requests through a coordinated crew of specialist AI agents, grounds every decision in policy, and lands at a human approval gate with a complete audit trail.
+
+> **Note:** This is a portfolio demonstration system. API routes are not protected by authentication. It is designed to showcase AI orchestration architecture, not to be deployed as production enterprise software without adding proper auth and access controls.
 
 ---
 
@@ -8,7 +10,7 @@ An enterprise operations platform that routes business requests through a coordi
 
 **The problem.** Operations teams at holding companies and scale-ups manage a constant backlog of approval requests — vendor contracts, ad spend, legal reviews, facilities work, hiring approvals. The bottleneck is rarely the decision itself; it is assembling the evidence that lets the right person make that decision quickly and defensibly.
 
-**Who it is for.** Portfolio operators, COOs, and enterprise engineering teams evaluating AI-assisted workflow automation.
+**Who it is for.** Technical founders, engineering managers, and enterprise teams evaluating AI-assisted workflow automation — or anyone wanting a reference architecture for multi-agent systems with human-in-the-loop oversight.
 
 **What it delivers.** A fully auditable pipeline where each request is triaged, reviewed by specialist agents (Ops, Legal, Finance, Communications, Memory), synthesised into a recommendation, and routed to a human operator — with every agent action, retrieved evidence, tool call, confidence score, and operator decision stored as a typed, replayable record.
 
@@ -45,7 +47,7 @@ The live instance runs in demo mode by default. Submit any request via **New Req
 React 19 SPA built with Vite 7 and Tailwind CSS 4. Routing via Wouter. Data fetching via TanStack Query 5 with generated hooks from orval. UI components via Radix UI primitives (shadcn). Animations via Framer Motion. TypeScript throughout. Compiled to a static build and served behind the Node API server.
 
 ### Backend — Node (Orchestration API)
-Express 5 API server written in TypeScript. Owns the primary orchestration logic: runs the 8-node agent state graph, persists all workflow state, manages the approval queue, and proxies `/api-python` requests to the Python service. Drizzle ORM manages the `public` schema.
+Express 5 API server written in TypeScript. Owns the primary orchestration logic: runs the 8-node agent state graph, persists all workflow state, manages the approval queue, and proxies `/api-python` requests to the Python service. Drizzle ORM manages the `public` schema. Routes are open — this is a demo system without authentication middleware.
 
 ### Backend — Python (RAG + Voice)
 FastAPI service running on a separate process. Handles retrieval-augmented assessment (`/api-python/assess`), initial request intake and triage (`/api-python/intake`, `/api-python/triage`), workflow state queries, and a WebSocket bridge between Twilio Media Streams and the OpenAI Realtime API for voice calls. Psycopg3 for database access.
@@ -53,7 +55,7 @@ FastAPI service running on a separate process. Handles retrieval-augmented asses
 ### Database
 PostgreSQL 16 with two schema owners:
 - **`public`** — managed by Drizzle ORM (Node side). Tables: `operational_requests`, `workflow_runs`, `agent_steps`, `tool_calls`, `approval_requests`, `agents`, `knowledge_documents`, `memory_chunks`, `activity_logs`, `portfolio_companies`, `system_settings`, `users`
-- **`agentops_py`** — managed by Alembic migrations (Python side). Assessment records, vector memory metadata
+- **`agentops_py`** — managed by Alembic migrations (Python side). Assessment records and memory metadata.
 
 ### AI / Automation
 - OpenAI chat completions API via the `openai` Node and Python SDKs
@@ -109,9 +111,9 @@ Every step — agent outputs, tool calls, state transitions, operator actions �
 
 ## Screenshots
 
-*Add screenshots to `docs/screenshots/` and update the paths below.*
+*Screenshots to be added at `docs/screenshots/`. Filenames are listed below for reference.*
 
-| | |
+| Filename | Content |
 |---|---|
 | `docs/screenshots/dashboard.png` | Live dashboard with KPIs and agent crew |
 | `docs/screenshots/workflow-detail.png` | Step-by-step pipeline view with agent outputs |
@@ -126,9 +128,11 @@ Every step — agent outputs, tool calls, state transitions, operator actions �
 **Prerequisites:** Node.js 20+, pnpm 9+, Python 3.11+, [uv](https://docs.astral.sh/uv/), PostgreSQL 16
 
 ```bash
-# Clone and install Node dependencies
-git clone https://github.com/your-username/agentops-command-center.git
-cd agentops-command-center
+# Clone the repository
+git clone https://github.com/ProdigyProjectStudios/<repo-name>.git
+cd <repo-name>
+
+# Install Node dependencies
 pnpm install
 
 # Configure environment

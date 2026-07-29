@@ -61,6 +61,9 @@ __pycache__/
 *.zip
 *.tar.gz
 
+# Internal development assets (prompts, uploaded briefs, dev screenshots)
+attached_assets/
+
 # Replit
 .cache/
 .local/
