@@ -128,8 +128,8 @@ For full architecture diagrams and sequence flows, see [docs/architecture.md](do
 
 ```bash
 # Clone
-git clone https://github.com/ProdigyProjectStudios/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/ProdigyProjectStudios/agentops-command-center.git
+cd agentops-command-center
 
 # Node dependencies
 pnpm install
