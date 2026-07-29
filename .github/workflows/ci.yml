@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  node:
+    name: Node — typecheck, build, test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: TypeScript — typecheck all packages
+        run: pnpm run typecheck
+
+      - name: API server — unit tests (55 tests)
+        run: pnpm --filter @workspace/api-server test
+
+      - name: Frontend — production build
+        env:
+          PORT: 20962
+          BASE_PATH: /
+          NODE_ENV: production
+        run: pnpm --filter @workspace/agentops run build
+
+      - name: API server — production build
+        env:
+          NODE_ENV: production
+        run: pnpm --filter @workspace/api-server run build
+
+  python:
+    name: Python — syntax and dependency check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Python FastAPI service — install dependencies
+        run: uv sync --project api-python
+
+      - name: Python FastAPI service — syntax check
+        run: |
+          python -m py_compile api-python/main.py
+          python -m py_compile api-python/voice.py
+          python -m py_compile api-python/twilio_client.py
+
+      - name: Agent worker — install dependencies
+        run: uv sync --project artifacts/agent-worker
+
+      - name: Agent worker — syntax check
+        run: |
+          python -m py_compile artifacts/agent-worker/embedding.py
+          python -m py_compile artifacts/agent-worker/twilio_client.py
