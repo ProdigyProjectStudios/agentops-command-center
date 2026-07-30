@@ -238,4 +238,4 @@ AI-Native Full-Stack & Systems Engineer
 
 ## Licence
 
-Published as a portfolio sample. You are welcome to read and learn from this code. Do not redistribute it as your own work or use it as the basis of a commercial product without permission.
+Proprietary source code. Publicly available for portfolio evaluation and technical review only. Copying, redistribution, commercial use, and derivative works are prohibited without written permission. See [LICENSE](LICENSE).
