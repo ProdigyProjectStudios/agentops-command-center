@@ -19,7 +19,7 @@ A multi-agent enterprise operations platform built as a technical portfolio syst
 
 ## Live Demo
 
-**[agent-ops-command-center.replit.app](https://agent-ops-command-center.replit.app)**
+**[agentops.digitalprodigy.dev](https://agentops.digitalprodigy.dev)**
 
 Runs in deterministic demo mode by default — no API key required. Set `OPENAI_API_KEY` to switch to live LLM calls. Submit any request via **New Request** to run the full pipeline.
 
