@@ -10,6 +10,7 @@
     "seed": "tsx src/seed.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "node --test --experimental-test-module-mocks --import tsx 'src/__tests__/*.test.ts'",
+    "eval": "node --test --experimental-test-module-mocks --import tsx 'src/__tests__/eval-harness.test.ts'",
     "check": "pnpm run typecheck && pnpm run test"
   },
   "dependencies": {
