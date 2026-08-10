@@ -1,6 +1,7 @@
 import type { ZodTypeAny } from "zod";
 import { generateAgentOutput, type AgentInvocation } from "../llm";
 import { getModelForAgent } from "../model-config";
+import { persistTelemetry, logTelemetryError } from "../telemetry";
 import type { AgentOutput, ToolCallRequest, WorkflowState } from "./types";
 import { agentOutputSchema, parseConfidence } from "./types";
 
@@ -61,6 +62,19 @@ export class BaseAgent<TDetails extends Record<string, unknown>> {
       model,
     };
     const result = await generateAgentOutput(invocation);
+
+    // Non-blocking telemetry persist — must never propagate errors to callers.
+    // Usage is undefined in demo mode (no credentials), so we only persist
+    // when a real provider round-trip was attempted.
+    if (result.usage) {
+      persistTelemetry({
+        workflowRunId: state.workflowRun?.id,
+        agentSlug: this.cfg.slug,
+        usage: result.usage,
+        fallbackReason: result.fallback?.reason,
+      }).catch((err: unknown) => logTelemetryError(err, this.cfg.slug));
+    }
+
     const details = result.details as TDetails;
     const env = this.cfg.buildEnvelope(details, state);
     const candidate: AgentOutput = {

@@ -68,9 +68,30 @@ export interface FallbackInfo {
   message: string;
 }
 
+/**
+ * Usage metrics from one provider round-trip.
+ * Present only when a live call was actually attempted (demo mode → undefined).
+ * Token fields are null when the provider omits usage (rare but possible).
+ */
+export interface LlmUsage {
+  provider: "openai";
+  model: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  /** Wall-clock duration of the provider call in milliseconds. */
+  durationMs: number;
+}
+
 export interface AgentOutputResult {
   details: Record<string, unknown>;
   fallback?: FallbackInfo;
+  /**
+   * Populated whenever a live LLM call was attempted, regardless of whether
+   * it succeeded or fell back to the demo payload.
+   * Undefined in true demo mode (no credentials).
+   */
+  usage?: LlmUsage;
 }
 
 export interface AgentInvocation {
@@ -135,6 +156,7 @@ ${schemaHint}`;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const callStarted = Date.now();
   try {
     const completion = await openai.chat.completions.create(
       {
@@ -148,6 +170,17 @@ ${schemaHint}`;
       },
       { signal: controller.signal },
     );
+    const durationMs = Date.now() - callStarted;
+    // Capture real usage from the provider response.
+    const usage: LlmUsage = {
+      provider: "openai",
+      model,
+      inputTokens: completion.usage?.prompt_tokens ?? null,
+      outputTokens: completion.usage?.completion_tokens ?? null,
+      totalTokens: completion.usage?.total_tokens ?? null,
+      durationMs,
+    };
+
     const raw = completion.choices[0]?.message?.content;
     if (!raw) {
       logger.warn(
@@ -158,6 +191,7 @@ ${schemaHint}`;
         invocation,
         "empty_content",
         `Live call to ${model} returned empty content; using demo payload.`,
+        usage,
       );
     }
     let parsed: unknown;
@@ -172,6 +206,7 @@ ${schemaHint}`;
         invocation,
         "invalid_json",
         `Live call to ${model} returned non-JSON content; using demo payload.`,
+        usage,
       );
     }
     if (!isPlainObject(parsed)) {
@@ -183,6 +218,7 @@ ${schemaHint}`;
         invocation,
         "non_object",
         `Live call to ${model} returned a non-object JSON value; using demo payload.`,
+        usage,
       );
     }
     if (invocation.schema) {
@@ -206,6 +242,7 @@ ${schemaHint}`;
           invocation,
           "schema_validation",
           `Live call to ${model} failed schema validation (${issueSummary}); using demo payload.`,
+          usage,
         );
       }
       logger.debug(
@@ -217,6 +254,7 @@ ${schemaHint}`;
           invocation.demoFallback,
           result.data as Record<string, unknown>,
         ),
+        usage,
       };
     }
     if (!matchesShape(parsed, invocation.demoFallback)) {
@@ -228,22 +266,34 @@ ${schemaHint}`;
         invocation,
         "shape_mismatch",
         `Live call to ${model} returned a payload that did not match the expected shape; using demo payload.`,
+        usage,
       );
     }
     logger.debug(
       { agentSlug: invocation.agentSlug, model: model },
       "LLM live call succeeded",
     );
-    return { details: deepMerge(invocation.demoFallback, parsed) };
+    return { details: deepMerge(invocation.demoFallback, parsed), usage };
   } catch (err) {
+    const durationMs = Date.now() - callStarted;
     logger.warn(
       { err, agentSlug: invocation.agentSlug, model: model },
       "LLM live call fell back to demo: API, timeout, or parse error",
     );
+    // Usage is unavailable on hard failures but we still record duration.
+    const usage: LlmUsage = {
+      provider: "openai",
+      model,
+      inputTokens: null,
+      outputTokens: null,
+      totalTokens: null,
+      durationMs,
+    };
     return liveFallback(
       invocation,
       "api_error",
       `Live call to ${model} failed (${err instanceof Error ? err.message : String(err)}); using demo payload.`,
+      usage,
     );
   } finally {
     clearTimeout(timeout);
@@ -254,10 +304,12 @@ function liveFallback(
   invocation: AgentInvocation,
   reason: FallbackReason,
   message: string,
+  usage?: LlmUsage,
 ): AgentOutputResult {
   return {
     details: invocation.demoFallback,
     fallback: { mode: "live", reason, message },
+    usage,
   };
 }
 

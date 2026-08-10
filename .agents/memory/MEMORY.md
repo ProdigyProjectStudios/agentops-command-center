@@ -2,3 +2,4 @@
 - [Alembic migration chain](alembic-chain.md) — agentops_py schema, head is e1a2b3c4d5f6; always set down_revision to prior head before running.
 - [Port conflicts on Replit](port-conflicts.md) — orphan Python processes hold ports 8000/8008 after repeated restarts; kill with fuser -k before restart.
 - [pgvector semantic retrieval](pgvector-retrieval.md) — Task 47 complete; route path, backfill CLI, test constraints, and pre-existing race in job retry test.
+- [LLM telemetry architecture](llm-telemetry.md) — Task 3 complete; llm_usage table, pricing layer, usage capture in llm.ts, fire-and-forget persist in BaseAgent.
