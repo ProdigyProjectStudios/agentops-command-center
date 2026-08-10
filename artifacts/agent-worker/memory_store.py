@@ -214,6 +214,84 @@ def has_embeddings(document_id: int) -> bool:
         return bool(row and row[0])
 
 
+def backfill_embeddings(batch_size: int = 50) -> dict[str, int]:
+    """Embed all ``memory_chunks`` rows that currently have ``embedding IS NULL``.
+
+    Processes rows in batches of *batch_size*, committing each batch
+    independently so the job is safe to interrupt and resume.  Rows that
+    already have an embedding are never touched (the UPDATE includes
+    ``AND embedding IS NULL`` as a guard).
+
+    Returns a mapping with keys:
+        ``processed`` — rows successfully embedded in this run
+        ``skipped``   — rows whose embedding was set by a concurrent process
+                        between our SELECT and our UPDATE (rare)
+        ``failed``    — rows that raised an exception during embed/update
+
+    The function is idempotent: a second call when no NULL rows remain
+    returns ``{"processed": 0, "skipped": 0, "failed": 0}``.
+    """
+    from embedding import embed_text  # lazy import avoids circular dependency
+
+    processed = 0
+    skipped = 0
+    failed = 0
+
+    while True:
+        # Fetch the next batch of un-embedded chunk IDs.  Because we UPDATE
+        # each row (clearing IS NULL) before the next iteration, repeatedly
+        # fetching from offset 0 is both correct and race-safe.
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT id, content
+                FROM memory_chunks
+                WHERE embedding IS NULL
+                ORDER BY id
+                LIMIT %s
+                """,
+                (batch_size,),
+            )
+            rows = cur.fetchall()
+
+        if not rows:
+            break
+
+        batch_processed = 0
+        batch_skipped = 0
+        batch_failed = 0
+
+        with _conn() as conn:
+            for row in rows:
+                chunk_id = int(row[0])
+                content = str(row[1])
+                try:
+                    emb = embed_text(content)
+                    with conn.cursor() as cur:
+                        cur.execute(
+                            """
+                            UPDATE memory_chunks
+                            SET embedding = %s::vector
+                            WHERE id = %s AND embedding IS NULL
+                            """,
+                            (_vec_literal(emb.vector), chunk_id),
+                        )
+                        updated = cur.rowcount
+                    if updated == 0:
+                        batch_skipped += 1
+                    else:
+                        batch_processed += 1
+                except Exception:
+                    batch_failed += 1
+            conn.commit()
+
+        processed += batch_processed
+        skipped += batch_skipped
+        failed += batch_failed
+
+    return {"processed": processed, "skipped": skipped, "failed": failed}
+
+
 def hit_to_dict(hit: MemoryHit) -> dict[str, Any]:
     return {
         "chunkId": hit.chunk_id,

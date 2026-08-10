@@ -467,12 +467,27 @@ async def check_has_embeddings(document_id: int) -> HasEmbeddingsResponse:
 
 @app.post("/worker/memory/search-spike", response_model=SearchSpikeResponse)
 async def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
+    """Semantic retrieval endpoint — stable production path.
+
+    Route path is preserved for backwards compatibility; all callers
+    (api-python /assess) reference this path directly.
+
+    Retrieval strategy (three-tier, non-fatal):
+      1. Embed the query via embed_text() (live OpenAI → demo fallback).
+      2. vector_search() — cosine similarity over memory_chunks.embedding.
+         Returns mode="vector" when hits exist.
+      3. If vector_search raises or returns 0 rows → keyword_search() fallback.
+         Returns mode="keyword_fallback".
+      4. If both fail → mode="empty", empty results.
+
+    Assessment is never blocked: all exception paths return HTTP 200.
+    """
     emb = embed_text(req.query)
-    # Try vector path first.
+    # --- tier 1: pgvector cosine similarity ---
     try:
         hits = vector_search(emb.vector, limit=req.limit)
     except Exception as exc:
-        # DB or pgvector failure → keyword fallback.
+        # pgvector / DB failure → tier 2: keyword fallback
         try:
             kw = keyword_search(req.query, limit=req.limit)
             return SearchSpikeResponse(
@@ -483,6 +498,7 @@ async def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
                 reason=f"vector_failed: {type(exc).__name__}",
             )
         except Exception as kw_exc:
+            # tier 3: both paths failed
             return SearchSpikeResponse(
                 status="ok",
                 mode="empty",
@@ -497,7 +513,7 @@ async def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
             results=[hit_to_dict(h) for h in hits],
             embeddingMode=emb.mode,
         )
-    # Vector returned 0 rows (no embeddings yet) → keyword fallback.
+    # Vector returned 0 rows (no embedded chunks yet) → tier 2: keyword fallback
     try:
         kw = keyword_search(req.query, limit=req.limit)
     except Exception as kw_exc:

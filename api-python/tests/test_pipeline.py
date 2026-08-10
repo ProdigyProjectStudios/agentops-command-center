@@ -73,7 +73,10 @@ def _create_workflow(department: str = "finance") -> int:
     assert intake_resp.status_code == 201, intake_resp.text
     wf_id = intake_resp.json()["workflow_run_id"]
 
-    triage_resp = client.post(f"/triage/{wf_id}")
+    triage_resp = client.post(
+        f"/triage/{wf_id}",
+        json={"portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+    )
     assert triage_resp.status_code == 200, triage_resp.text
     return wf_id
 
@@ -151,7 +154,10 @@ def test_malformed_llm_output_rejected():
         _mock_search(mock_httpx)
         mock_openai.chat.completions.create.return_value = fake_llm
 
-        resp = client.post(f"/assess/{wf_id}")
+        resp = client.post(
+            f"/assess/{wf_id}",
+            params={"portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+        )
 
     assert resp.status_code == 502, resp.text
     detail = resp.json()["detail"]
@@ -184,7 +190,10 @@ def test_low_confidence_routes_to_approval_gate():
         _mock_search(mock_httpx)
         mock_openai.chat.completions.create.return_value = _mock_llm(verdict)
 
-        resp = client.post(f"/assess/{wf_id}?confidence_threshold=0.80")
+        resp = client.post(
+            f"/assess/{wf_id}",
+            params={"confidence_threshold": 0.80, "portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+        )
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -233,7 +242,10 @@ def test_high_confidence_auto_completes():
         _mock_search(mock_httpx)
         mock_openai.chat.completions.create.return_value = _mock_llm(verdict)
 
-        resp = client.post(f"/assess/{wf_id}?confidence_threshold=0.60")
+        resp = client.post(
+            f"/assess/{wf_id}",
+            params={"confidence_threshold": 0.60, "portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+        )
 
     assert resp.status_code == 200, resp.text
     data = resp.json()
@@ -511,7 +523,10 @@ def test_retrieval_references_stored_with_verdict():
         _mock_search(mock_httpx)
         mock_openai.chat.completions.create.return_value = _mock_llm(verdict)
 
-        resp = client.post(f"/assess/{wf_id}")
+        resp = client.post(
+            f"/assess/{wf_id}",
+            params={"portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+        )
 
     assert resp.status_code == 200, resp.text
     assessment_id = resp.json()["assessment_id"]
@@ -571,7 +586,10 @@ def test_intake_triage_assess_end_to_end():
     assert intake_data["portfolio_company_id"] == VALID_PORTFOLIO_CO_ID
 
     # Step 2 — Triage
-    triage_resp = client.post(f"/triage/{wf_id}", json={"request_type": "budget_increase"})
+    triage_resp = client.post(
+        f"/triage/{wf_id}",
+        json={"request_type": "budget_increase", "portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+    )
     assert triage_resp.status_code == 200, triage_resp.text
     triage_data = triage_resp.json()
 
@@ -594,7 +612,10 @@ def test_intake_triage_assess_end_to_end():
         _mock_search(mock_httpx)
         mock_openai.chat.completions.create.return_value = _mock_llm(verdict)
 
-        assess_resp = client.post(f"/assess/{wf_id}?confidence_threshold=0.60")
+        assess_resp = client.post(
+            f"/assess/{wf_id}",
+            params={"confidence_threshold": 0.60, "portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+        )
 
     assert assess_resp.status_code == 200, assess_resp.text
     assess_data = assess_resp.json()
@@ -621,7 +642,10 @@ def test_intake_triage_assess_end_to_end():
     assert db_row[2] == "vector"
 
     # Step 4 — GET /workflow confirms finalized state
-    state_resp = client.get(f"/workflow/{wf_id}")
+    state_resp = client.get(
+        f"/workflow/{wf_id}",
+        params={"portfolio_company_id": VALID_PORTFOLIO_CO_ID},
+    )
     assert state_resp.status_code == 200, state_resp.text
     state = state_resp.json()
 
