@@ -353,6 +353,13 @@ for (const scenario of GOLDEN_SCENARIOS) {
 // ─── Report ───────────────────────────────────────────────────────────────────
 
 after(async () => {
+  // Only write the JSON report and print the eval summary when explicitly
+  // requested via the eval script. During a normal `pnpm test` or
+  // `pnpm check` run the golden regression assertions execute (contributing
+  // to pass/fail) but no file is written and no eval-specific output is
+  // printed to avoid littering eval-results/ on every CI/local test run.
+  if (process.env["AGENTOPS_EVAL_REPORT"] !== "1") return;
+
   const report = buildReport(ALL_CHECKS);
   // Merge in coverage gaps that weren't exercised as failing checks.
   report.coverageGaps = COVERAGE_GAPS;
