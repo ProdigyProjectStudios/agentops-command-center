@@ -12,6 +12,8 @@ Covers:
   • /assess response exposes valid retrieval_mode
   • /assess response exposes valid retrieval_chunks_used
   • /assess continues gracefully when retrieval endpoint fails
+  • backfill terminates and returns failed>0 when embed_text raises (no infinite loop)
+  • backfill returns processed=0 when called with no NULL-embedding rows
 
 Real Postgres is used for all DB-backed tests (same DATABASE_URL as the
 rest of the suite).  No live OpenAI call is required — demo embeddings
@@ -48,6 +50,7 @@ sys.path.insert(1, _WORKER_ROOT)
 from fastapi.testclient import TestClient
 from main import app
 
+import embedding as embedding_module
 import memory_store
 from embedding import EMBEDDING_DIMENSIONS, _demo_embedding
 from memory_store import (
@@ -508,3 +511,84 @@ def test_assess_graceful_on_retrieval_failure():
         f"Expected retrieval_failed in mode, got: {data['retrieval_mode']}"
     )
     assert data["retrieval_chunks_used"] == 0
+
+
+# ===========================================================================
+# 11. backfill terminates when embed_text always raises (no infinite loop)
+# ===========================================================================
+
+def test_backfill_terminates_on_embed_failure():
+    """backfill_embeddings returns failed>0 and terminates when embed_text raises.
+
+    Monkeypatches embedding_module.embed_text so every call raises.  The
+    inner ``from embedding import embed_text`` in backfill_embeddings picks
+    up the patched version at call-time, so the loop must exit without
+    cycling forever on the same un-embeddable row.
+    """
+    doc_id = _create_test_document("Retrieval Test — Embed Failure Terminates")
+    try:
+        chunk_id = _insert_chunk_with_null_embedding(
+            doc_id, "failure termination test chunk content pgvector"
+        )
+        assert _read_embedding_dims(chunk_id) is None, "Chunk should start NULL"
+
+        original = embedding_module.embed_text
+
+        def _always_raise(text: str):
+            raise RuntimeError("simulated embed failure — should not loop")
+
+        embedding_module.embed_text = _always_raise
+        try:
+            result = backfill_embeddings(batch_size=10)
+        finally:
+            embedding_module.embed_text = original
+
+        assert result["failed"] >= 1, (
+            f"Expected at least 1 failed row, got: {result}"
+        )
+        assert result["processed"] == 0, (
+            f"Expected 0 processed when embed always raises: {result}"
+        )
+        # The chunk must remain NULL — failure must not corrupt the row
+        assert _read_embedding_dims(chunk_id) is None, (
+            "Embedding should still be NULL after a failed backfill"
+        )
+    finally:
+        _delete_test_document(doc_id)
+
+
+# ===========================================================================
+# 12. backfill returns processed=0 when no NULL-embedding rows exist
+# ===========================================================================
+
+def test_backfill_empty_when_no_null_rows():
+    """backfill_embeddings returns all-zeros when every chunk is already embedded."""
+    doc_id = _create_test_document("Retrieval Test — Empty Backfill")
+    try:
+        vec = _demo_embedding("pre-embedded content — no nulls expected")
+        store_chunk(doc_id, "pre-embedded content — no nulls expected", vec)
+        assert _read_embedding_dims(
+            # find the chunk we just wrote
+            _find_chunk_id(doc_id, "pre-embedded content — no nulls expected")
+        ) == EMBEDDING_DIMENSIONS
+
+        result = backfill_embeddings(batch_size=10)
+
+        assert result["failed"] == 0, f"Unexpected failures: {result}"
+        assert result["processed"] == 0, (
+            f"Expected processed=0 with no NULL rows, got: {result}"
+        )
+    finally:
+        _delete_test_document(doc_id)
+
+
+def _find_chunk_id(doc_id: int, content_prefix: str) -> int:
+    """Return the id of the first chunk in *doc_id* whose content starts with *content_prefix*."""
+    with _db() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id FROM memory_chunks WHERE document_id = %s AND content LIKE %s LIMIT 1",
+            (doc_id, f"{content_prefix[:40]}%"),
+        )
+        row = cur.fetchone()
+    assert row is not None, f"No chunk found for doc {doc_id} with prefix {content_prefix[:40]!r}"
+    return int(row[0])

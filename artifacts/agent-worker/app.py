@@ -24,7 +24,7 @@ from collections import defaultdict
 from threading import Lock
 from typing import Any, TypedDict
 
-from fastapi import FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -47,6 +47,7 @@ from memory_store import (
     hit_to_dict,
     clear_document_chunks,
     has_embeddings,
+    backfill_embeddings,
 )
 
 try:
@@ -62,6 +63,38 @@ except Exception as exc:  # pragma: no cover - surfaced via /worker/health
 
 
 SERVICE_NAME = "agentops-langgraph-worker"
+
+# ---------------------------------------------------------------------------
+# Ingest endpoint security — shared secret and concurrency guard
+# ---------------------------------------------------------------------------
+
+# WORKER_INGEST_SECRET must be set in the environment.  When absent the
+# ingest endpoint returns 503 so misconfigured deployments fail loudly
+# rather than silently accepting or silently rejecting every request.
+_INGEST_SECRET: str | None = os.environ.get("WORKER_INGEST_SECRET") or None
+
+# Process-level lock — prevents concurrent backfill runs from consuming
+# duplicate API quota and hammering the database simultaneously.
+_ingest_lock: Lock = Lock()
+
+
+def _require_ingest_auth(x_worker_secret: str | None = Header(default=None)) -> None:
+    """FastAPI dependency: enforce X-Worker-Secret header on ingest endpoint.
+
+    Returns:
+        503 — WORKER_INGEST_SECRET environment variable is not configured.
+        403 — header is absent or does not match the configured secret.
+    """
+    if _INGEST_SECRET is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "ingest endpoint not configured: "
+                "set the WORKER_INGEST_SECRET environment variable and restart the worker"
+            ),
+        )
+    if x_worker_secret != _INGEST_SECRET:
+        raise HTTPException(status_code=403, detail="forbidden: invalid or missing X-Worker-Secret")
 
 
 class SpikeState(TypedDict, total=False):
@@ -205,6 +238,7 @@ class HealthResponse(BaseModel):
     python: str
     langgraph_available: bool
     langgraph_error: str | None = None
+    ingest_configured: bool  # True when WORKER_INGEST_SECRET env var is set
 
 
 setup_logging()
@@ -288,6 +322,15 @@ async def _startup_db_check() -> None:
     start_worker_background()
     _log.info("durable worker loop started")
 
+    # 4 — Warn clearly when the ingest endpoint is not configured
+    if _INGEST_SECRET:
+        _log.info("ingest endpoint configured (WORKER_INGEST_SECRET is set)")
+    else:
+        _log.error(
+            "WORKER_INGEST_SECRET env var is not set — "
+            "POST /worker/memory/ingest will return 503 until this is configured"
+        )
+
 
 @app.get("/worker/health", response_model=HealthResponse)
 async def health() -> HealthResponse:
@@ -297,6 +340,7 @@ async def health() -> HealthResponse:
         python=sys.version.split()[0],
         langgraph_available=LANGGRAPH_AVAILABLE,
         langgraph_error=LANGGRAPH_IMPORT_ERROR,
+        ingest_configured=(_INGEST_SECRET is not None),
     )
 
 
@@ -530,6 +574,58 @@ async def search_spike(req: SearchSpikeRequest) -> SearchSpikeResponse:
         results=[hit_to_dict(h) for h in kw],
         embeddingMode=emb.mode,
         reason="no_vector_rows",
+    )
+
+
+class IngestRequest(BaseModel):
+    batch_size: int = Field(default=50, ge=1, le=500)
+
+
+class IngestResponse(BaseModel):
+    status: str
+    processed: int
+    skipped: int
+    failed: int
+
+
+@app.post(
+    "/worker/memory/ingest",
+    response_model=IngestResponse,
+    dependencies=[Depends(_require_ingest_auth)],
+)
+def memory_ingest(req: IngestRequest = IngestRequest()) -> IngestResponse:
+    """Trigger on-demand embedding backfill for all NULL-embedding memory chunks.
+
+    **Auth**: requires the ``X-Worker-Secret`` header to match the
+    ``WORKER_INGEST_SECRET`` environment variable (or the per-process
+    random secret if the env var is absent).  Returns 403 on mismatch.
+
+    **Concurrency**: at most one backfill can run at a time per process.
+    A 409 is returned immediately if a backfill is already in progress,
+    preventing duplicate API quota consumption and DB contention.
+
+    Declared as a synchronous ``def`` so FastAPI runs it in the default
+    threadpool executor, keeping the event loop free for concurrent
+    health-check and retrieval requests during a long backfill run.
+
+    Calls ``backfill_embeddings(batch_size)`` from memory_store, which
+    processes rows in batches and commits each independently so the job
+    is safe to interrupt and resume.  Already-embedded rows are skipped.
+    Rows that fail during embedding are excluded from re-selection within
+    the same run, so the call always terminates.
+    """
+    acquired = _ingest_lock.acquire(blocking=False)
+    if not acquired:
+        raise HTTPException(status_code=409, detail="backfill already in progress")
+    try:
+        result = backfill_embeddings(req.batch_size)
+    finally:
+        _ingest_lock.release()
+    return IngestResponse(
+        status="ok",
+        processed=result["processed"],
+        skipped=result["skipped"],
+        failed=result["failed"],
     )
 
 

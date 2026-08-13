@@ -222,6 +222,12 @@ def backfill_embeddings(batch_size: int = 50) -> dict[str, int]:
     already have an embedding are never touched (the UPDATE includes
     ``AND embedding IS NULL`` as a guard).
 
+    Rows that raise an exception during embedding are excluded from all
+    subsequent SELECT fetches within this invocation (tracked in
+    ``_failed_ids``).  This guarantees the loop always terminates: every
+    iteration either embeds at least one row (shrinking the NULL set) or
+    returns no new rows to process.
+
     Returns a mapping with keys:
         ``processed`` — rows successfully embedded in this run
         ``skipped``   — rows whose embedding was set by a concurrent process
@@ -236,22 +242,37 @@ def backfill_embeddings(batch_size: int = 50) -> dict[str, int]:
     processed = 0
     skipped = 0
     failed = 0
+    # IDs that failed during this run — excluded from all subsequent SELECTs
+    # so the loop cannot spin forever on a persistently un-embeddable row.
+    _failed_ids: list[int] = []
 
     while True:
-        # Fetch the next batch of un-embedded chunk IDs.  Because we UPDATE
-        # each row (clearing IS NULL) before the next iteration, repeatedly
-        # fetching from offset 0 is both correct and race-safe.
+        # Fetch the next batch of un-embedded chunk IDs, excluding any that
+        # already failed this run.  Because successful rows are UPDATEd before
+        # the next iteration, fetching from offset 0 is correct and race-safe.
         with _conn() as conn, conn.cursor() as cur:
-            cur.execute(
-                """
-                SELECT id, content
-                FROM memory_chunks
-                WHERE embedding IS NULL
-                ORDER BY id
-                LIMIT %s
-                """,
-                (batch_size,),
-            )
+            if _failed_ids:
+                cur.execute(
+                    """
+                    SELECT id, content
+                    FROM memory_chunks
+                    WHERE embedding IS NULL AND id != ALL(%s)
+                    ORDER BY id
+                    LIMIT %s
+                    """,
+                    (_failed_ids, batch_size),
+                )
+            else:
+                cur.execute(
+                    """
+                    SELECT id, content
+                    FROM memory_chunks
+                    WHERE embedding IS NULL
+                    ORDER BY id
+                    LIMIT %s
+                    """,
+                    (batch_size,),
+                )
             rows = cur.fetchall()
 
         if not rows:
@@ -282,6 +303,7 @@ def backfill_embeddings(batch_size: int = 50) -> dict[str, int]:
                     else:
                         batch_processed += 1
                 except Exception:
+                    _failed_ids.append(chunk_id)
                     batch_failed += 1
             conn.commit()
 
