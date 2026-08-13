@@ -217,6 +217,7 @@ Known: `test_job_retries_with_backoff_hits_max_ceiling` in `test_pipeline.py` ha
 | `AI_INTEGRATIONS_OPENAI_BASE_URL` | No | Replit-managed base URL (paired with above) |
 | `LLM_MODEL` | No | Process-level model override (lowest priority) |
 | `WORKER_BASE_URL` | No | Agent worker URL (default: `http://127.0.0.1:8000`) |
+| `WORKER_INGEST_SECRET` | No* | Shared secret for `POST /worker/memory/ingest`; endpoint returns 503 without it |
 | `LLM_REQUEST_TIMEOUT_MS` | No | LLM call timeout in ms (default: `20000`) |
 | `TWILIO_ACCOUNT_SID` | No | SMS and voice |
 | `TWILIO_API_KEY` | No | Twilio API key SID |

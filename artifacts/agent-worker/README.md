@@ -31,13 +31,29 @@ uv run --project artifacts/agent-worker python artifacts/agent-worker/app.py
 
 The worker binds to `0.0.0.0` on port `8000` (or `WORKER_PORT` env var). Endpoints:
 
-| Method | Path | Purpose |
-|---|---|---|
-| `GET` | `/worker/health` | Liveness check |
-| `POST` | `/worker/memory/embed-spike` | Embed text and store in `memory_chunks` |
-| `POST` | `/worker/memory/search-spike` | Cosine similarity search over `memory_chunks.embedding`; keyword fallback |
+| Method | Path | Auth | Purpose |
+|---|---|---|---|
+| `GET` | `/worker/health` | None | Liveness + `ingest_configured` status |
+| `POST` | `/worker/memory/ingest` | `X-Worker-Secret` | On-demand embedding backfill for all NULL-embedding chunks |
+| `POST` | `/worker/memory/embed-spike` | None | Embed text and store in `memory_chunks` |
+| `POST` | `/worker/memory/search-spike` | None | Cosine similarity search; keyword fallback |
 
 > **Note:** the `search-spike` path is stable and hardcoded in `api-python/main.py`. Do not rename it.
+
+### Auth-guarded ingest endpoint
+
+`POST /worker/memory/ingest` triggers an on-demand backfill of all `memory_chunks` rows where `embedding IS NULL`. It requires the `X-Worker-Secret` header to match the `WORKER_INGEST_SECRET` environment variable.
+
+| Condition | Status |
+|---|---|
+| `WORKER_INGEST_SECRET` not set | `503` — endpoint not configured |
+| Header absent or wrong | `403` — forbidden |
+| Another backfill already running | `409` — in progress |
+| Success | `200` — `{status, processed, skipped, failed}` |
+
+The endpoint runs synchronously in FastAPI's threadpool so the event loop stays free for concurrent health-check and retrieval requests during a long backfill. At most one backfill runs per process at any time (process-level `threading.Lock`).
+
+`GET /worker/health` includes `ingest_configured: true/false` so operators can verify the secret is set without triggering a backfill.
 
 ---
 
@@ -102,7 +118,10 @@ To create a new migration, always set `down_revision` to the current head before
 | `OPENAI_API_KEY` | No | Live embedding calls; deterministic demo embeddings used without it |
 | `AI_INTEGRATIONS_OPENAI_API_KEY` | No | Replit-managed alternative to `OPENAI_API_KEY` |
 | `AI_INTEGRATIONS_OPENAI_BASE_URL` | No | Paired with `AI_INTEGRATIONS_OPENAI_API_KEY` |
+| `WORKER_INGEST_SECRET` | No* | Shared secret for `POST /worker/memory/ingest`. Without it the endpoint returns 503. |
 | `WORKER_PORT` | No | Bind port (default: `8000`) |
+
+*Required to use the ingest endpoint. Without it the endpoint is disabled (503) — deployments fail loudly, not silently.
 
 ---
 

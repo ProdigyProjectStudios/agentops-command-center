@@ -224,13 +224,20 @@ cd api-python && uv run python main.py            # :8008
 
 Open `http://localhost:20962`. Demo mode works without an OpenAI key.
 
-**Embedding backfill** (required for live vector retrieval against the policy knowledge base):
+**Embedding backfill** — embed all NULL rows in `memory_chunks` (CLI or HTTP):
 
 ```bash
+# CLI (direct, no auth needed)
 cd artifacts/agent-worker
 uv run python backfill_embeddings.py           # embed all NULL rows
 uv run python backfill_embeddings.py --dry-run # preview without writing
 uv run python backfill_embeddings.py --batch-size 20
+
+# HTTP (requires WORKER_INGEST_SECRET to be set in the worker)
+curl -s -X POST http://localhost:8000/worker/memory/ingest \
+  -H "X-Worker-Secret: $WORKER_INGEST_SECRET" \
+  -H "Content-Type: application/json" \
+  -d '{"batch_size": 50}'
 ```
 
 **Run evaluation harness:**
@@ -250,6 +257,8 @@ pnpm --filter @workspace/api-server run eval
 | `AI_INTEGRATIONS_OPENAI_API_KEY` | No | Replit-managed OpenAI integration key (alternative to `OPENAI_API_KEY`) |
 | `AI_INTEGRATIONS_OPENAI_BASE_URL` | No | Replit-managed OpenAI base URL; set alongside `AI_INTEGRATIONS_OPENAI_API_KEY` |
 | `LLM_MODEL` | No | Process-level model override (lowest priority; see model config section) |
+| `WORKER_BASE_URL` | No | Agent worker URL (default: `http://127.0.0.1:8000`) |
+| `WORKER_INGEST_SECRET` | No* | Shared secret for `POST /worker/memory/ingest`; endpoint returns 503 without it |
 | `TWILIO_ACCOUNT_SID` | No | SMS and voice features |
 | `TWILIO_API_KEY` | No | Twilio API key SID |
 | `TWILIO_API_KEY_SECRET` | No | Twilio API key secret |
@@ -257,6 +266,8 @@ pnpm --filter @workspace/api-server run eval
 | `SESSION_SECRET` | No | Express session signing secret |
 | `PORT` | No | Node API port (default: `8080`) |
 | `NODE_ENV` | No | `development` or `production` |
+
+*`WORKER_INGEST_SECRET` is required to enable the HTTP ingest endpoint. Without it the endpoint is disabled and returns 503 — misconfigured deployments fail loudly.
 
 ---
 
