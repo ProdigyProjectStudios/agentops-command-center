@@ -17,7 +17,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:16
+        image: pgvector/pgvector:pg16
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -57,6 +57,11 @@ jobs:
           PORT: "20962"
           BASE_PATH: /
         run: pnpm run build
+
+      - name: Enable pgvector extension
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d agentops_test -c "CREATE EXTENSION IF NOT EXISTS vector;"
 
       - name: Push DB schema
         run: pnpm --filter @workspace/db run push-force
