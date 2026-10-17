@@ -359,7 +359,7 @@ pnpm --filter @workspace/api-server run eval
 
 ## Author
 
-**Aaron Archer**  
+**Aaron at Digital Prodigy**  
 AI-Native Full-Stack & Systems Engineer  
 [digitalprodigy.dev](https://digitalprodigy.dev)
 
