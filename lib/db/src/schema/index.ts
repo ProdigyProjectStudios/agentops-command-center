@@ -12,3 +12,4 @@ export * from "./approval-requests";
 export * from "./activity-logs";
 export * from "./system-settings";
 export * from "./llm-usage";
+export * from "./proof";

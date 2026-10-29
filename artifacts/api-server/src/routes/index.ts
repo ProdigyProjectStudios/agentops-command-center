@@ -12,8 +12,10 @@ import systemRouter from "./system";
 import workerRouter from "./worker";
 
 import proofRouter from "./proof";
+import { proofRuntimeRouter } from "../lib/proof-runtime";
 
 const router: IRouter = Router();
+router.use(proofRuntimeRouter);
 router.use(proofRouter);
 
 router.use(healthRouter);

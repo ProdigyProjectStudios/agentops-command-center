@@ -35,11 +35,9 @@ router.post("/proof/evaluate", (req, res) => {
 router.post("/proof/review", (req, res) => {
   const parsed = reviewInput.safeParse(req.body);
   if (!parsed.success)
-    return res
-      .status(400)
-      .json({
-        error: "A scenario and explicit approve/reject decision are required.",
-      });
+    return res.status(400).json({
+      error: "A scenario and explicit approve/reject decision are required.",
+    });
   if (!scenarios.some((s) => s.id === parsed.data.scenarioId))
     return res.status(404).json({ error: "Unknown scenario." });
   const result = evaluateScenario(

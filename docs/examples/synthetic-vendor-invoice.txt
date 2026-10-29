@@ -1,0 +1,6 @@
+Vendor: SYNTHETIC-STUDIO
+Invoice: SYN-INV-1042
+Amount: 2400
+Currency: EUR
+Purchase-order: SYN-PO-1042
+Service-confirmed: yes

@@ -4,6 +4,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/AppShell";
 import ProofLabPage from "@/pages/proof-lab";
+import ProofFixturesPage from "@/pages/proof-fixtures";
+import SharedProofPage from "@/pages/shared-proof";
 import DashboardPage from "@/pages/dashboard";
 import NewRequestPage from "@/pages/new-request";
 import WorkflowsListPage from "@/pages/workflows-list";
@@ -18,7 +20,10 @@ import ArchitecturePage from "@/pages/architecture";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useState } from "react";
-import { CommandPalette, useCommandPaletteShortcut } from "@/components/CommandPalette";
+import {
+  CommandPalette,
+  useCommandPaletteShortcut,
+} from "@/components/CommandPalette";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +39,8 @@ function Router() {
     <Switch>
       <Route path="/" component={DashboardPage} />
       <Route path="/proof-lab" component={ProofLabPage} />
+      <Route path="/proof-lab/fixtures" component={ProofFixturesPage} />
+      <Route path="/proof-lab/:id" component={ProofLabPage} />
       <Route path="/requests/new" component={NewRequestPage} />
       <Route path="/workflows" component={WorkflowsListPage} />
       <Route path="/workflows/:id" component={WorkflowDetailPage} />
@@ -56,12 +63,20 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <WouterRouter base={import.meta.env.BASE_URL.replace(/\/$/, "")}>
-          <AppShell onOpenPalette={() => setPaletteOpen(true)}>
-            <ErrorBoundary>
-              <Router />
-            </ErrorBoundary>
-          </AppShell>
-          <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} />
+          <Switch>
+            <Route path="/proof/shared" component={SharedProofPage} />
+            <Route>
+              <AppShell onOpenPalette={() => setPaletteOpen(true)}>
+                <ErrorBoundary>
+                  <Router />
+                </ErrorBoundary>
+              </AppShell>
+              <CommandPalette
+                open={paletteOpen}
+                onOpenChange={setPaletteOpen}
+              />
+            </Route>
+          </Switch>
         </WouterRouter>
         <Toaster />
       </TooltipProvider>

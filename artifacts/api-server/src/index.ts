@@ -2,6 +2,8 @@ import http from "http";
 import net from "net";
 import app from "./app";
 import { logger } from "./lib/logger";
+import { pool } from "@workspace/db";
+import { migrateProof } from "./lib/proof-store";
 
 const rawPort = process.env["PORT"];
 
@@ -18,6 +20,8 @@ if (Number.isNaN(port) || port <= 0) {
 }
 
 const server = http.createServer(app);
+// Provision additive proof tables before accepting requests.
+await migrateProof(pool);
 
 // ---------------------------------------------------------------------------
 // WebSocket upgrade proxy — /api-python/* → FastAPI on port 8008

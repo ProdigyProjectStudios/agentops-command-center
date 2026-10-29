@@ -1,0 +1,5 @@
+Case-reference: SYN-CASE-2042
+Coverage: active
+Encounter: present
+Claim-reference: SYN-CLAIM-2042
+Duplicate: no

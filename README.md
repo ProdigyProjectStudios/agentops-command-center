@@ -21,9 +21,13 @@ Operational requests move through a typed 8-node agent state machine — triaged
 9. **Provider usage / token telemetry** — input tokens, output tokens, total tokens, and duration captured from every live provider round-trip; stored in `llm_usage` table
 10. **Estimated LLM cost aggregation** — per-call and per-run cost estimates in microdollars; unknown-model pricing represented as null, not zero
 11. **Failure / fallback handling** — fallback to deterministic demo fixtures on missing credentials, empty content, JSON parse failure, or schema validation failure; fallback reason surfaced in UI
-12. **Contract-first API / service architecture** — a single `openapi.yaml` generates typed TanStack Query hooks and Zod validators; schema drift between frontend and backend is structurally impossible
+12. **Contract-first API / service architecture** — a single `openapi.yaml` generates typed TanStack Query hooks and Zod validators; generated operational contracts reduce schema drift
 
 ---
+
+## Document-driven Proof Lab
+
+The new `/proof-lab` adds saved vendor-invoice, authorization and revenue-cycle demonstrations: upload synthetic text documents, inspect exact cited lines, approve an immutable packet, verify a real HTTP receipt in the first-party sandbox ledger, and create expiring/revocable read-only proof links. Optional live AI adds validated cited advisory notes; deterministic policy checks and human approval remain authoritative. It shares the app/database/provider infrastructure without replacing the existing specialist graph. See [capabilities, limits and setup](docs/proof-lab.md).
 
 ## Live Demo
 
@@ -52,7 +56,7 @@ Runs in deterministic demo mode by default — no API key required. Set `OPENAI_
 ## Technical Architecture
 
 ### Frontend
-React 19 SPA — Vite 7, Tailwind CSS 4, Radix UI (shadcn), TanStack Query 5, Wouter, Framer Motion. Compiled to static files served by the Node API server. All data access goes through generated TanStack Query hooks derived from the OpenAPI contract.
+React 19 SPA — Vite 7, Tailwind CSS 4, Radix UI (shadcn), TanStack Query 5, Wouter, Framer Motion. Compiled to static files served by the Node API server. Existing operational pages use generated TanStack Query hooks derived from the OpenAPI contract. The additional Proof Lab uses shared Zod input contracts and TypeScript types directly.
 
 ### Backend — Node (Orchestration API)
 Express 5, TypeScript. Runs the 8-node agent state graph, persists all workflow state via Drizzle ORM, manages the approval queue, and reverse-proxies `/api-python/*` to the Python service. Routes are open — no auth middleware.
