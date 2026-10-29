@@ -1,3 +1,4 @@
+import { GithubProofHandoff } from "./proof-github";
 import { randomBytes } from "node:crypto";
 import { pool } from "@workspace/db";
 import { ProofStore } from "./proof-store";
@@ -17,4 +18,20 @@ export const proofService = new ProofService(
   ),
   reviewProofAi,
 );
-export const proofRuntimeRouter = proofRunsRouter(proofService, secret);
+const integration =
+  process.env.PROOF_GITHUB_REPOSITORY &&
+  process.env.PROOF_GITHUB_TOKEN &&
+  (process.env.PROOF_INTEGRATION_KEY?.length ?? 0) >= 32
+    ? {
+        handoff: new GithubProofHandoff(proofStore, {
+          repository: process.env.PROOF_GITHUB_REPOSITORY,
+          token: process.env.PROOF_GITHUB_TOKEN,
+        }),
+        operatorKey: process.env.PROOF_INTEGRATION_KEY!,
+      }
+    : undefined;
+export const proofRuntimeRouter = proofRunsRouter(
+  proofService,
+  secret,
+  integration,
+);

@@ -1,3 +1,4 @@
+import { GithubHandoff } from "@/components/proof/GithubHandoff";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useParams } from "wouter";
@@ -575,6 +576,9 @@ export default function ProofLabPage() {
             >
               Verify receipt in receiver ledger
             </button>
+          )}
+          {run.status === "completed" && (
+            <GithubHandoff key={run.id} run={run} onUpdate={saveRun} />
           )}
           {["completed", "blocked", "rejected"].includes(run.status) && (
             <section className={`${panel} space-y-4`}>

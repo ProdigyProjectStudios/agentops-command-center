@@ -14,7 +14,12 @@ import {
 import { ProofError } from "../lib/proof-store";
 import { ProofService } from "../lib/proof-service";
 
-export function proofRunsRouter(service: ProofService, sandboxSecret: string) {
+import { GithubProofHandoff, integrationAuthorized } from "../lib/proof-github";
+export function proofRunsRouter(
+  service: ProofService,
+  sandboxSecret: string,
+  integration?: { handoff: GithubProofHandoff; operatorKey: string },
+) {
   const router = Router();
   const endpoint =
     (fn: (req: Request, res: Response) => Promise<unknown>) =>
@@ -97,6 +102,28 @@ export function proofRunsRouter(service: ProofService, sandboxSecret: string) {
       return res.json(await service.store.receipt(id(req)));
     }),
   );
+  for (const action of ["send", "verify"] as const) {
+    router.post(
+      `/proof/runs/:id/github/${action}`,
+      endpoint(async (req, res) => {
+        if (!integration)
+          throw new ProofError(503, "GitHub handoff is not configured.");
+        if (
+          !integrationAuthorized(
+            req.header("x-proof-integration-key") ?? "",
+            integration.operatorKey,
+          )
+        )
+          throw new ProofError(403, "An integration operator key is required.");
+        if (action === "send" && req.body?.confirmExternal !== true)
+          throw new ProofError(
+            400,
+            "Confirm creating a synthetic issue in the configured demo repository.",
+          );
+        return res.json(await integration.handoff[action](owner(req), id(req)));
+      }),
+    );
+  }
   router.get(
     "/proof/runs/:id/export",
     endpoint(async (req, res) => {

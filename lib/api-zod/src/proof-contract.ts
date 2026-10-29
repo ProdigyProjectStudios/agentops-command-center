@@ -73,6 +73,13 @@ export type ProofReceipt = {
 };
 export type ProofEvent = { at: string; action: string; detail: string };
 export type ProofRun = {
+  githubHandoff?: {
+    status: "sending" | "unverified" | "verified";
+    repository: string;
+    issueNumber: number | null;
+    url: string | null;
+    verifiedAt: string | null;
+  };
   id: string;
   input: ProofInput;
   analysis: ProofAnalysis;

@@ -14,12 +14,14 @@ export async function proofApi<T>(
   path: string,
   method = "GET",
   body?: unknown,
+  extraHeaders?: Record<string, string>,
 ): Promise<T> {
   const response = await fetch(`${proofApiBase}${path}`, {
     method,
     headers: {
       "Content-Type": "application/json",
       "x-proof-owner": ownerKey(),
+      ...extraHeaders,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });

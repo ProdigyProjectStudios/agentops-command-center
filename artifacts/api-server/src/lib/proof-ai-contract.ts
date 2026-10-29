@@ -36,5 +36,17 @@ export function validateProofAi(value: unknown, analysis: ProofAnalysis) {
         "Live AI cited evidence outside the relevant finding. No run or approval was created.",
       );
   }
-  return parsed.data.notes;
+  return parsed.data.notes.map((note) => {
+    const finding = analysis.findings.find((f) => f.id === note.findingId)!;
+    // Model prose cannot elevate a supplied marker into real-world verification.
+    // Suppress these claims at the server boundary, not just in the prompt.
+    const overclaim =
+      /authori[sz]|verif|recogniz|recognis|eligib|legitima|sanction|insurance|identity|ensur|guarantee|cleared|compliant/i;
+    return overclaim.test(note.explanation)
+      ? {
+          ...note,
+          explanation: `Supplied synthetic evidence only. ${finding.explanation} This fictional check establishes no real-world approval or verification.`,
+        }
+      : note;
+  });
 }

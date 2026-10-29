@@ -1,3 +1,4 @@
+import { GithubProofHandoff } from "../lib/proof-github";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
@@ -500,6 +501,77 @@ test("live AI requested without a reviewer fails explicitly rather than fabricat
       /not configured/,
     );
     assert.equal((await h.store.list(owner)).length, 0);
+  } finally {
+    await h.close();
+  }
+});
+
+test("GitHub handoff verifies external IDs, persists and prevents duplicate submissions", async () => {
+  const h = await harness();
+  try {
+    const draft = await h.service.create(owner, sample());
+    await h.service.review(owner, draft.id, {
+      decision: "approve",
+      fingerprint: draft.analysis.fingerprint,
+      note: "Synthetic integration test review",
+    });
+    let posts = 0;
+    let body = "";
+    const transport: typeof fetch = async (_url, init) => {
+      if (init?.method === "POST") {
+        posts++;
+        body = JSON.parse(String(init.body)).body;
+      }
+      return new Response(
+        JSON.stringify({
+          number: 42,
+          html_url: "https://github.com/demo/proof/issues/42",
+          body,
+        }),
+        { status: 200 },
+      );
+    };
+    const github = new GithubProofHandoff(
+      h.store,
+      { repository: "demo/proof", token: "test-token" },
+      transport,
+    );
+    const result = await github.send(owner, draft.id);
+    assert.equal(result.githubHandoff?.status, "verified");
+    assert.equal(result.githubHandoff?.issueNumber, 42);
+    assert.ok(!body.includes("Vendor: SYNTHETIC-STUDIO"));
+    assert.ok(!body.includes("Synthetic integration test review"));
+    await assert.rejects(() => github.send(owner, draft.id));
+    await github.verify(owner, draft.id);
+    assert.equal(posts, 1);
+    await assert.rejects(() => github.verify(stranger, draft.id));
+  } finally {
+    await h.close();
+  }
+});
+test("lost GitHub response is retained as uncertain and cannot be resent", async () => {
+  const h = await harness();
+  try {
+    const draft = await h.service.create(owner, sample());
+    const github = new GithubProofHandoff(
+      h.store,
+      { repository: "demo/proof", token: "test-token" },
+      async () => {
+        throw new Error("lost response");
+      },
+    );
+    await assert.rejects(() => github.send(owner, draft.id));
+    await h.service.review(owner, draft.id, {
+      decision: "approve",
+      fingerprint: draft.analysis.fingerprint,
+      note: "Synthetic test approval",
+    });
+    await assert.rejects(() => github.send(owner, draft.id));
+    assert.equal(
+      (await h.store.get(owner, draft.id)).githubHandoff?.status,
+      "unverified",
+    );
+    await assert.rejects(() => github.send(owner, draft.id));
   } finally {
     await h.close();
   }
