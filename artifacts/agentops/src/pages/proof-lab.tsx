@@ -511,7 +511,7 @@ export default function ProofLabPage() {
             </section>
           )}
           <ProofPack run={run} />
-          <ProofEvidence key={run.id} run={run} />
+          <ProofEvidence key={`evidence-${run.id}`} run={run} />
           {run.status === "blocked" && (
             <section className={`${panel} border-amber-500/30`}>
               <h2 className="font-semibold text-amber-400">
@@ -632,7 +632,7 @@ export default function ProofLabPage() {
             </button>
           )}
           {run.status === "completed" && (
-            <GithubHandoff key={run.id} run={run} onUpdate={saveRun} />
+            <GithubHandoff key={`github-${run.id}`} run={run} onUpdate={saveRun} />
           )}
           {["completed", "blocked", "rejected"].includes(run.status) && (
             <section className={`${panel} space-y-4`}>

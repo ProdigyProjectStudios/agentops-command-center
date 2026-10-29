@@ -25,3 +25,13 @@ No time savings, external delivery, verified human identity or compliance claims
 Desktop preview browser QA completed: prepare recovery case, explicit approval, labelled first-attempt failure, successful retry, receiver receipt recheck, share creation, shared proof pack, refresh, and evidence drill-down. QA used the production proof service/router/store with embedded PostgreSQL; production Replit was not republished or restarted. The browser download monitor timed out, so delivery of the HTML download to the user's filesystem is not verified, despite passing HTML-generation tests. Full mobile/download/restart QA remains outstanding.
 
 The GitHub handoff is implemented but not live-activated: this environment has none of `PROOF_GITHUB_REPOSITORY`, `PROOF_GITHUB_TOKEN` or `PROOF_INTEGRATION_KEY`, and no Replit secret-management connector. Configure these privately in Replit following `docs/github-proof-handoff.md`, then republish and run a synthetic external handoff. Never put token values in chat or the repository.
+
+## Follow-up browser QA — 29 October 2026
+
+Uploaded the repository's synthetic invoice through the file picker, removed the prefilled document, evaluated the uploaded source, inspected filename/line citations, approved and received a verified sandbox receipt. This exposed duplicate evidence panels after completion: sibling `ProofEvidence` and `GithubHandoff` components shared the same React key. Their keys now use distinct prefixes. Repeated the recovery flow on the rebuilt app; approval, injected failure, retry and independent ledger recheck passed, with exactly one evidence panel after completion. All 34 proof tests and the frontend typecheck/build passed.
+
+![Recovery after the completion-panel fix](screenshots/recovery-qa.jpg)
+
+The HTML download monitor again timed out; download completion remains unverified. Stopping and starting the managed preview made the previously saved run unavailable. This preview uses embedded PostgreSQL under `/tmp`, not the production database; the result does not establish the cause or production persistence behavior. The database close/reopen automated test passes, but a production Replit restart test is still required. Full mobile QA and external GitHub activation also remain outstanding. No production deployment was performed.
+
+Before starting the next document-intelligence increment, resolve these outstanding checks against the deployed build. Do not treat the passing automated suite as end-to-end production sign-off.
