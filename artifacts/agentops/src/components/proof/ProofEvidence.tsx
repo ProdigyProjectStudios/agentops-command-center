@@ -12,8 +12,18 @@ export const proofPanel = "rounded-xl border border-border bg-card p-5";
 export const proofButton =
   "inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium border border-border hover:bg-secondary transition-colors disabled:opacity-40 disabled:cursor-not-allowed";
 export const proofDate = (at: string) => new Date(at).toLocaleString();
-export function ProofEvidence({ run }: { run: ProofRun | ProofPublicRun }) {
-  const [selected, setSelected] = useState(run.analysis.findings[0]?.id ?? "");
+export function ProofEvidence({
+  run,
+  initialFindingId,
+  showExecution = true,
+}: {
+  run: ProofRun | ProofPublicRun;
+  initialFindingId?: string;
+  showExecution?: boolean;
+}) {
+  const [selected, setSelected] = useState(
+    initialFindingId ?? run.analysis.findings[0]?.id ?? "",
+  );
   const finding =
     run.analysis.findings.find((f) => f.id === selected) ??
     run.analysis.findings[0];
@@ -138,99 +148,106 @@ export function ProofEvidence({ run }: { run: ProofRun | ProofPublicRun }) {
           </p>
         </section>
       </div>
-      <div className="grid lg:grid-cols-2 gap-4">
-        <section className={proofPanel}>
-          <h2 className="font-semibold">Recorded execution</h2>
-          <ol className="mt-4 space-y-4">
-            {run.events.map((e, i) => (
-              <li key={i} className="border-l-2 border-primary/30 pl-4">
-                <p className="text-xs text-muted-foreground">
-                  {proofDate(e.at)}
+      {showExecution && (
+        <div className="grid lg:grid-cols-2 gap-4">
+          <section className={proofPanel}>
+            <h2 className="font-semibold">Recorded execution</h2>
+            <ol className="mt-4 space-y-4">
+              {run.events.map((e, i) => (
+                <li key={i} className="border-l-2 border-primary/30 pl-4">
+                  <p className="text-xs text-muted-foreground">
+                    {proofDate(e.at)}
+                  </p>
+                  <p className="text-sm font-medium mt-1">{e.action}</p>
+                  <p className="text-sm text-muted-foreground mt-1 break-words">
+                    {e.detail}
+                  </p>
+                </li>
+              ))}
+            </ol>
+          </section>
+          <section className={`${proofPanel} space-y-4`}>
+            <h2 className="font-semibold">Delivery evidence</h2>
+            {run.receipt ? (
+              <>
+                <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
+                  <p className="text-emerald-400 font-medium">
+                    Verified in the sandbox ledger
+                  </p>
+                  <p className="text-xs font-mono mt-2 break-all">
+                    {run.receipt.id}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-2">
+                    Received {proofDate(run.receipt.acceptedAt)}
+                  </p>
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  A real HTTP POST created this saved record. A separate HTTP
+                  GET verified it. The destination is Agent Ops’s own sandbox;
+                  no external payment, EHR or payer action occurred.
                 </p>
-                <p className="text-sm font-medium mt-1">{e.action}</p>
-                <p className="text-sm text-muted-foreground mt-1 break-words">
-                  {e.detail}
+                <details>
+                  <summary className="cursor-pointer text-sm text-primary">
+                    Inspect accepted packet
+                  </summary>
+                  <pre className="text-xs whitespace-pre-wrap break-all bg-secondary/40 p-3 mt-3 rounded-lg">
+                    {JSON.stringify(run.receipt.packet, null, 2)}
+                  </pre>
+                </details>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                {run.delivery.error ??
+                  (run.status === "rejected"
+                    ? "The operator rejected this packet. No delivery was attempted."
+                    : run.status === "blocked"
+                      ? "Policy checks blocked this packet. Correct the evidence in a new run before review."
+                      : "The packet has not been submitted and verified. Complete the evidence checks and human review first.")}
+              </p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Delivery attempts: {run.delivery.attempts}. Duplicate protection
+              applies to retries of this run, not different runs with matching
+              business references.
+            </p>
+            {run.analysis.aiReview ? (
+              <div className="border-t border-border pt-4 text-xs text-muted-foreground space-y-2">
+                <p className="text-primary">
+                  Live AI: {run.analysis.aiReview.model}
                 </p>
-              </li>
-            ))}
-          </ol>
-        </section>
-        <section className={`${proofPanel} space-y-4`}>
-          <h2 className="font-semibold">Delivery evidence</h2>
-          {run.receipt ? (
-            <>
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4">
-                <p className="text-emerald-400 font-medium">
-                  Verified in the sandbox ledger
+                <p>
+                  Input tokens: {run.analysis.aiReview.inputTokens ?? "unknown"}{" "}
+                  · Output tokens:{" "}
+                  {run.analysis.aiReview.outputTokens ?? "unknown"}
                 </p>
-                <p className="text-xs font-mono mt-2 break-all">
-                  {run.receipt.id}
-                </p>
-                <p className="text-xs text-muted-foreground mt-2">
-                  Received {proofDate(run.receipt.acceptedAt)}
+                <p>
+                  {run.analysis.aiReview.durationMs} ms · Estimated model cost:{" "}
+                  {run.analysis.aiReview.estimatedCostMicros === null
+                    ? "unavailable"
+                    : `$${(run.analysis.aiReview.estimatedCostMicros / 1_000_000).toFixed(6)}`}
                 </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                A real HTTP POST created this saved record. A separate HTTP GET
-                verified it. The destination is Agent Ops’s own sandbox; no
-                external payment, EHR or payer action occurred.
+            ) : (
+              <p className="text-xs text-muted-foreground border-t border-border pt-4">
+                Execution: exact text extraction + deterministic rules. No live
+                AI call was used for this run.
               </p>
-              <details>
-                <summary className="cursor-pointer text-sm text-primary">
-                  Inspect accepted packet
-                </summary>
-                <pre className="text-xs whitespace-pre-wrap break-all bg-secondary/40 p-3 mt-3 rounded-lg">
-                  {JSON.stringify(run.receipt.packet, null, 2)}
-                </pre>
-              </details>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">
-              {run.delivery.error ??
-                "The packet has not been submitted and verified. Complete the evidence checks and human review first."}
-            </p>
-          )}
-          <p className="text-xs text-muted-foreground">
-            Delivery attempts: {run.delivery.attempts}. Duplicate protection
-            applies to retries of this run, not different runs with matching
-            business references.
-          </p>
-          {run.analysis.aiReview ? (
-            <div className="border-t border-border pt-4 text-xs text-muted-foreground space-y-2">
-              <p className="text-primary">
-                Live AI: {run.analysis.aiReview.model}
+            )}
+            <details>
+              <summary className="cursor-pointer text-xs text-muted-foreground">
+                Input fingerprint
+              </summary>
+              <p className="text-xs font-mono break-all mt-2">
+                {run.analysis.fingerprint}
               </p>
-              <p>
-                Input tokens: {run.analysis.aiReview.inputTokens ?? "unknown"} ·
-                Output tokens: {run.analysis.aiReview.outputTokens ?? "unknown"}
+              <p className="text-xs text-muted-foreground mt-2">
+                Identifies the evaluated inputs and policy. This is not a
+                digital signature or a tamper-proof audit guarantee.
               </p>
-              <p>
-                {run.analysis.aiReview.durationMs} ms · Estimated model cost:{" "}
-                {run.analysis.aiReview.estimatedCostMicros === null
-                  ? "unavailable"
-                  : `$${(run.analysis.aiReview.estimatedCostMicros / 1_000_000).toFixed(6)}`}
-              </p>
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground border-t border-border pt-4">
-              Execution: exact text extraction + deterministic rules. No live AI
-              call was used for this run.
-            </p>
-          )}
-          <details>
-            <summary className="cursor-pointer text-xs text-muted-foreground">
-              Input fingerprint
-            </summary>
-            <p className="text-xs font-mono break-all mt-2">
-              {run.analysis.fingerprint}
-            </p>
-            <p className="text-xs text-muted-foreground mt-2">
-              Identifies the evaluated inputs and policy. This is not a digital
-              signature or a tamper-proof audit guarantee.
-            </p>
-          </details>
-        </section>
-      </div>
+            </details>
+          </section>
+        </div>
+      )}
     </div>
   );
 }

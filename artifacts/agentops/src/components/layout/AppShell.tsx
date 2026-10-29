@@ -36,6 +36,7 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
+  { href: "/demo/healthcare", label: "Guided Demo", icon: Network, testId: "nav-guided-demo" },
   { href: "/proof-lab", label: "Proof Lab", icon: ListChecks, testId: "nav-proof-lab" },
   { href: "/", label: "Dashboard", icon: LayoutDashboard, testId: "nav-dashboard" },
   { href: "/requests/new", label: "New Request", icon: PlusCircle, testId: "nav-new-request" },

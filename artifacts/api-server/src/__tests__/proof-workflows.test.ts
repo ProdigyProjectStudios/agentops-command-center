@@ -5,7 +5,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import express from "express";
-import { proofTemplates, type ProofRun } from "@workspace/api-zod";
+import {
+  proofTemplates,
+  healthcareDemoInput,
+  type HealthcareDemo,
+  type ProofRun,
+} from "@workspace/api-zod";
 import { assessProof } from "../lib/proof-assessment";
 import { migrateProof, ProofStore } from "../lib/proof-store";
 import { ProofService, httpProofDelivery } from "../lib/proof-service";
@@ -16,6 +21,67 @@ import { validateProofAi } from "../lib/proof-ai-contract";
 const sample = () => structuredClone(proofTemplates[0].input);
 const owner = randomBytes(32).toString("hex");
 const stranger = randomBytes(32).toString("hex");
+for (const workflow of ["authorization", "revenue-cycle"] as HealthcareDemo[]) {
+  test(`guided ${workflow}: preserve exception, correct evidence, review and verify delivery`, async () => {
+    const h = await harness();
+    try {
+      const blockedResponse = await h.api(
+        "/runs",
+        "POST",
+        healthcareDemoInput(workflow, false),
+      );
+      assert.equal(blockedResponse.status, 201);
+      const blocked = (await blockedResponse.json()) as ProofRun;
+      assert.equal(blocked.status, "blocked");
+      assert.equal(blocked.analysis.blockers.length, 1);
+      assert.equal(
+        (
+          await h.api(`/runs/${blocked.id}/review`, "POST", {
+            fingerprint: blocked.analysis.fingerprint,
+            decision: "approve",
+            note: "Cannot bypass the exception",
+          })
+        ).status,
+        409,
+      );
+      const correctedResponse = await h.api(
+        "/runs",
+        "POST",
+        healthcareDemoInput(workflow, true),
+      );
+      assert.equal(correctedResponse.status, 201);
+      const corrected = (await correctedResponse.json()) as ProofRun;
+      assert.equal(corrected.status, "awaiting-review");
+      assert.notEqual(corrected.id, blocked.id);
+      assert.notEqual(
+        corrected.analysis.fingerprint,
+        blocked.analysis.fingerprint,
+      );
+      const approvalResponse = await h.api(
+        `/runs/${corrected.id}/review`,
+        "POST",
+        {
+          fingerprint: corrected.analysis.fingerprint,
+          decision: "approve",
+          note: "Reviewed corrected synthetic evidence; sandbox only.",
+        },
+      );
+      assert.equal(approvalResponse.status, 200);
+      const completed = (await approvalResponse.json()) as ProofRun;
+      assert.equal(completed.status, "completed");
+      assert.deepEqual(
+        await (await h.api(`/runs/${corrected.id}/receipt`)).json(),
+        completed.receipt,
+      );
+      const original = await h.store.get(owner, blocked.id);
+      assert.equal(original.status, "blocked");
+      assert.equal(original.receipt, null);
+      assert.equal(original.review, null);
+    } finally {
+      await h.close();
+    }
+  });
+}
 async function harness(failAfterAccept = false) {
   const db = await proofTestDatabase();
   await migrateProof(db.pool);

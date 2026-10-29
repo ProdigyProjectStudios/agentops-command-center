@@ -27,7 +27,7 @@ Operational requests move through a typed 8-node agent state machine — triaged
 
 ## Document-driven Proof Lab
 
-The new `/proof-lab` adds saved vendor-invoice, authorization and revenue-cycle demonstrations: upload synthetic text documents, inspect exact cited lines, approve an immutable packet, verify a real HTTP receipt in the first-party sandbox ledger, and create expiring/revocable read-only proof links. Optional live AI adds validated cited advisory notes; deterministic policy checks and human approval remain authoritative. It shares the app/database/provider infrastructure without replacing the existing specialist graph. See [capabilities, limits and setup](docs/proof-lab.md).
+The new `/proof-lab` adds saved vendor-invoice, authorization and revenue-cycle demonstrations: upload synthetic text documents, inspect exact cited lines, approve an immutable packet, verify a real HTTP receipt in the first-party sandbox ledger, and create expiring/revocable read-only proof links. Optional live AI adds validated cited advisory notes; deterministic policy checks and human approval remain authoritative. It shares the app/database/provider infrastructure without replacing the existing specialist graph. See [capabilities, limits and setup](docs/proof-lab.md). The [guided healthcare walkthrough](docs/healthcare-guided-demo.md) at `/demo/healthcare` walks a partner through exceptions, human review, saved receipts and partnership fit.
 
 ## Live Demo
 

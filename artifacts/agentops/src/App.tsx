@@ -19,7 +19,8 @@ import OverviewPage from "@/pages/overview";
 import ArchitecturePage from "@/pages/architecture";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
+const HealthcareDemoPage = lazy(() => import("@/pages/healthcare-demo"));
 import {
   CommandPalette,
   useCommandPaletteShortcut,
@@ -38,6 +39,17 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/demo/healthcare">
+        <Suspense
+          fallback={
+            <p className="p-8" role="status">
+              Loading guided demo…
+            </p>
+          }
+        >
+          <HealthcareDemoPage />
+        </Suspense>
+      </Route>
       <Route path="/proof-lab" component={ProofLabPage} />
       <Route path="/proof-lab/fixtures" component={ProofFixturesPage} />
       <Route path="/proof-lab/:id" component={ProofLabPage} />

@@ -65,7 +65,7 @@ The standalone preview serves the built frontend and actual proof API with a dis
 
 For Replit, merge/pull the reviewed branch, install from the lockfile, build the frontend/API and republish the existing deployment. Startup provisions the additive proof tables. No new environment variables are needed in rules mode. Verify a complete run and a shared link on the production URL after deployment. No production deployment has been performed during development.
 
-The Perentis-specific guided demo page, external healthcare adapters, authenticated organization workspaces, model-comparison dashboard and measured business outcome reporting remain separate follow-on work.
+A guided healthcare partner walkthrough is now available at `/demo/healthcare`; see [presenter flow and setup](healthcare-guided-demo.md). External healthcare adapters, authenticated organization workspaces, model-comparison dashboards and measured business outcome reporting remain follow-on work.
 
 ## Validation on 29 October 2026
 

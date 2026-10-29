@@ -130,6 +130,9 @@ export default function ProofLabPage() {
           </p>
         </div>
         <div className="flex gap-2">
+          <Link className={button} href="/demo/healthcare">
+            Guided healthcare demo <ArrowRight size={16} />
+          </Link>
           <button className={button} onClick={() => setHistory(!history)}>
             <History size={16} /> Saved runs
           </button>
