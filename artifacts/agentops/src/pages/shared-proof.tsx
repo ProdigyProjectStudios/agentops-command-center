@@ -1,3 +1,4 @@
+import { ProofPack } from "@/components/proof/ProofPack";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { FileJson, ShieldCheck } from "lucide-react";
@@ -76,7 +77,15 @@ export default function SharedProofPage() {
                 <FileJson size={16} /> Download snapshot
               </button>
             </div>
-            <ProofEvidence key={run.id} run={run} />
+            <ProofPack run={run} />
+            <details className={proofPanel}>
+              <summary className="cursor-pointer font-semibold">
+                Inspect full source evidence and execution timeline
+              </summary>
+              <div className="mt-5">
+                <ProofEvidence key={run.id} run={run} />
+              </div>
+            </details>
             <p className="text-xs text-muted-foreground">
               This link grants viewing only. Source document bodies and
               workspace credentials are excluded. The owner can revoke access;

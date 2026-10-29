@@ -576,3 +576,39 @@ test("lost GitHub response is retained as uncertain and cannot be resent", async
     await h.close();
   }
 });
+
+test("presenter recovery fault accepts once, persists state, then verifies one receipt on retry", async () => {
+  const h = await harness();
+  try {
+    const draft = await h.service.create(owner, {
+      ...sample(),
+      recoveryDemo: true,
+    });
+    const failed = await h.service.review(owner, draft.id, {
+      decision: "approve",
+      fingerprint: draft.analysis.fingerprint,
+      note: "Approve synthetic response-loss demonstration",
+    });
+    assert.equal(failed.status, "delivery-failed");
+    assert.equal(failed.receipt, null);
+    assert.equal(failed.delivery.attempts, 1);
+    assert.ok(
+      failed.events.some((e) => e.action === "Demonstration fault injected"),
+    );
+    const accepted = await h.store.receipt(draft.id);
+    const saved = await new ProofStore(h.db.pool).get(owner, draft.id);
+    assert.equal(saved.input.recoveryDemo, true);
+    const recovered = await h.service.deliver(owner, draft.id);
+    assert.equal(recovered.status, "completed");
+    assert.equal(recovered.delivery.attempts, 2);
+    assert.equal(recovered.receipt?.id, accepted.id);
+    const count = await h.db.pool.query(
+      "SELECT count(*)::int AS count FROM proof_receipts WHERE run_id=$1",
+      [draft.id],
+    );
+    assert.equal(count.rows[0].count, 1);
+    await assert.rejects(() => h.service.deliver(owner, draft.id));
+  } finally {
+    await h.close();
+  }
+});

@@ -5,6 +5,7 @@ export const proofInputSchema = z
     workflow: z.enum(["vendor-payment", "authorization", "revenue-cycle"]),
     title: z.string().trim().min(3).max(120),
     syntheticAcknowledged: z.literal(true),
+    recoveryDemo: z.boolean().optional(),
     analysisMode: z.enum(["rules", "live-ai"]).optional(),
     documents: z
       .array(

@@ -1,3 +1,4 @@
+import { ProofPack } from "@/components/proof/ProofPack";
 import { GithubHandoff } from "@/components/proof/GithubHandoff";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -217,6 +218,35 @@ export default function ProofLabPage() {
       )}
       {!id ? (
         <>
+          <section className={`${panel} space-y-3`}>
+            <h2 className="font-semibold">Show recovery under failure</h2>
+            <p className="text-sm text-muted-foreground">
+              The sandbox will accept the first approved packet, then
+              deliberately discard its response. Retry the same run and verify
+              that the receiver still has one receipt. This is an explicitly
+              injected demonstration fault.
+            </p>
+            <button
+              className={button}
+              disabled={!!busy}
+              onClick={() => {
+                setDraft({
+                  ...structuredClone(proofTemplates[0].input),
+                  title: "Response-loss recovery demonstration",
+                  recoveryDemo: true,
+                });
+                setConfirmed(false);
+              }}
+            >
+              Prepare recovery walkthrough
+            </button>
+          </section>
+          {draft.recoveryDemo && (
+            <p role="status" className="text-sm text-amber-400">
+              Recovery mode selected: a deliberate response-loss fault will
+              occur after the first sandbox acceptance.
+            </p>
+          )}
           <div className="grid md:grid-cols-3 gap-3">
             {proofTemplates.map((t) => (
               <button
@@ -457,6 +487,30 @@ export default function ProofLabPage() {
               <FileJson size={16} /> Export evidence
             </button>
           </section>
+          {run.input.recoveryDemo && (
+            <section className={`${panel} space-y-2`}>
+              <h2 className="font-semibold">
+                Recovery walkthrough · injected response loss
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                1. Review and approve. 2. Inspect the deliberately lost
+                response. 3. Retry the same run. 4. Verify the original receiver
+                receipt.
+              </p>
+              <p role="status" className="text-sm text-primary">
+                {run.status === "completed"
+                  ? `Recovered in ${run.delivery.attempts} attempts; receiver receipt ${run.receipt?.id}.`
+                  : run.status === "delivery-failed"
+                    ? run.events.some(
+                        (e) => e.action === "Demonstration fault injected",
+                      )
+                      ? "First response deliberately discarded after acceptance. Use Retry delivery below."
+                      : "Delivery failed before the demonstration fault could be confirmed. Inspect the recorded error before retrying."
+                    : "Fault applies once, on the first approved submission."}
+              </p>
+            </section>
+          )}
+          <ProofPack run={run} />
           <ProofEvidence key={run.id} run={run} />
           {run.status === "blocked" && (
             <section className={`${panel} border-amber-500/30`}>

@@ -128,6 +128,18 @@ export class ProofService {
     });
     try {
       const receipt = await this.delivery.submit(run);
+      if (run.input.recoveryDemo && run.delivery.attempts === 1) {
+        await this.store.mutate(id, owner, (current) => {
+          event(
+            current,
+            "Demonstration fault injected",
+            "The receiver accepted the packet. This walkthrough deliberately discards the first response to demonstrate uncertain delivery and safe retry.",
+          );
+        });
+        throw new Error(
+          "Demonstration: response lost after receiver acceptance",
+        );
+      }
       const verified = await this.delivery.verify(run);
       if (
         receipt.id !== verified.id ||

@@ -76,3 +76,7 @@ A guided healthcare partner walkthrough is now available at `/demo/healthcare`; 
 - No live model credentials were available, so successful provider execution is not verified. No production deployment, full existing PostgreSQL/Python stack integration test, mobile viewport test or production load test was performed.
 
 ![Shared run evidence from the browser QA preview](screenshots/proof-lab-v2.jpg)
+
+## Recovery walkthrough and proof packs
+
+See [Recovery and proof packs](recovery-and-proof-packs.md) for the labelled response-loss demonstration and client-facing evidence summaries.
