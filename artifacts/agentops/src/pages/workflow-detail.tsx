@@ -1037,7 +1037,7 @@ function AgentPanel({
             </StatusBadge>
             {step?.confidence != null && (
               <span className="text-[11px] text-muted-foreground">
-                conf {Math.round(Number(step.confidence) * 100)}%
+                Confidence not calibrated
               </span>
             )}
             {stepToolCalls.length > 0 && (

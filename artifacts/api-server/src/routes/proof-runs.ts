@@ -19,6 +19,7 @@ export function proofRunsRouter(
   service: ProofService,
   sandboxSecret: string,
   integration?: { handoff: GithubProofHandoff; operatorKey: string },
+  evaluationKey?: string,
 ) {
   const router = Router();
   const endpoint =
@@ -52,6 +53,53 @@ export function proofRunsRouter(
     next();
   });
   router.get("/proof/templates", (_req, res) => res.json(proofTemplates));
+  router.get(
+    "/proof/evaluations",
+    endpoint(async (req, res) =>
+      res.json(await service.store.evaluations(owner(req))),
+    ),
+  );
+  router.post(
+    "/proof/evaluations",
+    endpoint(async (req, res) => {
+      const key = owner(req);
+      const parsed = z
+        .object({
+          mode: z.enum(["rules", "live-ai"]),
+          label: z.string().trim().min(3).max(100),
+          liveCostAcknowledged: z.boolean().optional(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!parsed.success)
+        throw new ProofError(400, "Supply an evaluation label and mode.");
+      if (
+        parsed.data.mode === "live-ai" &&
+        parsed.data.liveCostAcknowledged !== true
+      )
+        throw new ProofError(
+          400,
+          "Confirm nine specialist reviews may incur provider charges, including retries.",
+        );
+      if (parsed.data.mode === "live-ai") {
+        if (!evaluationKey || evaluationKey.length < 32)
+          throw new ProofError(
+            503,
+            "Live benchmarks require a configured integration operator key.",
+          );
+        if (
+          !integrationAuthorized(
+            req.header("x-proof-integration-key") ?? "",
+            evaluationKey,
+          )
+        )
+          throw new ProofError(403, "An integration operator key is required.");
+      }
+      return res
+        .status(201)
+        .json(await service.evaluate(key, parsed.data.mode, parsed.data.label));
+    }),
+  );
   router.get(
     "/proof/runs",
     endpoint(async (req, res) =>

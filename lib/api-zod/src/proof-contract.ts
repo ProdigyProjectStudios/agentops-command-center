@@ -53,6 +53,8 @@ export const proofInputSchema = z
     syntheticAcknowledged: z.literal(true),
     recoveryDemo: z.boolean().optional(),
     analysisMode: z.enum(["rules", "live-ai"]).optional(),
+    connectedReview: z.boolean().optional(),
+    policyQuery: z.string().trim().min(1).max(240).optional(),
     documents: z.array(proofDocumentSchema).min(1).max(4),
   })
   .strict();
@@ -85,6 +87,11 @@ export type ProofFinding = {
   citationIds: string[];
 };
 export type ProofAnalysis = {
+  retrieval?: ProofRetrieval;
+  specialists?: {
+    role: string;
+    review: NonNullable<ProofAnalysis["aiReview"]>;
+  }[];
   policyVersion: string;
   fingerprint: string;
   fields: Record<string, string>;
@@ -101,6 +108,50 @@ export type ProofAnalysis = {
     durationMs: number;
     estimatedCostMicros: number | null;
   };
+};
+export type ProofRetrieval = {
+  method: "keyword";
+  catalogVersion: string;
+  query: string;
+  requiredFields: string[];
+  missingFields: string[];
+  passages: {
+    id: string;
+    documentId: string;
+    title: string;
+    version: string;
+    documentHash: string;
+    field: string;
+    line: number;
+    quote: string;
+    matchedTerms: string[];
+    score: number;
+  }[];
+};
+export type ProofEvaluation = {
+  id: string;
+  createdAt: string;
+  label: string;
+  datasetVersion: string;
+  promptVersion: string;
+  mode: "rules" | "live-ai";
+  models: string[];
+  cases: {
+    name: string;
+    expected: "blocked" | "awaiting-review";
+    actual: string;
+    passed: boolean;
+    citationsValid: boolean;
+    durationMs: number;
+    error: string | null;
+  }[];
+  passed: number;
+  total: number;
+  modelCalls: number;
+  durationMs: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  estimatedCostMicros: number | null;
 };
 export type ProofReceipt = {
   id: string;

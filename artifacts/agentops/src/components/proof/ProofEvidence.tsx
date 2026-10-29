@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ConnectedProof } from "./ConnectedProof";
 import {
   CheckCircle2,
   AlertTriangle,
@@ -35,6 +36,7 @@ export function ProofEvidence({
   );
   return (
     <div className="space-y-5">
+      <ConnectedProof analysis={run.analysis} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           ["01 / Intake", `${run.input.documents.length} documents saved`],

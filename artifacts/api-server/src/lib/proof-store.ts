@@ -4,6 +4,7 @@ import type {
   ProofReceipt,
   ProofPublicRun,
   ProofShare,
+  ProofEvaluation,
 } from "@workspace/api-zod";
 import { hashProof } from "./proof-assessment";
 
@@ -28,6 +29,8 @@ CREATE TABLE IF NOT EXISTS proof_runs (id text PRIMARY KEY, owner_hash text NOT 
 CREATE INDEX IF NOT EXISTS proof_runs_owner_idx ON proof_runs(owner_hash);
 CREATE TABLE IF NOT EXISTS proof_receipts (run_id text PRIMARY KEY REFERENCES proof_runs(id), snapshot jsonb NOT NULL);
 CREATE TABLE IF NOT EXISTS proof_shares (id text PRIMARY KEY, run_id text NOT NULL REFERENCES proof_runs(id), token_hash text NOT NULL UNIQUE, snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL, revoked_at timestamptz);
+CREATE TABLE IF NOT EXISTS proof_evaluations (id text PRIMARY KEY, owner_hash text NOT NULL, snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE INDEX IF NOT EXISTS proof_evaluations_owner_idx ON proof_evaluations(owner_hash);
 `;
 export async function migrateProof(pool: SqlClient) {
   await pool.query(proofMigration);
@@ -44,6 +47,20 @@ export function publicProof(run: ProofRun): ProofPublicRun {
 }
 export class ProofStore {
   constructor(private pool: SqlPool) {}
+  async saveEvaluation(owner: string, report: ProofEvaluation) {
+    await this.pool.query(
+      "INSERT INTO proof_evaluations (id,owner_hash,snapshot) VALUES ($1,$2,$3)",
+      [report.id, hashProof(owner), JSON.stringify(report)],
+    );
+    return report;
+  }
+  async evaluations(owner: string): Promise<ProofEvaluation[]> {
+    const { rows } = await this.pool.query(
+      "SELECT snapshot FROM proof_evaluations WHERE owner_hash=$1 ORDER BY created_at DESC LIMIT 20",
+      [hashProof(owner)],
+    );
+    return rows.map((r) => r.snapshot);
+  }
   async create(owner: string, run: ProofRun) {
     await this.pool.query(
       "INSERT INTO proof_runs (id, owner_hash, snapshot) VALUES ($1,$2,$3)",

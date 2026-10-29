@@ -26,8 +26,8 @@ export const finalizeNode: NodeDefinition = {
     return {
       output: {
         summary: isApproved
-          ? "Workflow finalized — distributing artifacts to downstream systems."
-          : "Workflow finalized — recording rejection and notifying stakeholders.",
+          ? "Workflow finalized — follow-up actions prepared; external dispatch has not been performed."
+          : "Workflow finalized — rejection recorded; stakeholder notifications have not been sent.",
         findings: [`Outcome: ${isApproved ? "approved" : "rejected"}`],
         risks: [],
         recommendedActions: followUps,
@@ -40,8 +40,8 @@ export const finalizeNode: NodeDefinition = {
         },
       },
       reasoningSummary: isApproved
-        ? "Workflow finalized — distributing artifacts to downstream systems."
-        : "Workflow finalized — recording rejection and notifying stakeholders.",
+        ? "Workflow finalized — follow-up actions prepared; external dispatch has not been performed."
+        : "Workflow finalized — rejection recorded; stakeholder notifications have not been sent.",
       confidence: "1.0",
       toolsUsed: ["dispatch_queue"],
       toolCalls: [
@@ -49,9 +49,10 @@ export const finalizeNode: NodeDefinition = {
           toolName: "dispatch_queue",
           status: "success",
           input: { outcome: isApproved ? "approved" : "rejected" },
-          output: { dispatched: true },
-          outputSummary: "Final artifacts queued for dispatch.",
-          durationMs: 64,
+          output: { dispatched: false, executionKind: "simulation" },
+          outputSummary:
+            "Demonstration follow-up plan prepared. No dispatch queue was invoked.",
+          durationMs: 0,
         },
       ],
       activity: [

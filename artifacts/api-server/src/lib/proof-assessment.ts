@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 import { pdfLineReference } from "@workspace/api-zod";
+import type { ProofRetrieval } from "@workspace/api-zod";
+import { retrieveProofPolicy } from "./proof-policy";
 import type {
   ProofInput,
   ProofAnalysis,
@@ -25,7 +27,10 @@ export function canonicalJson(value: unknown): string {
 }
 
 /** Exact line extraction: source content is data, never executable instructions. */
-export function assessProof(input: ProofInput): ProofAnalysis {
+export function assessProof(
+  input: ProofInput,
+  savedRetrieval?: ProofRetrieval,
+): ProofAnalysis {
   const citations: ProofCitation[] = [];
   const fields: Record<string, string> = {};
   const findings: ProofFinding[] = [];
@@ -145,9 +150,23 @@ export function assessProof(input: ProofInput): ProofAnalysis {
     });
   }
   const blockers = findings.filter((f) => !f.passed).map((f) => f.label);
+  const retrieval = input.connectedReview
+    ? (savedRetrieval ?? retrieveProofPolicy(input))
+    : undefined;
+  if (retrieval?.missingFields.length)
+    blockers.push(
+      `Insufficient policy evidence: ${retrieval.missingFields.join(", ")}`,
+    );
   return {
+    ...(retrieval ? { retrieval } : {}),
     policyVersion: proofPolicy,
-    fingerprint: hashProof(canonicalJson({ input, policy: proofPolicy })),
+    fingerprint: hashProof(
+      canonicalJson({
+        input,
+        policy: proofPolicy,
+        ...(retrieval ? { retrieval } : {}),
+      }),
+    ),
     fields,
     citations,
     findings,

@@ -34,4 +34,5 @@ export const proofRuntimeRouter = proofRunsRouter(
   proofService,
   secret,
   integration,
+  process.env.PROOF_INTEGRATION_KEY,
 );

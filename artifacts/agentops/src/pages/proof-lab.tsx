@@ -37,9 +37,10 @@ export default function ProofLabPage() {
   const { id } = useParams<{ id?: string }>();
   const [, navigate] = useLocation();
   const cache = useQueryClient();
-  const [draft, setDraft] = useState<ProofInput>(() =>
-    structuredClone(proofTemplates[0].input),
-  );
+  const [draft, setDraft] = useState<ProofInput>(() => ({
+    ...structuredClone(proofTemplates[0].input),
+    connectedReview: true,
+  }));
   const [confirmed, setConfirmed] = useState(false);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState("");
@@ -500,6 +501,45 @@ export default function ProofLabPage() {
                 </button>
               </div>
             </fieldset>
+            <label className="text-sm block max-w-md space-y-2">
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!draft.connectedReview}
+                  disabled={!!busy}
+                  onChange={(e) =>
+                    setDraft({ ...draft, connectedReview: e.target.checked })
+                  }
+                />
+                Connect policy retrieval and specialist review
+              </span>
+            </label>
+            {draft.connectedReview && (
+              <div className="rounded-lg border border-primary/30 p-4 space-y-3 text-sm">
+                <label className="block space-y-2">
+                  <span>Policy search query (optional)</span>
+                  <input
+                    className={field}
+                    maxLength={240}
+                    value={draft.policyQuery ?? ""}
+                    disabled={!!busy}
+                    placeholder="Uses the workflow's policy terms when empty"
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        policyQuery: e.target.value || undefined,
+                      })
+                    }
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Searches a versioned fictional policy catalog. Missing rule
+                  sources block approval. Rules mode makes no model calls; live
+                  mode adds three cited specialist reviews using the configured
+                  Ops, Legal and Finance models.
+                </p>
+              </div>
+            )}
             <label className="text-sm block max-w-md space-y-2">
               <span>Analysis mode</span>
               <select

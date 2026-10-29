@@ -1,5 +1,18 @@
 import { pgTable, text, jsonb, timestamp, index } from "drizzle-orm/pg-core";
 
+export const proofEvaluationsTable = pgTable(
+  "proof_evaluations",
+  {
+    id: text("id").primaryKey(),
+    ownerHash: text("owner_hash").notNull(),
+    snapshot: jsonb("snapshot").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("proof_evaluations_owner_idx").on(t.ownerHash)],
+);
+
 export const proofRunsTable = pgTable(
   "proof_runs",
   {

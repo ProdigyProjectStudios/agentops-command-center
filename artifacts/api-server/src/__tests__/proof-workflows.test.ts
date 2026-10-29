@@ -12,6 +12,7 @@ import {
   pdfDocumentFromPages,
   type HealthcareDemo,
   type ProofRun,
+  type ProofEvaluation,
 } from "@workspace/api-zod";
 import { assessProof } from "../lib/proof-assessment";
 import { migrateProof, ProofStore } from "../lib/proof-store";
@@ -23,6 +24,89 @@ import { validateProofAi } from "../lib/proof-ai-contract";
 const sample = () => structuredClone(proofTemplates[0].input);
 const owner = randomBytes(32).toString("hex");
 const stranger = randomBytes(32).toString("hex");
+test("connected policy gate blocks approval and saved evaluations stay owner-isolated", async () => {
+  const h = await harness();
+  try {
+    const bad = {
+      ...sample(),
+      connectedReview: true,
+      policyQuery: "astronomy telescope",
+    };
+    const run = (await (await h.api("/runs", "POST", bad)).json()) as ProofRun;
+    assert.equal(run.status, "blocked");
+    assert.equal(
+      (
+        await h.api(`/runs/${run.id}/review`, "POST", {
+          fingerprint: run.analysis.fingerprint,
+          decision: "approve",
+          note: "Cannot approve missing policy sources",
+        })
+      ).status,
+      409,
+    );
+    const valid = (await (
+      await h.api("/runs", "POST", { ...sample(), connectedReview: true })
+    ).json()) as ProofRun;
+    const completed = (await (
+      await h.api(`/runs/${valid.id}/review`, "POST", {
+        fingerprint: valid.analysis.fingerprint,
+        decision: "approve",
+        note: "Inspected exact policy and document evidence",
+      })
+    ).json()) as ProofRun;
+    assert.equal(completed.status, "completed");
+    assert.equal(completed.analysis.retrieval?.passages.length, 6);
+    assert.equal(
+      (
+        await h.api("/evaluations", "POST", {
+          mode: "live-ai",
+          label: "No consent",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await h.api("/evaluations", "POST", {
+          mode: "live-ai",
+          label: "No provider",
+          liveCostAcknowledged: true,
+        })
+      ).status,
+      503,
+    );
+    const response = await h.api("/evaluations", "POST", {
+      mode: "rules",
+      label: "HTTP baseline",
+    });
+    assert.equal(response.status, 201);
+    assert.equal(((await response.json()) as ProofEvaluation).passed, 6);
+    assert.equal(
+      ((await (await h.api("/evaluations")).json()) as ProofEvaluation[])
+        .length,
+      1,
+    );
+    assert.deepEqual(
+      await (await h.api("/evaluations", "GET", undefined, stranger)).json(),
+      [],
+    );
+    // Evaluations must not create proof runs, receiver records, approvals or external actions.
+    const rows = await h.db.pool.query(
+      "SELECT count(*)::int AS count FROM proof_runs",
+    );
+    assert.equal(rows.rows[0].count, 2);
+    const receipts = await h.db.pool.query(
+      "SELECT count(*)::int AS count FROM proof_receipts",
+    );
+    assert.equal(receipts.rows[0].count, 1);
+    assert.equal(
+      (await new ProofStore(h.db.pool).evaluations(owner)).length,
+      1,
+    );
+  } finally {
+    await h.close();
+  }
+});
 test("PDF review gate is enforced over HTTP and page citations survive approval, export and sharing", async () => {
   const h = await harness();
   try {
@@ -127,7 +211,39 @@ for (const workflow of ["authorization", "revenue-cycle"] as HealthcareDemo[]) {
     }
   });
 }
-async function harness(failAfterAccept = false) {
+test("billable evaluations require the operator key before invoking a reviewer", async () => {
+  const operatorKey = "evaluation-test-operator-key-32-chars";
+  const h = await harness(false, operatorKey);
+  try {
+    const body = {
+      mode: "live-ai",
+      label: "Guarded benchmark",
+      liveCostAcknowledged: true,
+    };
+    assert.equal((await h.api("/evaluations", "POST", body)).status, 403);
+    assert.equal(
+      (
+        await h.api("/evaluations", "POST", body, owner, {
+          "x-proof-integration-key": "incorrect",
+        })
+      ).status,
+      403,
+    );
+    // Authorization passes; the fixture deliberately has no provider.
+    assert.equal(
+      (
+        await h.api("/evaluations", "POST", body, owner, {
+          "x-proof-integration-key": operatorKey,
+        })
+      ).status,
+      503,
+    );
+    assert.deepEqual(await h.store.evaluations(owner), []);
+  } finally {
+    await h.close();
+  }
+});
+async function harness(failAfterAccept = false, evaluationKey?: string) {
   const db = await proofTestDatabase();
   await migrateProof(db.pool);
   await migrateProof(db.pool);
@@ -152,7 +268,7 @@ async function harness(failAfterAccept = false) {
   });
   const app = express();
   app.use(express.json());
-  app.use("/api", proofRunsRouter(service, secret));
+  app.use("/api", proofRunsRouter(service, secret, undefined, evaluationKey));
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>((r) => server.once("listening", r));
   const address = server.address();

@@ -8,6 +8,8 @@ import type {
 } from "@workspace/api-zod";
 import { assessProof, canonicalJson } from "./proof-assessment";
 import { ProofStore, ProofError } from "./proof-store";
+import { analyzeProof, type ProofReviewer } from "./proof-connected";
+import { evaluateProof } from "./proof-evaluations";
 
 export interface ProofDelivery {
   submit(run: ProofRun): Promise<ProofReceipt>;
@@ -16,25 +18,33 @@ export interface ProofDelivery {
 const event = (run: ProofRun, action: string, detail: string) =>
   run.events.push({ at: new Date().toISOString(), action, detail });
 export class ProofService {
+  private evaluationsInProgress = new Set<string>();
   constructor(
     public store: ProofStore,
     private delivery: ProofDelivery,
-    private aiReview?: (
-      input: ProofInput,
-      analysis: ProofAnalysis,
-    ) => Promise<NonNullable<ProofAnalysis["aiReview"]>>,
+    private aiReview?: ProofReviewer,
   ) {}
-  async create(owner: string, input: ProofInput) {
-    const analysis = assessProof(input),
-      at = new Date().toISOString();
-    if (input.analysisMode === "live-ai") {
-      if (!this.aiReview)
-        throw new ProofError(
-          503,
-          "Live AI review is not configured. Use rules mode or configure provider credentials.",
-        );
-      analysis.aiReview = await this.aiReview(input, analysis);
+  async evaluate(owner: string, mode: "rules" | "live-ai", label: string) {
+    if (this.evaluationsInProgress.has(owner))
+      throw new ProofError(
+        409,
+        "An evaluation is already running in this workspace.",
+      );
+    if (mode === "live-ai" && !this.aiReview)
+      throw new ProofError(503, "Live AI review is not configured.");
+    this.evaluationsInProgress.add(owner);
+    try {
+      return await this.store.saveEvaluation(
+        owner,
+        await evaluateProof(mode, label, this.aiReview),
+      );
+    } finally {
+      this.evaluationsInProgress.delete(owner);
     }
+  }
+  async create(owner: string, input: ProofInput) {
+    const analysis = await analyzeProof(input, this.aiReview),
+      at = new Date().toISOString();
     const run: ProofRun = {
       id: randomUUID(),
       input,
@@ -62,6 +72,18 @@ export class ProofService {
       "Evidence extracted",
       `${analysis.citations.length} exact source lines linked to ${analysis.findings.length} policy checks.`,
     );
+    if (analysis.retrieval)
+      event(
+        run,
+        "Policy retrieval recorded",
+        `${analysis.retrieval.method} search: ${analysis.retrieval.passages.length} versioned passages; ${analysis.retrieval.missingFields.length} missing rule sources. Query: ${analysis.retrieval.query}`,
+      );
+    for (const s of analysis.specialists ?? [])
+      event(
+        run,
+        "Specialist review completed",
+        `${s.role} · ${s.review.model} · ${s.review.notes.length} cited advisory notes · ${s.review.durationMs} ms. Human approval remains required.`,
+      );
     for (const doc of input.documents) {
       if (doc.pdf)
         event(
@@ -93,7 +115,7 @@ export class ProofService {
     const run = await this.store.mutate(id, owner, (current) => {
       if (current.status !== "awaiting-review")
         throw new ProofError(409, "This run is not awaiting review.");
-      const assessment = assessProof(current.input);
+      const assessment = assessProof(current.input, current.analysis.retrieval);
       if (
         assessment.blockers.length ||
         assessment.fingerprint !== review.fingerprint ||

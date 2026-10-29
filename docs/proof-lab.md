@@ -1,5 +1,7 @@
 # Proof Lab: document → evidence → approval → receipt
 
+For the latest connected retrieval, specialist-review and saved benchmark features, see [Connected evidence and evaluations](connected-proof-and-evaluations.md), including their validation and scope limits.
+
 The Proof Lab at `/proof-lab` now executes and saves a complete synthetic administrative workflow. The original four checkbox-based examples remain at `/proof-lab/fixtures`; their legacy `/api/proof/evaluate` and `/review` APIs remain explicitly stateless simulations.
 
 ## What works
@@ -65,7 +67,7 @@ The standalone preview serves the built frontend and actual proof API with a dis
 
 For Replit, merge/pull the reviewed branch, install from the lockfile, build the frontend/API and republish the existing deployment. Startup provisions the additive proof tables. No new environment variables are needed in rules mode. Verify a complete run and a shared link on the production URL after deployment. No production deployment has been performed during development.
 
-A guided healthcare partner walkthrough is now available at `/demo/healthcare`; see [presenter flow and setup](healthcare-guided-demo.md). External healthcare adapters, authenticated organization workspaces, model-comparison dashboards and measured business outcome reporting remain follow-on work.
+A guided healthcare partner walkthrough is now available at `/demo/healthcare`; see [presenter flow and setup](healthcare-guided-demo.md). Saved synthetic model/rules benchmark comparisons are available at `/evaluations`. External healthcare adapters, authenticated organization workspaces and measured business outcome reporting remain follow-on work.
 
 ## Validation on 29 October 2026
 

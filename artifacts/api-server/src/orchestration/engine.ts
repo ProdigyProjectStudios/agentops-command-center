@@ -51,6 +51,7 @@ import { FINALIZE_NODE, PIPELINE } from "./edges";
 import { synthesisNode } from "./nodes/synthesis-node";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
 import type { NodeContext, NodeDefinition, NodeResult } from "./types";
+import { labelGraphToolEvidence } from "./execution-evidence";
 
 const LIVE_INTER_STEP_DELAY_MS = Number(
   process.env["LIVE_INTER_STEP_DELAY_MS"] ?? "500",
@@ -245,6 +246,7 @@ async function executeNode(
   let result: NodeResult;
   try {
     result = await node.run(ctx);
+    result.toolCalls = result.toolCalls?.map(labelGraphToolEvidence);
   } catch (err) {
     logger.error({ err, stepIndex, agentSlug: node.agentSlug }, "Node failed");
     await db
@@ -346,9 +348,7 @@ export class WorkflowEngine {
         await db
           .delete(toolCallsTable)
           .where(eq(toolCallsTable.agentStepId, s.id));
-        await db
-          .delete(agentStepsTable)
-          .where(eq(agentStepsTable.id, s.id));
+        await db.delete(agentStepsTable).where(eq(agentStepsTable.id, s.id));
       }
     }
     // Approval requests are reset on re-run — they get re-created at the
@@ -373,9 +373,9 @@ export class WorkflowEngine {
       "approval_pending",
     ];
     const resumeStage = isResume
-      ? (STAGE_ORDER.indexOf(priorStage) >= STAGE_ORDER.indexOf("triaged")
-          ? priorStage
-          : "triaged")
+      ? STAGE_ORDER.indexOf(priorStage) >= STAGE_ORDER.indexOf("triaged")
+        ? priorStage
+        : "triaged"
       : "triaged";
     [workflowRun] = await db
       .update(workflowRunsTable)
@@ -494,7 +494,10 @@ export class WorkflowEngine {
           .returning();
       }
     } catch (err) {
-      logger.error({ err, workflowRunId }, "Pipeline failed; marking run failed");
+      logger.error(
+        { err, workflowRunId },
+        "Pipeline failed; marking run failed",
+      );
       await db
         .update(workflowRunsTable)
         .set({
