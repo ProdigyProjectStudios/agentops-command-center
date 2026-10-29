@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AppShell } from "@/components/layout/AppShell";
+import ProofLabPage from "@/pages/proof-lab";
 import DashboardPage from "@/pages/dashboard";
 import NewRequestPage from "@/pages/new-request";
 import WorkflowsListPage from "@/pages/workflows-list";
@@ -32,6 +33,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/proof-lab" component={ProofLabPage} />
       <Route path="/requests/new" component={NewRequestPage} />
       <Route path="/workflows" component={WorkflowsListPage} />
       <Route path="/workflows/:id" component={WorkflowDetailPage} />

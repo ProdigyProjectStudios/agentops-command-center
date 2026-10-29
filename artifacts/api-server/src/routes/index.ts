@@ -11,7 +11,10 @@ import dashboardRouter from "./dashboard";
 import systemRouter from "./system";
 import workerRouter from "./worker";
 
+import proofRouter from "./proof";
+
 const router: IRouter = Router();
+router.use(proofRouter);
 
 router.use(healthRouter);
 router.use(dashboardRouter);
