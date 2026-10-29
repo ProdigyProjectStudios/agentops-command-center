@@ -52,6 +52,7 @@
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "@workspace/api-client-react": "workspace:*",
+    "@workspace/api-zod": "workspace:*",
     "class-variance-authority": "catalog:",
     "clsx": "catalog:",
     "cmdk": "^1.1.1",
@@ -76,12 +77,13 @@
     "vaul": "^1.1.2",
     "vite": "catalog:",
     "wouter": "^3.3.5",
-    "zod": "catalog:",
-    "@workspace/api-zod": "workspace:*"
+    "zod": "catalog:"
   },
   "dependencies": {
     "@fontsource/inter": "^5.2.8",
     "@fontsource/jetbrains-mono": "^5.2.8",
-    "@fontsource/plus-jakarta-sans": "^5.2.8"
+    "@fontsource/plus-jakarta-sans": "^5.2.8",
+    "@noble/hashes": "2.0.0",
+    "pdfjs-dist": "6.4.299"
   }
 }

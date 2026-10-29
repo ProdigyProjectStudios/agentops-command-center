@@ -65,7 +65,7 @@ export function proofPackHtml(run: Run) {
             .filter(Boolean)
             .map(
               (c) =>
-                `<small>${escape(c!.name)} · line ${c!.line}</small><blockquote>${escape(c!.quote)}</blockquote>`,
+                `<small>${escape(c!.name)} · ${c!.page ? `PDF page ${c!.page} · extracted line ${c!.pageLine}` : `line ${c!.line}`}${c!.sourceKind === "edited-pdf-text" ? " · edited evidence" : ""}</small><blockquote>${escape(c!.quote)}</blockquote>`,
             )
             .join("") || "No matching source supplied"
         }</td></tr>`,

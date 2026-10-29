@@ -119,11 +119,23 @@ export function ProofEvidence({
           {citations.map((c) => (
             <div className="mt-4" key={c.id}>
               <p className="text-xs text-muted-foreground break-all">
-                {c.name} · line {c.line} · {c.id}
+                {c.name} ·{" "}
+                {c.page
+                  ? `PDF page ${c.page} · extracted line ${c.pageLine}`
+                  : `line ${c.line}`}{" "}
+                · {c.id}
+                {c.sourceKind === "edited-pdf-text" && " · edited evidence"}
               </p>
               <blockquote className="font-mono text-sm bg-primary/5 border-l-2 border-primary rounded-r-lg p-4 mt-2 whitespace-pre-wrap break-words">
                 {c.quote}
               </blockquote>
+              {c.sourceKind === "pdf-text" && (
+                <p className="text-xs text-muted-foreground mt-2">
+                  Browser-extracted text, reviewed by the operator. Page
+                  references are not independently verified against PDF bytes by
+                  the server.
+                </p>
+              )}
             </div>
           ))}
           {!!aiNotes?.length && (

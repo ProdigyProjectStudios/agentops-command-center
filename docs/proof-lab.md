@@ -5,7 +5,7 @@ The Proof Lab at `/proof-lab` now executes and saves a complete synthetic admini
 ## What works
 
 - Three document-driven workflows: vendor invoice, authorization packet and revenue-cycle packet.
-- Upload `.txt` / `.md` files or edit supplied samples. Intake accepts 1–4 documents, each at most 16,000 characters (file-picker limit: 16 KB). Field extraction uses exact `Field: value` lines. PDFs, OCR and arbitrary unstructured-document extraction are not implemented.
+- Upload `.txt` / `.md` files, text-based PDFs, or edit supplied samples. Intake accepts 1–4 documents, each at most 16,000 extracted characters (text-file limit: 16 KB; PDF limit: 5 MB / 20 pages). PDF text requires operator review, retains page references and a byte fingerprint, and offers an explicitly labelled manual-correction path. Field extraction still uses exact `Field: value` lines; OCR and arbitrary prose extraction are not implemented. See [PDF evidence intake](pdf-evidence-intake.md) for boundaries and QA.
 - Every rule result links to the exact document, line number and quote. Missing and repeated fields block execution. Policies are fictional, versioned administrative rules.
 - Each run saves immutable inputs, a canonical SHA-256 fingerprint, extracted fields, findings and an execution timeline in PostgreSQL. Changing evidence creates a new run requiring fresh review.
 - An operator must supply a review note and approve or reject. Review re-evaluates the stored inputs and checks the fingerprint against the current policy. Approval is serialized by a row lock.

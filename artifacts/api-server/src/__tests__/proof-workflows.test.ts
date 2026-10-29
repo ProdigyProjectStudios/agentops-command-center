@@ -9,6 +9,7 @@ import express from "express";
 import {
   proofTemplates,
   healthcareDemoInput,
+  pdfDocumentFromPages,
   type HealthcareDemo,
   type ProofRun,
 } from "@workspace/api-zod";
@@ -22,6 +23,49 @@ import { validateProofAi } from "../lib/proof-ai-contract";
 const sample = () => structuredClone(proofTemplates[0].input);
 const owner = randomBytes(32).toString("hex");
 const stranger = randomBytes(32).toString("hex");
+test("PDF review gate is enforced over HTTP and page citations survive approval, export and sharing", async () => {
+  const h = await harness();
+  try {
+    const value = sample();
+    const lines = value.documents[0].text.split("\n");
+    value.documents = [
+      pdfDocumentFromPages("synthetic.pdf", "a".repeat(64), [
+        lines.slice(0, 2).join("\n"),
+        lines.slice(2).join("\n"),
+      ]),
+    ];
+    assert.equal((await h.api("/runs", "POST", value)).status, 400);
+    value.documents[0].pdf!.reviewed = true;
+    const response = await h.api("/runs", "POST", value);
+    assert.equal(response.status, 201);
+    const run = (await response.json()) as ProofRun;
+    assert.ok(run.events.some((e) => e.action === "PDF extraction reviewed"));
+    const approved = await h.api(`/runs/${run.id}/review`, "POST", {
+      fingerprint: run.analysis.fingerprint,
+      decision: "approve",
+      note: "Reviewed synthetic PDF pages and exact evidence.",
+    });
+    assert.equal(approved.status, 200);
+    assert.equal(((await approved.json()) as ProofRun).status, "completed");
+    const exported = (await (
+      await h.api(`/runs/${run.id}/export`)
+    ).json()) as ProofRun;
+    assert.deepEqual(exported.input.documents[0].pdf?.pageStarts, [1, 3]);
+    assert.equal(
+      exported.analysis.citations.find((c) => c.field === "amount")?.page,
+      2,
+    );
+    const shared = await h.service.store.share(owner, run.id);
+    const snapshot = await h.service.store.shared(shared.token);
+    assert.equal("text" in snapshot.input.documents[0], false);
+    assert.equal(
+      snapshot.analysis.citations.find((c) => c.field === "amount")?.page,
+      2,
+    );
+  } finally {
+    await h.close();
+  }
+});
 for (const workflow of ["authorization", "revenue-cycle"] as HealthcareDemo[]) {
   test(`guided ${workflow}: preserve exception, correct evidence, review and verify delivery`, async () => {
     const h = await harness();

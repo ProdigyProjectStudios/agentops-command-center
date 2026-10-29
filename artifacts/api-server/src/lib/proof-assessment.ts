@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { pdfLineReference } from "@workspace/api-zod";
 import type {
   ProofInput,
   ProofAnalysis,
@@ -117,6 +118,7 @@ export function assessProof(input: ProofInput): ProofAnalysis {
           document,
           name: doc.name,
           line: i + 1,
+          ...pdfLineReference(doc, i + 1),
           quote,
           field,
           value: quote.slice(colon + 1).trim(),

@@ -1,5 +1,51 @@
 import { z } from "zod";
 
+const pdfOrigin = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    sha256: z.string().regex(/^[a-f0-9]{64}$/),
+  })
+  .strict();
+export const proofDocumentSchema = z
+  .object({
+    name: z.string().trim().min(1).max(100),
+    text: z.string().trim().min(1).max(16000),
+    pdf: z
+      .object({
+        sha256: z.string().regex(/^[a-f0-9]{64}$/),
+        reviewed: z.boolean(),
+        pageStarts: z.array(z.number().int().positive()).min(1).max(20),
+      })
+      .strict()
+      .optional(),
+    editedFromPdf: pdfOrigin.optional(),
+  })
+  .strict()
+  .superRefine((doc, ctx) => {
+    if (!doc.pdf) return;
+    const starts = doc.pdf.pageStarts;
+    const lines = doc.text.split(/\r?\n/).length;
+    if (
+      starts[0] !== 1 ||
+      starts.some((n, i) => n > lines || (i > 0 && n <= starts[i - 1]))
+    )
+      ctx.addIssue({
+        code: "custom",
+        message: "PDF page references must cover ordered source lines.",
+      });
+    if (doc.editedFromPdf)
+      ctx.addIssue({
+        code: "custom",
+        message: "Edited evidence cannot retain PDF page references.",
+      });
+    if (!doc.pdf.reviewed)
+      ctx.addIssue({
+        code: "custom",
+        message: "Review every PDF page before evaluating.",
+      });
+  });
+export type ProofDocument = z.infer<typeof proofDocumentSchema>;
+
 export const proofInputSchema = z
   .object({
     workflow: z.enum(["vendor-payment", "authorization", "revenue-cycle"]),
@@ -7,17 +53,7 @@ export const proofInputSchema = z
     syntheticAcknowledged: z.literal(true),
     recoveryDemo: z.boolean().optional(),
     analysisMode: z.enum(["rules", "live-ai"]).optional(),
-    documents: z
-      .array(
-        z
-          .object({
-            name: z.string().trim().min(1).max(100),
-            text: z.string().trim().min(1).max(16000),
-          })
-          .strict(),
-      )
-      .min(1)
-      .max(4),
+    documents: z.array(proofDocumentSchema).min(1).max(4),
   })
   .strict();
 export const proofReviewSchema = z
@@ -34,6 +70,9 @@ export type ProofCitation = {
   document: number;
   name: string;
   line: number;
+  page?: number;
+  pageLine?: number;
+  sourceKind?: "pdf-text" | "edited-pdf-text";
   quote: string;
   field: string;
   value: string;

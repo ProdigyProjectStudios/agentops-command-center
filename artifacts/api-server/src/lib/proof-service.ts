@@ -62,6 +62,20 @@ export class ProofService {
       "Evidence extracted",
       `${analysis.citations.length} exact source lines linked to ${analysis.findings.length} policy checks.`,
     );
+    for (const doc of input.documents) {
+      if (doc.pdf)
+        event(
+          run,
+          "PDF extraction reviewed",
+          `${doc.name}: ${doc.pdf.pageStarts.length} pages, SHA-256 ${doc.pdf.sha256}. Browser-extracted text and page references were reviewed by the operator. Original PDF bytes are not retained or independently verified by the server.`,
+        );
+      if (doc.editedFromPdf)
+        event(
+          run,
+          "Edited PDF evidence",
+          `${doc.name}: operator-editable text derived from ${doc.editedFromPdf.name}, SHA-256 ${doc.editedFromPdf.sha256}. PDF page references were removed; citations refer to the edited text.`,
+        );
+    }
     if (analysis.aiReview)
       event(
         run,

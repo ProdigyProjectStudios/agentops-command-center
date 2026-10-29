@@ -4,3 +4,4 @@ export * from "./proof-contract";
 export * from "./guided-demo";
 
 export * from "./proof-pack";
+export * from "./proof-pdf";

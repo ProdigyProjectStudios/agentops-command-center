@@ -17,6 +17,7 @@ import {
 import {
   proofTemplates,
   proofInputSchema,
+  editablePdfCopy,
   type ProofInput,
   type ProofRun,
   type ProofShare,
@@ -94,26 +95,36 @@ export default function ProofLabPage() {
     setConfirmed(false);
     setShareUrl("");
     setError("");
+    setNotice("");
     navigate("/proof-lab");
   }
   async function readFiles(files: FileList | null) {
     if (!files?.length) return;
     await action("Reading documents…", async () => {
-      const docs = await Promise.all(
-        Array.from(files).map(async (file) => {
-          if (!/\.(txt|md)$/i.test(file.name) || file.size > 16000)
-            throw new Error(
-              "Use .txt or .md files up to 16 KB. PDF/OCR intake is not included yet.",
-            );
-          return { name: file.name, text: await file.text() };
-        }),
-      );
       const existing = draft.documents.filter((d) => d.text.trim());
-      if (existing.length + docs.length > 4)
+      if (existing.length + files.length > 4)
         throw new Error(
           "At most four documents per run. Remove a sample before adding more.",
         );
+      const docs: ProofInput["documents"] = [];
+      for (const file of Array.from(files)) {
+        if (file.name.length > 100)
+          throw new Error("Document filenames must be at most 100 characters.");
+        if (/\.pdf$/i.test(file.name)) {
+          if (file.size > 5 * 1024 * 1024)
+            throw new Error("PDFs must be 5 MB or smaller.");
+          const { readProofPdf } = await import("@/lib/proof-pdf-intake");
+          docs.push(await readProofPdf(file));
+          continue;
+        }
+        if (!/\.(txt|md)$/i.test(file.name) || file.size > 16000)
+          throw new Error(
+            "Use .txt/.md up to 16 KB, or text-based .pdf up to 5 MB and 20 pages. OCR is not available.",
+          );
+        docs.push({ name: file.name, text: await file.text() });
+      }
       setDraft({ ...draft, documents: [...existing, ...docs] });
+      setConfirmed(false);
     });
   }
   return (
@@ -131,7 +142,7 @@ export default function ProofLabPage() {
             receipt. Every step stays with the run.
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Link className={button} href="/demo/healthcare">
             Guided healthcare demo <ArrowRight size={16} />
           </Link>
@@ -272,9 +283,10 @@ export default function ProofLabPage() {
             <div>
               <h2 className="font-semibold text-lg">Prepare the evidence</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                Edit the sample or upload text documents using the same Field:
-                value format. Remove a required line to demonstrate a blocked
-                run.
+                Upload text or a text-based PDF, then review the extracted
+                evidence. Checks still require Field: value lines. PDF intake
+                reads the text layer; it does not infer fields from prose or
+                perform OCR.
               </p>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
@@ -307,92 +319,187 @@ export default function ProofLabPage() {
                 </select>
               </label>
             </div>
-            {draft.documents.map((doc, i) => (
-              <div key={i} className="space-y-2">
-                <div className="flex gap-2 items-center">
-                  <label className="flex-1">
-                    <span className="sr-only">Document {i + 1} filename</span>
-                    <input
-                      className={`${field} font-mono`}
-                      maxLength={100}
-                      value={doc.name}
-                      onChange={(e) =>
+            <fieldset disabled={!!busy} className="space-y-5 min-w-0">
+              {draft.documents.map((doc, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex gap-2 items-center">
+                    <label className="flex-1">
+                      <span className="sr-only">Document {i + 1} filename</span>
+                      <input
+                        className={`${field} font-mono`}
+                        maxLength={100}
+                        readOnly={!!doc.pdf}
+                        value={doc.name}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            documents: draft.documents.map((d, j) =>
+                              j === i ? { ...d, name: e.target.value } : d,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                    <button
+                      title={`Remove document ${i + 1}`}
+                      aria-label={`Remove document ${i + 1}`}
+                      className={button}
+                      disabled={draft.documents.length === 1}
+                      onClick={() =>
                         setDraft({
                           ...draft,
-                          documents: draft.documents.map((d, j) =>
-                            j === i ? { ...d, name: e.target.value } : d,
-                          ),
+                          documents: draft.documents.filter((_, j) => j !== i),
                         })
                       }
-                    />
-                  </label>
-                  <button
-                    title={`Remove document ${i + 1}`}
-                    aria-label={`Remove document ${i + 1}`}
-                    className={button}
-                    disabled={draft.documents.length === 1}
-                    onClick={() =>
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label={`Document ${i + 1} content`}
+                    rows={8}
+                    className={`${field} font-mono leading-relaxed`}
+                    maxLength={16000}
+                    readOnly={!!doc.pdf}
+                    value={doc.text}
+                    onChange={(e) =>
                       setDraft({
                         ...draft,
-                        documents: draft.documents.filter((_, j) => j !== i),
+                        documents: draft.documents.map((d, j) =>
+                          j === i ? { ...d, text: e.target.value } : d,
+                        ),
                       })
                     }
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  />
+                  {doc.pdf && (
+                    <div className="rounded-lg border border-primary/30 p-4 space-y-3 text-sm">
+                      <p className="font-medium">
+                        PDF text layer · {doc.pdf.pageStarts.length} pages ·{" "}
+                        {doc.pdf.reviewed
+                          ? "review recorded"
+                          : "review required"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Compare every page below with your original PDF,
+                        especially tables and image content. Reading order and
+                        missing image text cannot be guaranteed. Only reviewed
+                        text and a file fingerprint are saved; the original PDF
+                        stays on your device.
+                      </p>
+                      <div className="space-y-2">
+                        {doc.pdf.pageStarts.map((start, page) => (
+                          <details key={page}>
+                            <summary className="cursor-pointer text-primary">
+                              Page {page + 1} · extracted lines {start}–
+                              {(doc.pdf!.pageStarts[page + 1] ??
+                                doc.text.split("\n").length + 1) - 1}
+                            </summary>
+                            <pre className="whitespace-pre-wrap break-words font-mono text-xs mt-2 p-3 bg-secondary/40 rounded-lg">
+                              {doc.text
+                                .split("\n")
+                                .slice(
+                                  start - 1,
+                                  doc.pdf!.pageStarts[page + 1]
+                                    ? doc.pdf!.pageStarts[page + 1] - 1
+                                    : undefined,
+                                )
+                                .join("\n")}
+                            </pre>
+                          </details>
+                        ))}
+                      </div>
+                      <label className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={doc.pdf.reviewed}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              documents: draft.documents.map((d, j) =>
+                                j === i && d.pdf
+                                  ? {
+                                      ...d,
+                                      pdf: {
+                                        ...d.pdf,
+                                        reviewed: e.target.checked,
+                                      },
+                                    }
+                                  : d,
+                              ),
+                            })
+                          }
+                        />
+                        <span>
+                          I compared all extracted pages in {doc.name} with the
+                          original PDF.
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className={button}
+                        onClick={() => {
+                          setDraft({
+                            ...draft,
+                            documents: draft.documents.map((d, j) =>
+                              j === i ? editablePdfCopy(d) : d,
+                            ),
+                          });
+                          setConfirmed(false);
+                        }}
+                      >
+                        Convert to editable text
+                      </button>
+                      <p className="text-xs text-muted-foreground">
+                        Corrections remove PDF page references and are labelled
+                        as edited evidence. To retain original page references,
+                        fix the PDF and upload it again.
+                      </p>
+                    </div>
+                  )}
+                  {doc.editedFromPdf && (
+                    <p className="text-xs text-amber-400">
+                      Edited evidence derived from {doc.editedFromPdf.name}.
+                      Citations refer to this text, not original PDF pages.
+                    </p>
+                  )}
                 </div>
-                <textarea
-                  aria-label={`Document ${i + 1} content`}
-                  rows={8}
-                  className={`${field} font-mono leading-relaxed`}
-                  maxLength={16000}
-                  value={doc.text}
-                  onChange={(e) =>
+              ))}
+              <div className="flex flex-wrap gap-3">
+                <label className={`${button} cursor-pointer`}>
+                  <Upload size={16} /> Upload .txt / .md / .pdf
+                  <input
+                    className="sr-only"
+                    type="file"
+                    aria-label="Upload evidence documents"
+                    accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+                    multiple
+                    disabled={!!busy}
+                    onChange={(e) => {
+                      void readFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  className={button}
+                  disabled={draft.documents.length >= 4 || !!busy}
+                  onClick={() =>
                     setDraft({
                       ...draft,
-                      documents: draft.documents.map((d, j) =>
-                        j === i ? { ...d, text: e.target.value } : d,
-                      ),
+                      documents: [
+                        ...draft.documents,
+                        {
+                          name: `evidence-${draft.documents.length + 1}.txt`,
+                          text: "",
+                        },
+                      ],
                     })
                   }
-                />
+                >
+                  <Plus size={16} /> Add document
+                </button>
               </div>
-            ))}
-            <div className="flex flex-wrap gap-3">
-              <label className={`${button} cursor-pointer`}>
-                <Upload size={16} /> Upload .txt / .md
-                <input
-                  className="sr-only"
-                  type="file"
-                  aria-label="Upload text documents"
-                  accept=".txt,.md,text/plain,text/markdown"
-                  multiple
-                  disabled={!!busy}
-                  onChange={(e) => {
-                    void readFiles(e.target.files);
-                    e.target.value = "";
-                  }}
-                />
-              </label>
-              <button
-                className={button}
-                disabled={draft.documents.length >= 4 || !!busy}
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    documents: [
-                      ...draft.documents,
-                      {
-                        name: `evidence-${draft.documents.length + 1}.txt`,
-                        text: "",
-                      },
-                    ],
-                  })
-                }
-              >
-                <Plus size={16} /> Add document
-              </button>
-            </div>
+            </fieldset>
             <label className="text-sm block max-w-md space-y-2">
               <span>Analysis mode</span>
               <select
@@ -428,7 +535,11 @@ export default function ProofLabPage() {
             </label>
             <button
               className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
-              disabled={!confirmed || !!busy}
+              disabled={
+                !confirmed ||
+                !!busy ||
+                draft.documents.some((d) => d.pdf && !d.pdf.reviewed)
+              }
               onClick={() =>
                 action("Extracting evidence and saving the run…", async () => {
                   const parsed = proofInputSchema.safeParse(draft);
@@ -632,7 +743,11 @@ export default function ProofLabPage() {
             </button>
           )}
           {run.status === "completed" && (
-            <GithubHandoff key={`github-${run.id}`} run={run} onUpdate={saveRun} />
+            <GithubHandoff
+              key={`github-${run.id}`}
+              run={run}
+              onUpdate={saveRun}
+            />
           )}
           {["completed", "blocked", "rejected"].includes(run.status) && (
             <section className={`${panel} space-y-4`}>

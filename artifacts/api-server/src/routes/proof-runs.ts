@@ -66,7 +66,7 @@ export function proofRunsRouter(
       if (!parsed.success)
         throw new ProofError(
           400,
-          "Supply 1–4 text documents (at most 16,000 characters each), a title, workflow and synthetic-data confirmation.",
+          "Supply 1–4 documents (at most 16,000 extracted characters each), a title, workflow and synthetic-data confirmation. PDF text requires reviewed, ordered page references.",
         );
       return res.status(201).json(await service.create(key, parsed.data));
     }),
