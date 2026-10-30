@@ -2,6 +2,7 @@ import { Fragment, useState, type ReactNode } from "react";
 import { Link, useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import {
+  FileCheck2,
   LayoutDashboard,
   PlusCircle,
   ListChecks,
@@ -43,6 +44,12 @@ const NAV: NavItem[] = [
     icon: Sparkles,
     testId: "nav-overview",
     section: "Start here",
+  },
+  {
+    href: "/workers/authorization",
+    label: "Authorization Worker",
+    icon: FileCheck2,
+    testId: "nav-authorization-worker",
   },
   {
     href: "/demo/healthcare",

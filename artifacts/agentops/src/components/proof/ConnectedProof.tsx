@@ -19,7 +19,11 @@ export function ConnectedProof({ analysis }: { analysis: ProofAnalysis }) {
       <div className="grid sm:grid-cols-3 gap-3 text-sm">
         <div className="rounded-lg border p-3">
           <p className="text-muted-foreground">Retrieval method</p>
-          <p>Keyword search · fictional policy catalog</p>
+          <p>
+            {retrieval.method === "exact-policy-id"
+              ? "Exact policy ID · versioned fictional criteria"
+              : "Keyword search · fictional policy catalog"}
+          </p>
         </div>
         <div className="rounded-lg border p-3">
           <p className="text-muted-foreground">Rule sources</p>
@@ -47,9 +51,9 @@ export function ConnectedProof({ analysis }: { analysis: ProofAnalysis }) {
         </p>
       )}
       <p className="text-xs text-muted-foreground">
-        Matches are literal keyword overlaps, not semantic relevance or
-        confidence scores. These synthetic policy passages are frozen with this
-        run.
+        {retrieval.method === "exact-policy-id"
+          ? "The selected policy version and exact criteria are frozen with this run. No semantic ranking is claimed."
+          : "Matches are literal keyword overlaps, not semantic relevance or confidence scores. These synthetic policy passages are frozen with this run."}
       </p>
       <div className="space-y-2">
         {retrieval.passages.map((p) => (
@@ -61,8 +65,9 @@ export function ConnectedProof({ analysis }: { analysis: ProofAnalysis }) {
               {p.quote}
             </blockquote>
             <p className="text-xs text-muted-foreground">
-              Matched: {p.matchedTerms.join(", ")} · {p.score} distinct query
-              terms
+              {retrieval.method === "exact-policy-id"
+                ? `Selected policy: ${p.documentId}`
+                : `Matched: ${p.matchedTerms.join(", ")} · ${p.score} distinct query terms`}
             </p>
             <p className="font-mono break-all text-xs text-muted-foreground mt-2">
               Document SHA-256: {p.documentHash}

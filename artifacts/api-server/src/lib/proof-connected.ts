@@ -27,7 +27,7 @@ export async function analyzeProof(
       503,
       "Live AI review is not configured. Use rules mode or configure provider credentials.",
     );
-  if (!input.connectedReview) {
+  if (!input.connectedReview && !input.healthcarePolicy) {
     analysis.aiReview = await reviewer(input, analysis);
     return analysis;
   }

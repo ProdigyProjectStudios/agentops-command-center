@@ -1,3 +1,4 @@
+import { assessHealthcare } from "./healthcare-assessment";
 import { createHash } from "node:crypto";
 import { pdfLineReference } from "@workspace/api-zod";
 import type { ProofRetrieval } from "@workspace/api-zod";
@@ -31,6 +32,7 @@ export function assessProof(
   input: ProofInput,
   savedRetrieval?: ProofRetrieval,
 ): ProofAnalysis {
+  if (input.healthcarePolicy) return assessHealthcare(input, savedRetrieval);
   const citations: ProofCitation[] = [];
   const fields: Record<string, string> = {};
   const findings: ProofFinding[] = [];

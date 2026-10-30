@@ -161,6 +161,17 @@ export class ProofService {
     }
   }
   async create(owner: string, input: ProofInput) {
+    if (input.supersedesRunId) {
+      const prior = await this.store.get(owner, input.supersedesRunId);
+      if (
+        prior.input.workflow !== input.workflow ||
+        prior.input.healthcarePolicy !== input.healthcarePolicy
+      )
+        throw new ProofError(
+          409,
+          "The prior run must belong to the same workflow and policy.",
+        );
+    }
     const analysis = await analyzeProof(input, this.aiReview),
       at = new Date().toISOString();
     const run: ProofRun = {
@@ -180,6 +191,12 @@ export class ProofService {
       },
       events: [],
     };
+    if (input.supersedesRunId)
+      event(
+        run,
+        "Prior run retained",
+        `This run follows ${input.supersedesRunId}; its evidence and decision remain unchanged.`,
+      );
     event(
       run,
       "Documents received",
@@ -233,6 +250,15 @@ export class ProofService {
     const run = await this.store.mutate(id, owner, (current) => {
       if (current.status !== "awaiting-review")
         throw new ProofError(409, "This run is not awaiting review.");
+      if (
+        current.input.healthcarePolicy &&
+        (!current.analysis.aiReview ||
+          current.analysis.specialists?.length !== 3)
+      )
+        throw new ProofError(
+          409,
+          "Complete all three live evidence reviews before deciding this authorization packet. Rules-only checks cannot be submitted as an AI worker result.",
+        );
       const assessment = assessProof(current.input, current.analysis.retrieval);
       if (
         assessment.blockers.length ||

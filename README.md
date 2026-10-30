@@ -4,11 +4,17 @@
 
 AgentOps is a portfolio reference implementation of controlled agent workflows. It combines a TypeScript agent engine, source-level evidence, explicit human approval and saved execution records. The Proof Lab connects the original agent graph to an immutable synthetic packet and a verifiable HTTP receipt.
 
-[Live application](https://agentops.digitalprodigy.dev) · [Guided healthcare demo](https://agentops.digitalprodigy.dev/demo/healthcare) · [Technical architecture](docs/architecture.md)
+[Live application](https://agentops.digitalprodigy.dev) · [Authorization worker](https://agentops.digitalprodigy.dev/workers/authorization) · [Guided healthcare demo](https://agentops.digitalprodigy.dev/demo/healthcare) · [Technical architecture](docs/architecture.md)
 
 > **Synthetic portfolio system, not a production healthcare product.** The first-party sandbox does not contact a payer, EHR, bank or vendor. Proof records use browser capability keys; those are not authenticated user accounts. Legacy operational routes lack authentication middleware. Use synthetic data only.
 
-## Start with the guided demo
+## Start with the authorization evidence worker
+
+Open **Authorization Worker** at `/workers/authorization` for a complete, bounded healthcare administrative workflow. Supply the synthetic referral and eligibility response, inspect the blocked result, add the signed supporting note, then run three actual provider-backed specialist reviews. All ten versioned fictional criteria have exact source citations. Human approval remains locked until every review succeeds; approval sends the inspected packet to the first-party HTTP sandbox and verifies its receipt. Rejection sends nothing. Saved runs, linked corrections, exports and expiring proof links preserve the evidence.
+
+This is an implemented **authorization-preparation worker**, not a payer-connected authorization service. It supports three named text documents with explicit fields and duration sentences, not unrestricted clinical-document understanding. The policy and records are fictional. Configured provider credentials and explicit usage acknowledgement are required for the live AI stage; there is no preset-output fallback. See [worker documentation](docs/authorization-worker.md).
+
+## Original guided graph rehearsal
 
 Open **Overview → Start guided demo**, or choose **Guided Demo** in the sidebar. Authorization and revenue-cycle preparation each follow the same working path:
 
@@ -21,12 +27,13 @@ Open **Overview → Start guided demo**, or choose **Guided Demo** in the sideba
 
 The walkthrough includes presenter cues, resumable tab progress and a partnership discussion. It uses **demo graph mode with zero model calls**, even if server credentials are configured. Demo narratives and estimates are preset illustrations; source checks control the packet.
 
-The deployed site may lag the repository branch. See [PR #1](https://github.com/ProdigyProjectStudios/agentops-command-center/pull/1) for changes awaiting merge/deployment.
+The deployed site may lag the repository branch. PR #1 is merged; the authorization-worker upgrade requires deployment of its own reviewed branch.
 
 ## What is implemented
 
 | Capability | Inspectable evidence |
 |---|---|
+| Authorization evidence worker | Ten cited fictional-policy checks, full-document specialist reviews, missing-evidence intervention, linked corrections and mandatory human decision. |
 | Document intake | Synthetic text and text-layer PDF intake, reviewed extraction, exact line/page citations and correction provenance. PDF originals remain on the operator's device. |
 | Policy checks | Deterministic gates and frozen, versioned keyword policy passages with quotes/hashes. Missing required sources block approval. |
 | Original agent execution | Seven pre-approval nodes plus the final decision node; saved outputs, tool records and a graph fingerprint attached to the proof run. |

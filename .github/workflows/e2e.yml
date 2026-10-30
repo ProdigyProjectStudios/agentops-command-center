@@ -114,6 +114,39 @@ jobs:
           E2E_BASE_URL: http://localhost:${{ env.AGENTOPS_PORT }}
         run: pnpm --filter @workspace/agentops run test:e2e
 
+      - name: Start isolated healthcare provider contract fixture
+        env:
+          PORT: ${{ env.API_SERVER_PORT }}
+          AI_INTEGRATIONS_OPENAI_BASE_URL: http://127.0.0.1:8091/v1
+          AI_INTEGRATIONS_OPENAI_API_KEY: ci-fixture-not-a-real-provider-key
+        run: |
+          # Replace only this CI process. No production provider or account is used.
+          fuser -k "${API_SERVER_PORT}/tcp" || true
+          node scripts/healthcare-provider-fixture.mjs > /tmp/healthcare-provider.log 2>&1 &
+          echo $! > /tmp/healthcare-provider.pid
+          node artifacts/api-server/dist/index.mjs > /tmp/api-healthcare.log 2>&1 &
+          echo $! > /tmp/api-server.pid
+          for i in $(seq 1 60); do
+            if curl -sf "http://localhost:${API_SERVER_PORT}/api/healthz" >/dev/null; then exit 0; fi
+            sleep 1
+          done
+          cat /tmp/api-healthcare.log; exit 1
+
+      - name: Verify healthcare worker with a real API and explicit provider fixture
+        env:
+          E2E_BASE_URL: http://localhost:${{ env.AGENTOPS_PORT }}
+          E2E_HEALTHCARE_PROVIDER_FIXTURE: "1"
+        run: pnpm --filter @workspace/agentops run test:e2e authorization-worker.spec.ts
+
+      - name: Save healthcare QA recordings (provider fixture, not live-AI demo footage)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: healthcare-worker-qa
+          path: artifacts/agentops/test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Save demo presentation screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -139,6 +172,8 @@ jobs:
           path: |
             /tmp/api-server.log
             /tmp/agentops.log
+            /tmp/api-healthcare.log
+            /tmp/healthcare-provider.log
           if-no-files-found: ignore
 
       - name: Stop background services
@@ -146,3 +181,4 @@ jobs:
         run: |
           if [ -f /tmp/agentops.pid ]; then kill "$(cat /tmp/agentops.pid)" || true; fi
           if [ -f /tmp/api-server.pid ]; then kill "$(cat /tmp/api-server.pid)" || true; fi
+          if [ -f /tmp/healthcare-provider.pid ]; then kill "$(cat /tmp/healthcare-provider.pid)" || true; fi
