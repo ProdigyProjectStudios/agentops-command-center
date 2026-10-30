@@ -45,7 +45,7 @@ export function validateProofAi(value: unknown, analysis: ProofAnalysis) {
     return overclaim.test(note.explanation)
       ? {
           ...note,
-          explanation: `Supplied synthetic evidence only. ${finding.explanation} This fictional check establishes no real-world approval or verification.`,
+          explanation: `Supplied synthetic evidence only. ${finding.explanation} This evidence check establishes no real-world approval or verification.`,
         }
       : note;
   });

@@ -154,6 +154,10 @@ function Hero() {
         Synthetic data · no model key needed for the guided demo · first-party
         sandbox delivery
       </motion.p>
+      <motion.div variants={FADE_UP} className="mt-6 rounded-xl border border-primary/30 p-4 text-sm">
+        <Link href="/workers/authorization" className="font-semibold text-primary">Open the CMS CPAP coverage worker →</Link>
+        <p className="text-muted-foreground mt-2">Published coverage criteria, synthetic clinical records and three live specialist reviews, followed by a human decision and verified sandbox handoff. Requires a configured model provider.</p>
+      </motion.div>
       {/* Hero pipeline */}
       <motion.div variants={FADE_UP} className="mt-12">
         <PipelineFlow ambient height={130} testId="overview-hero-pipeline" />

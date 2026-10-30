@@ -20,10 +20,16 @@ async function ready(page: Page) {
     page.getByRole("heading", { name: "Evidence needs human intervention" }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Supply the synthetic signed note" })
+    .getByRole("button", { name: "Supply the synthetic sleep study" })
     .click();
   const corrected = await check(page, "Check evidence");
   expect(corrected.status).toBe("awaiting-review");
+  expect(corrected.input.workflow).toBe("revenue-cycle");
+  expect(corrected.analysis.fields["policy-source"]).toContain("cms.gov");
+  expect(corrected.analysis.fields["sleep-study / AHI events per hour"]).toBe(
+    "18",
+  );
+  expect(corrected.input.supersedesRunId).toBe(blocked.id);
   await expect(
     page.getByRole("button", { name: "Approve sandbox submission" }),
   ).toBeDisabled();
@@ -52,7 +58,7 @@ test("authorization worker: exception, live-provider contract, persisted review,
   await page
     .getByLabel("Human review note")
     .fill(
-      "Inspected sources, fictional policy, three reviewer outputs and exact packet. CI fixture evaluation.",
+      "Inspected sources, published CMS policy mapping, three reviewer outputs and exact packet. CI fixture evaluation.",
     );
   const response = page.waitForResponse((r) =>
     r.url().endsWith(`/runs/${draft.id}/review`),
@@ -85,7 +91,7 @@ test("authorization worker: exception, live-provider contract, persisted review,
   ).toBeVisible();
   await page
     .getByRole("heading", {
-      name: "Authorization evidence worker",
+      name: "CPAP coverage evidence worker",
       exact: true,
     })
     .scrollIntoViewIfNeeded();
@@ -123,7 +129,7 @@ test("authorization worker: mobile rejection records the decision without delive
   ).toBe(true);
   await page
     .getByRole("heading", {
-      name: "Authorization evidence worker",
+      name: "CPAP coverage evidence worker",
       exact: true,
     })
     .scrollIntoViewIfNeeded();
@@ -141,9 +147,9 @@ test("authorization worker: provider failure keeps approval locked and preserves
   await page.goto("/workers/authorization");
   await check(page, "Check evidence");
   await page
-    .getByRole("button", { name: "Supply the synthetic signed note" })
+    .getByRole("button", { name: "Supply the synthetic sleep study" })
     .click();
-  const note = page.getByLabel("supporting-note.txt", { exact: true });
+  const note = page.getByLabel("sleep-study.txt", { exact: true });
   await note.fill((await note.inputValue()) + "\nTEST_PROVIDER_FAILURE");
   const rules = await check(page, "Check evidence");
   await page.getByRole("checkbox", { name: /three real model calls/ }).check();

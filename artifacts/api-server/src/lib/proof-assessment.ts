@@ -1,3 +1,4 @@
+import { assessCpap } from "./cpap-assessment";
 import { assessHealthcare } from "./healthcare-assessment";
 import { createHash } from "node:crypto";
 import { pdfLineReference } from "@workspace/api-zod";
@@ -32,6 +33,8 @@ export function assessProof(
   input: ProofInput,
   savedRetrieval?: ProofRetrieval,
 ): ProofAnalysis {
+  if (input.healthcarePolicy === "cms-cpap-initial-v1")
+    return assessCpap(input, savedRetrieval);
   if (input.healthcarePolicy) return assessHealthcare(input, savedRetrieval);
   const citations: ProofCitation[] = [];
   const fields: Record<string, string> = {};

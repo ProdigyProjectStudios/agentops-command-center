@@ -96,8 +96,9 @@ export function ProofEvidence({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium">{f.label}</p>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {f.passed ? "Passed" : "Blocked"} · {f.citationIds.length}{" "}
-                    source line{f.citationIds.length === 1 ? "" : "s"}
+                    {f.status ?? (f.passed ? "Passed" : "Blocked")} ·{" "}
+                    {f.citationIds.length} source line
+                    {f.citationIds.length === 1 ? "" : "s"}
                   </p>
                 </div>
                 <ArrowUpRight size={14} className="text-muted-foreground" />
@@ -158,8 +159,8 @@ export function ProofEvidence({
             </div>
           )}
           <p className="text-xs text-muted-foreground mt-6">
-            Policy: {run.analysis.policyVersion}. These fictional administrative
-            checks do not establish clinical eligibility, coverage or payment
+            Policy: {run.analysis.policyVersion}. These administrative checks do
+            not establish clinical eligibility, coverage or payment
             authorization.
           </p>
         </section>

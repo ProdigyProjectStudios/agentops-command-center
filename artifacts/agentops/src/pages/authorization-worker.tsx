@@ -8,9 +8,9 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import {
-  authorizationPolicy,
-  authorizationSupportingNote,
-  authorizationWorkerInput,
+  cpapPolicy,
+  cpapSleepReport,
+  cpapWorkerInput,
   type ProofInput,
   type ProofRun,
   type ProofReceipt,
@@ -23,7 +23,7 @@ import {
 } from "@/components/proof/ProofEvidence";
 import { ProofPack } from "@/components/proof/ProofPack";
 
-const pointer = "agentops-authorization-worker-v1";
+const pointer = "agentops-cms-cpap-worker-v1";
 const stages = [
   "Source evidence",
   "Policy checks",
@@ -32,9 +32,7 @@ const stages = [
   "Verified outcome",
 ];
 export default function AuthorizationWorkerPage() {
-  const [input, setInput] = useState<ProofInput>(() =>
-    authorizationWorkerInput(),
-  );
+  const [input, setInput] = useState<ProofInput>(() => cpapWorkerInput());
   const [run, setRun] = useState<ProofRun | null>(null);
   const [prior, setPrior] = useState<string | null>(null);
   const [busy, setBusy] = useState("");
@@ -58,7 +56,7 @@ export default function AuthorizationWorkerPage() {
     proofApi<ProofRun>(`/runs/${id}`)
       .then((saved) => {
         if (!active) return;
-        if (!saved.input.healthcarePolicy)
+        if (saved.input.healthcarePolicy !== "cms-cpap-initial-v1")
           throw new Error("Saved run is not an authorization worker case.");
         setRun(saved);
         setInput(saved.input);
@@ -174,11 +172,11 @@ export default function AuthorizationWorkerPage() {
           <span>Synthetic evidence</span>
         </div>
         <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mt-3">
-          Authorization evidence worker
+          CPAP coverage evidence worker
         </h1>
         <p className="mt-3 max-w-3xl text-muted-foreground">
-          Turn a referral, supplied eligibility response and signed supporting
-          note into an inspectable packet. Missing evidence stops the workflow.
+          Turn a referral, benefit record, clinical note and sleep study into an
+          inspectable revenue-cycle packet. Missing evidence stops the workflow.
           A person controls the final handoff.
         </p>
         <div className="flex flex-wrap gap-3 mt-5 text-xs">
@@ -188,7 +186,7 @@ export default function AuthorizationWorkerPage() {
               : "Live AI not yet demonstrated for this case"}
           </span>
           <span className="rounded-full border px-3 py-1.5">
-            Policy {authorizationPolicy.version} · fictional
+            CMS NCD 240.4 · version {cpapPolicy.version}
           </span>
           <span className="rounded-full border px-3 py-1.5">
             First-party sandbox destination
@@ -263,10 +261,10 @@ export default function AuthorizationWorkerPage() {
           </button>
         </div>
         <p className="text-xs text-muted-foreground mt-2">
-          Supported evidence format: the three named text documents below, with
-          their labelled fields and duration sentences. This worker does not
-          claim unrestricted clinical-document extraction. Editing creates a new
-          run; saved records remain unchanged.
+          Supported evidence format: four named clinical text documents with the
+          labelled fields shown below. This worker does not claim unrestricted
+          clinical-document extraction. Editing creates a new run; saved records
+          remain unchanged.
         </p>
         {editOpen && (
           <div className="mt-5 space-y-4">
@@ -290,23 +288,20 @@ export default function AuthorizationWorkerPage() {
             ))}
           </div>
         )}
-        {!input.documents.some((d) => d.name === "supporting-note.txt") && (
+        {!input.documents.some((d) => d.name === "sleep-study.txt") && (
           <div className="mt-4 rounded-lg border border-amber-400/30 bg-amber-400/5 p-4">
             <p className="text-sm">
-              The supporting note is intentionally missing. Check the case first
-              to retain the blocked result.
+              The sleep-study report is intentionally missing. Check the case
+              first to retain the blocked result.
             </p>
             <button
               className={`${button} mt-3`}
               disabled={!!busy || restoring || !run || run.status !== "blocked"}
               onClick={() =>
-                edit([
-                  ...input.documents,
-                  structuredClone(authorizationSupportingNote),
-                ])
+                edit([...input.documents, structuredClone(cpapSleepReport)])
               }
             >
-              Supply the synthetic signed note
+              Supply the synthetic sleep study
             </button>
           </div>
         )}
@@ -325,7 +320,7 @@ export default function AuthorizationWorkerPage() {
               localStorage.removeItem(pointer);
               setRun(null);
               setPrior(null);
-              setInput(authorizationWorkerInput());
+              setInput(cpapWorkerInput());
               setConsent(false);
               setInspected(false);
               setVerified(false);
@@ -349,15 +344,32 @@ export default function AuthorizationWorkerPage() {
       </section>
       <details className={panel}>
         <summary className="cursor-pointer font-semibold">
-          Fictional policy · exact criteria and boundaries
+          Published CMS policy · mapped criteria and boundaries
         </summary>
         <p className="text-sm text-muted-foreground mt-3">
-          {authorizationPolicy.disclaimer}
+          {cpapPolicy.disclaimer}
         </p>
+        <a
+          className="block mt-3 text-sm text-primary underline"
+          href={cpapPolicy.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Read CMS NCD 240.4, version 3
+        </a>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Effective {cpapPolicy.effectiveDate} · mapping reviewed{" "}
+          {cpapPolicy.reviewedDate}. The linked policy is published by CMS; the
+          criteria below are our versioned mapping.
+        </p>
+        <p className="mt-3 text-sm text-muted-foreground">{cpapPolicy.scope}</p>
         <ol className="space-y-3 mt-4">
-          {authorizationPolicy.criteria.map(([id, title, text]) => (
+          {cpapPolicy.criteria.map(([id, title, text, reference]) => (
             <li key={id} className="text-sm">
               <strong>{title}:</strong> {text}
+              <span className="block text-xs text-muted-foreground mt-1">
+                {reference}
+              </span>
             </li>
           ))}
         </ol>
@@ -386,7 +398,7 @@ export default function AuthorizationWorkerPage() {
           {!run.analysis.blockers.length && !live && (
             <section className={`${panel} space-y-4`}>
               <h2 className="font-semibold text-lg">
-                2. Run the live authorization worker
+                2. Run the live coverage worker
               </h2>
               <p className="text-sm text-muted-foreground">
                 Intake consistency → policy-to-evidence review → packet
@@ -417,7 +429,7 @@ export default function AuthorizationWorkerPage() {
           <ProofEvidence
             key={run.id}
             run={run}
-            initialFindingId={run.status === "blocked" ? "symptoms" : "therapy"}
+            initialFindingId={run.status === "blocked" ? "test-type" : "ahi"}
             showExecution={false}
           />
           <section className={panel}>
@@ -425,21 +437,37 @@ export default function AuthorizationWorkerPage() {
               3. Review the exact submission packet
             </h2>
             <p className="text-sm text-muted-foreground mt-2">
-              Source-derived fields are authoritative. Model interpretations
-              remain advisory. This packet represents administrative
-              preparation, not a payer decision.
+              Extracted fields reflect supplied records and require human
+              verification. Model interpretations remain advisory. This packet
+              represents administrative preparation, not a payer decision.
             </p>
-            <dl className="mt-4 grid sm:grid-cols-2 gap-3">
-              {Object.entries(run.analysis.fields).map(([key, value]) => (
-                <div
-                  key={key}
-                  className="rounded-lg bg-secondary/30 p-3 min-w-0"
-                >
-                  <dt className="text-xs text-muted-foreground">{key}</dt>
-                  <dd className="mt-1 text-sm break-words">{value}</dd>
-                </div>
-              ))}
-            </dl>
+            <div className="mt-4 rounded-lg border border-amber-400/30 p-4">
+              <h3 className="font-semibold text-sm">
+                Human checks before handoff
+              </h3>
+              <ul className="list-disc pl-5 mt-2 space-y-2 text-sm text-muted-foreground">
+                {cpapPolicy.humanChecklist.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            </div>
+            <details className="mt-4" open={false}>
+              <summary className="cursor-pointer font-medium text-sm">
+                Inspect every extracted packet field, source hash and policy
+                reference
+              </summary>
+              <dl className="mt-4 grid sm:grid-cols-2 gap-3">
+                {Object.entries(run.analysis.fields).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="rounded-lg bg-secondary/30 p-3 min-w-0"
+                  >
+                    <dt className="text-xs text-muted-foreground">{key}</dt>
+                    <dd className="mt-1 text-sm break-words">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
             {run.status === "awaiting-review" && (
               <div className="mt-5 space-y-3 border-t pt-4">
                 <label className="flex gap-3 text-sm">
@@ -450,7 +478,7 @@ export default function AuthorizationWorkerPage() {
                     onChange={(e) => setInspected(e.target.checked)}
                   />
                   I inspected the source evidence, specialist notes and exact
-                  packet.
+                  packet and the remaining human checks.
                 </label>
                 <label className="block text-sm">
                   Human review note
@@ -575,7 +603,7 @@ export default function AuthorizationWorkerPage() {
               <button
                 className={button}
                 onClick={() =>
-                  downloadProof(run, `authorization-${run.id}.json`)
+                  downloadProof(run, `cpap-coverage-${run.id}.json`)
                 }
               >
                 Export evidence JSON
@@ -663,8 +691,9 @@ export default function AuthorizationWorkerPage() {
           <div>
             <h3 className="font-medium">Partner inputs required</h3>
             <p className="text-muted-foreground mt-2">
-              Validated payer policies, supported source formats, EHR and payer
-              access, clinician oversight, privacy and deployment requirements.
+              Policy applicability and local-rule validation, supported source
+              formats, EHR and payer access, clinician oversight, privacy and
+              deployment requirements.
             </p>
           </div>
           <div>

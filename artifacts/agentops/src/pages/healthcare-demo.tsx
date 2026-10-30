@@ -255,7 +255,7 @@ export default function HealthcareDemoPage() {
           href="/workers/authorization"
           className="text-primary font-medium"
         >
-          Open the live authorization evidence worker →
+          Open the live CMS CPAP coverage worker →
         </Link>
         <p className="mt-1 text-muted-foreground">
           Use the worker for substantive source evidence and real specialist
