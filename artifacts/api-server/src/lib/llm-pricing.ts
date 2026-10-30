@@ -1,7 +1,7 @@
 /**
  * Centralized LLM pricing configuration.
  *
- * Prices are USD per 1,000,000 tokens as published by OpenAI (2026-08).
+ * Prices are USD per 1,000,000 tokens as published by OpenAI (Luna verified 2026-10-30).
  * Update this file — and nowhere else — when pricing changes.
  *
  * Unknown/unconfigured models return `pricingAvailable: false` so callers
@@ -18,11 +18,12 @@ export interface ModelPricing {
 /**
  * Priced model catalog.  Keys are the model IDs accepted by the OpenAI API.
  *
- * All four models that appear in AVAILABLE_MODELS (llm-models.ts) must have
+ * All models that appear in AVAILABLE_MODELS (llm-models.ts) must have
  * an entry here so operators always see a cost estimate.  Add new models as
  * they are added to AVAILABLE_MODELS.
  */
 export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
+  "gpt-6-luna": { inputPricePer1M: 0.10, outputPricePer1M: 0.50 },
   // ── Frontier ────────────────────────────────────────────────────────────
   "gpt-4.1":    { inputPricePer1M: 2.00, outputPricePer1M: 8.00 },
   "o4-mini":    { inputPricePer1M: 1.10, outputPricePer1M: 4.40 },

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { proofTemplates, type ProofAnalysis } from "@workspace/api-zod";
+import { cpapWorkerInput, proofTemplates, type ProofAnalysis } from "@workspace/api-zod";
 import { assessProof } from "../lib/proof-assessment";
 import { analyzeProof } from "../lib/proof-connected";
 import { retrieveProofPolicy } from "../lib/proof-policy";
@@ -139,4 +139,47 @@ test("legacy graph distinguishes real database search from simulated tool record
   });
   assert.equal(search.output.executionKind, "database-search");
   assert.deepEqual(search.output.hits, []);
+});
+
+
+test("CMS reviews overlap, and packet review waits for both validated results", { timeout: 2000 }, async () => {
+  const calls: string[] = [];
+  let release!: () => void;
+  const bothStarted = new Promise<void>((resolve) => { release = resolve; });
+  const result = await analyzeProof(
+    { ...cpapWorkerInput(true), analysisMode: "live-ai" },
+    async (_input, analysis, role) => {
+      calls.push(role!);
+      if (role !== "finance-analyst") {
+        assert.deepEqual(analysis.specialists, []);
+        if (calls.length === 2) release();
+        await bothStarted;
+      } else {
+        assert.deepEqual(analysis.specialists?.map((s) => s.role), ["ops-conductor", "legal-counsel"]);
+        assert.ok(analysis.specialists?.every((s) => s.review.notes.length === analysis.findings.length));
+      }
+      return review(analysis);
+    },
+  );
+  assert.deepEqual(calls, ["ops-conductor", "legal-counsel", "finance-analyst"]);
+  assert.equal(result.aiReview?.inputTokens, 300);
+  assert.equal(result.aiReview?.estimatedCostMicros, 150);
+});
+
+test("CMS specialist failure or omitted findings prevents packet review", async () => {
+  for (const failure of ["provider", "incomplete"]) {
+    const calls: string[] = [];
+    await assert.rejects(() => analyzeProof(
+      { ...cpapWorkerInput(true), analysisMode: "live-ai" },
+      async (_input, analysis, role) => {
+        calls.push(role!);
+        if (role === "legal-counsel") {
+          if (failure === "provider") throw new Error("provider unavailable");
+          return { ...review(analysis), notes: review(analysis).notes.slice(0, 1) };
+        }
+        return review(analysis);
+      },
+    ), /provider unavailable|omitted/);
+    assert.ok(!calls.includes("finance-analyst"));
+  }
 });

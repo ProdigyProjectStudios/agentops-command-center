@@ -12,17 +12,23 @@ export interface AvailableModel {
 
 export const AVAILABLE_MODELS: readonly AvailableModel[] = [
   {
+    id: "gpt-6-luna",
+    label: "GPT-6 Luna",
+    description: "Fast focused review. Default for the CMS coverage worker.",
+    tier: "fast",
+  },
+  {
     id: "gpt-4.1",
     label: "GPT-4.1",
     description:
-      "Strongest general-purpose reasoning. Best for triage and synthesis.",
+      "Legacy general-purpose model.",
     tier: "frontier",
   },
   {
     id: "gpt-4.1-mini",
     label: "GPT-4.1 mini",
     description:
-      "Balanced cost and quality. Recommended default for every agent.",
+      "Legacy balanced model; retained for existing configurations.",
     tier: "balanced",
   },
   {
