@@ -7,6 +7,7 @@ import path from "node:path";
 import express from "express";
 import {
   authorizationWorkerInput,
+  cpapWorkerInput,
   proofInputSchema,
   type ProofAnalysis,
   type ProofRun,
@@ -190,165 +191,180 @@ test("provider failure, omitted findings and invented citations never produce co
   );
 });
 
-test("real HTTP authorization flow: consent, blocked case, correction, live reviews, bound approval, receipt, share, export and DB reopen", async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), "authorization-worker-"));
-  let database = await proofTestDatabase(dir);
-  const owner = randomBytes(32).toString("hex"),
-    outsider = randomBytes(32).toString("hex");
-  const secret = randomBytes(32).toString("hex");
-  let base = "",
-    calls = 0;
-  await migrateProof(database.pool);
-  const store = new ProofStore(database.pool);
-  const service = new ProofService(
-    store,
-    httpProofDelivery(() => base + "/api/proof/sandbox", secret),
-    async (_i, a) => {
-      calls++;
-      return reviewed(a);
-    },
-  );
-  const app = express();
-  app.use(express.json());
-  app.use("/api", proofRunsRouter(service, secret));
-  const server = app.listen(0, "127.0.0.1");
-  await new Promise<void>((resolve) => server.once("listening", resolve));
-  base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
-  async function api(
-    route: string,
-    method = "GET",
-    data?: unknown,
-    key = owner,
-  ) {
-    return fetch(base + "/api/proof" + route, {
-      method,
-      headers: { "content-type": "application/json", "x-proof-owner": key },
-      ...(data ? { body: JSON.stringify(data) } : {}),
-    });
-  }
-  try {
-    const blocked: ProofRun = (await (
-      await api("/runs", "POST", authorizationWorkerInput())
-    ).json()) as any;
-    assert.equal(blocked.status, "blocked");
-    assert.equal(calls, 0);
-    assert.equal(
-      (
-        await api(`/runs/${blocked.id}/review`, "POST", {
-          fingerprint: blocked.analysis.fingerprint,
-          decision: "approve",
-          note: "No shortcut",
+for (const [label, workerInput, packetKey, packetValue] of [
+  [
+    "legacy fictional worker",
+    authorizationWorkerInput,
+    "completed-care-weeks",
+    "8",
+  ],
+  [
+    "published CMS CPAP worker",
+    cpapWorkerInput,
+    "sleep-study / AHI events per hour",
+    "18",
+  ],
+] as const)
+  test(`real HTTP ${label}: consent, correction, live reviews, approval, receipt, share, export and DB reopen`, async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "authorization-worker-"));
+    let database = await proofTestDatabase(dir);
+    const owner = randomBytes(32).toString("hex"),
+      outsider = randomBytes(32).toString("hex");
+    const secret = randomBytes(32).toString("hex");
+    let base = "",
+      calls = 0;
+    await migrateProof(database.pool);
+    const store = new ProofStore(database.pool);
+    const service = new ProofService(
+      store,
+      httpProofDelivery(() => base + "/api/proof/sandbox", secret),
+      async (_i, a) => {
+        calls++;
+        return reviewed(a);
+      },
+    );
+    const app = express();
+    app.use(express.json());
+    app.use("/api", proofRunsRouter(service, secret));
+    const server = app.listen(0, "127.0.0.1");
+    await new Promise<void>((resolve) => server.once("listening", resolve));
+    base = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
+    async function api(
+      route: string,
+      method = "GET",
+      data?: unknown,
+      key = owner,
+    ) {
+      return fetch(base + "/api/proof" + route, {
+        method,
+        headers: { "content-type": "application/json", "x-proof-owner": key },
+        ...(data ? { body: JSON.stringify(data) } : {}),
+      });
+    }
+    try {
+      const blocked: ProofRun = (await (
+        await api("/runs", "POST", workerInput())
+      ).json()) as any;
+      assert.equal(blocked.status, "blocked");
+      assert.equal(calls, 0);
+      assert.equal(
+        (
+          await api(`/runs/${blocked.id}/review`, "POST", {
+            fingerprint: blocked.analysis.fingerprint,
+            decision: "approve",
+            note: "No shortcut",
+          })
+        ).status,
+        409,
+      );
+      const rules: ProofRun = (await (
+        await api("/runs", "POST", {
+          ...workerInput(true),
+          supersedesRunId: blocked.id,
         })
-      ).status,
-      409,
-    );
-    const rules: ProofRun = (await (
-      await api("/runs", "POST", {
-        ...authorizationWorkerInput(true),
-        supersedesRunId: blocked.id,
-      })
-    ).json()) as any;
-    assert.equal(
-      (
-        await api(`/runs/${rules.id}/review`, "POST", {
-          fingerprint: rules.analysis.fingerprint,
-          decision: "approve",
-          note: "No model shortcut",
-        })
-      ).status,
-      409,
-    );
-    assert.equal(
-      (await api("/runs", "POST", authorizationWorkerInput(true, "live-ai")))
-        .status,
-      400,
-    );
-    const input = {
-      ...authorizationWorkerInput(true, "live-ai"),
-      liveCostAcknowledged: true,
-      supersedesRunId: rules.id,
-    };
-    assert.equal((await api("/runs", "POST", input, outsider)).status, 404);
-    const draft: ProofRun = (await (
-      await api("/runs", "POST", input)
-    ).json()) as any;
-    assert.equal(draft.status, "awaiting-review");
-    assert.equal(calls, 3);
-    assert.equal(
-      (
+      ).json()) as any;
+      assert.equal(
+        (
+          await api(`/runs/${rules.id}/review`, "POST", {
+            fingerprint: rules.analysis.fingerprint,
+            decision: "approve",
+            note: "No model shortcut",
+          })
+        ).status,
+        409,
+      );
+      assert.equal(
+        (await api("/runs", "POST", workerInput(true, "live-ai"))).status,
+        400,
+      );
+      const input = {
+        ...workerInput(true, "live-ai"),
+        liveCostAcknowledged: true,
+        supersedesRunId: rules.id,
+      };
+      assert.equal((await api("/runs", "POST", input, outsider)).status, 404);
+      const draft: ProofRun = (await (
+        await api("/runs", "POST", input)
+      ).json()) as any;
+      assert.equal(draft.status, "awaiting-review");
+      assert.equal(calls, 3);
+      assert.equal(
+        (
+          await api(`/runs/${draft.id}/review`, "POST", {
+            fingerprint: "0".repeat(64),
+            decision: "approve",
+            note: "Stale review",
+          })
+        ).status,
+        409,
+      );
+      const approved: ProofRun = (await (
         await api(`/runs/${draft.id}/review`, "POST", {
-          fingerprint: "0".repeat(64),
+          fingerprint: draft.analysis.fingerprint,
           decision: "approve",
-          note: "Stale review",
+          note: "Inspected each source, all three reviews and the exact synthetic packet.",
         })
-      ).status,
-      409,
-    );
-    const approved: ProofRun = (await (
-      await api(`/runs/${draft.id}/review`, "POST", {
-        fingerprint: draft.analysis.fingerprint,
-        decision: "approve",
-        note: "Inspected each source, all three reviews and the exact synthetic packet.",
-      })
-    ).json()) as any;
-    assert.equal(approved.status, "completed");
-    assert.equal(approved.receipt?.packet["completed-care-weeks"], "8");
-    const receipt = (await (
-      await api(`/runs/${draft.id}/receipt`)
-    ).json()) as any;
-    assert.equal(receipt.id, approved.receipt?.id);
-    assert.equal(receipt.externalDelivery, false);
-    assert.equal(
-      (await api(`/runs/${draft.id}/receipt`, "GET", undefined, outsider))
-        .status,
-      404,
-    );
-    const exported = (await (
-      await api(`/runs/${draft.id}/export`)
-    ).json()) as any;
-    assert.equal(exported.analysis.specialists.length, 3);
-    const shared = (await (
-      await api(`/runs/${draft.id}/shares`, "POST", { confirmDisclosure: true })
-    ).json()) as any;
-    const view = (await (
-      await fetch(base + "/api/proof/shared", {
-        headers: { "x-proof-share": shared.token },
-      })
-    ).json()) as any;
-    assert.equal(view.receipt.id, receipt.id);
-    assert.ok(view.input.documents.every((d: any) => !d.text));
-    await api(`/runs/${draft.id}/shares/${shared.id}`, "DELETE");
-    assert.equal(
-      (
+      ).json()) as any;
+      assert.equal(approved.status, "completed");
+      assert.equal(approved.receipt?.packet[packetKey], packetValue);
+      const receipt = (await (
+        await api(`/runs/${draft.id}/receipt`)
+      ).json()) as any;
+      assert.equal(receipt.id, approved.receipt?.id);
+      assert.equal(receipt.externalDelivery, false);
+      assert.equal(
+        (await api(`/runs/${draft.id}/receipt`, "GET", undefined, outsider))
+          .status,
+        404,
+      );
+      const exported = (await (
+        await api(`/runs/${draft.id}/export`)
+      ).json()) as any;
+      assert.equal(exported.analysis.specialists.length, 3);
+      const shared = (await (
+        await api(`/runs/${draft.id}/shares`, "POST", {
+          confirmDisclosure: true,
+        })
+      ).json()) as any;
+      const view = (await (
         await fetch(base + "/api/proof/shared", {
           headers: { "x-proof-share": shared.token },
         })
-      ).status,
-      404,
-    );
-    const rejected = await service.create(owner, {
-      ...input,
-      supersedesRunId: undefined,
-    });
-    await service.review(owner, rejected.id, {
-      fingerprint: rejected.analysis.fingerprint,
-      decision: "reject",
-      note: "Operator declines synthetic packet.",
-    });
-    await assert.rejects(() => store.receipt(rejected.id));
-    const id = draft.id;
-    await database.close();
-    database = await proofTestDatabase(dir);
-    const reopened = await new ProofStore(database.pool).get(owner, id);
-    assert.equal(reopened.receipt?.id, receipt.id);
-    assert.equal(reopened.analysis.specialists?.length, 3);
-    assert.equal(
-      assessProof(reopened.input, reopened.analysis.retrieval).fingerprint,
-      reopened.analysis.fingerprint,
-    );
-  } finally {
-    await new Promise<void>((resolve) => server.close(() => resolve()));
-    await database.close();
-    await rm(dir, { recursive: true, force: true });
-  }
-});
+      ).json()) as any;
+      assert.equal(view.receipt.id, receipt.id);
+      assert.ok(view.input.documents.every((d: any) => !d.text));
+      await api(`/runs/${draft.id}/shares/${shared.id}`, "DELETE");
+      assert.equal(
+        (
+          await fetch(base + "/api/proof/shared", {
+            headers: { "x-proof-share": shared.token },
+          })
+        ).status,
+        404,
+      );
+      const rejected = await service.create(owner, {
+        ...input,
+        supersedesRunId: undefined,
+      });
+      await service.review(owner, rejected.id, {
+        fingerprint: rejected.analysis.fingerprint,
+        decision: "reject",
+        note: "Operator declines synthetic packet.",
+      });
+      await assert.rejects(() => store.receipt(rejected.id));
+      const id = draft.id;
+      await database.close();
+      database = await proofTestDatabase(dir);
+      const reopened = await new ProofStore(database.pool).get(owner, id);
+      assert.equal(reopened.receipt?.id, receipt.id);
+      assert.equal(reopened.analysis.specialists?.length, 3);
+      assert.equal(
+        assessProof(reopened.input, reopened.analysis.retrieval).fingerprint,
+        reopened.analysis.fingerprint,
+      );
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+      await database.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });

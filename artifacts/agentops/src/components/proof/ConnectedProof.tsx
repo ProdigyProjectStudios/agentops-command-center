@@ -21,7 +21,7 @@ export function ConnectedProof({ analysis }: { analysis: ProofAnalysis }) {
           <p className="text-muted-foreground">Retrieval method</p>
           <p>
             {retrieval.method === "exact-policy-id"
-              ? "Exact policy ID · versioned fictional criteria"
+              ? "Exact policy ID · saved versioned mapping"
               : "Keyword search · fictional policy catalog"}
           </p>
         </div>
@@ -70,7 +70,7 @@ export function ConnectedProof({ analysis }: { analysis: ProofAnalysis }) {
                 : `Matched: ${p.matchedTerms.join(", ")} · ${p.score} distinct query terms`}
             </p>
             <p className="font-mono break-all text-xs text-muted-foreground mt-2">
-              Document SHA-256: {p.documentHash}
+              Saved mapping SHA-256: {p.documentHash}
             </p>
           </details>
         ))}

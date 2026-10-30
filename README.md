@@ -4,15 +4,17 @@
 
 AgentOps is a portfolio reference implementation of controlled agent workflows. It combines a TypeScript agent engine, source-level evidence, explicit human approval and saved execution records. The Proof Lab connects the original agent graph to an immutable synthetic packet and a verifiable HTTP receipt.
 
-[Live application](https://agentops.digitalprodigy.dev) · [Authorization worker](https://agentops.digitalprodigy.dev/workers/authorization) · [Guided healthcare demo](https://agentops.digitalprodigy.dev/demo/healthcare) · [Technical architecture](docs/architecture.md)
+[Live application](https://agentops.digitalprodigy.dev) · [CPAP coverage worker](https://agentops.digitalprodigy.dev/workers/authorization) · [Guided healthcare demo](https://agentops.digitalprodigy.dev/demo/healthcare) · [Technical architecture](docs/architecture.md)
 
 > **Synthetic portfolio system, not a production healthcare product.** The first-party sandbox does not contact a payer, EHR, bank or vendor. Proof records use browser capability keys; those are not authenticated user accounts. Legacy operational routes lack authentication middleware. Use synthetic data only.
 
-## Start with the authorization evidence worker
+## Start with the CMS CPAP coverage worker
 
-Open **Authorization Worker** at `/workers/authorization` for a complete, bounded healthcare administrative workflow. Supply the synthetic referral and eligibility response, inspect the blocked result, add the signed supporting note, then run three actual provider-backed specialist reviews. All ten versioned fictional criteria have exact source citations. Human approval remains locked until every review succeeds; approval sends the inspected packet to the first-party HTTP sandbox and verifies its receipt. Rejection sends nothing. Saved runs, linked corrections, exports and expiring proof links preserve the evidence.
+Open **Coverage Worker** at `/workers/authorization` (the existing route is retained). This revenue-cycle workflow prepares evidence for an initial CPAP course using **published CMS NCD 240.4, version 3**, with synthetic patient records. It is not a prior-authorization mandate or a coverage determination.
 
-This is an implemented **authorization-preparation worker**, not a payer-connected authorization service. It supports three named text documents with explicit fields and duration sentences, not unrestricted clinical-document understanding. The policy and records are fictional. Configured provider credentials and explicit usage acknowledgement are required for the live AI stage; there is no preset-output fallback. See [worker documentation](docs/authorization-worker.md).
+Inspect the referral, supplied benefit record and clinical note; the missing sleep-study report blocks the case. Supply the report and inspect the AHI calculation, threshold branch, scoring definition, physician order, education and document-integrity checks. Each finding cites exact source lines and identifies its CMS section or local administrative provenance. Three actual provider-backed reviews must succeed before a human can approve the exact packet for a first-party HTTP sandbox handoff and independently verified receipt. Rejection sends nothing; linked corrections preserve the earlier blocked case.
+
+The implemented scope is adult OSA, initial 12-week CPAP, attended laboratory PSG and AHI. The four text documents use explicit labelled fields; arbitrary medical-note/PDF understanding is not claimed. Other CMS-accepted routes are identified for manual review, not declared non-covered. The packet includes policy provenance, source hashes, human follow-up requirements, recorded model reviews and the decision/receipt. JSON includes the supplied documents; the printable pack includes the extracted packet and cited evidence. Provider credentials and usage acknowledgement are required for actual model execution. See [worker and deployment guide](docs/authorization-worker.md) and [policy mapping](docs/cms-cpap-policy-mapping.md).
 
 ## Original guided graph rehearsal
 
@@ -27,13 +29,13 @@ Open **Overview → Start guided demo**, or choose **Guided Demo** in the sideba
 
 The walkthrough includes presenter cues, resumable tab progress and a partnership discussion. It uses **demo graph mode with zero model calls**, even if server credentials are configured. Demo narratives and estimates are preset illustrations; source checks control the packet.
 
-The deployed site may lag the repository branch. PR #1 is merged; the authorization-worker upgrade requires deployment of its own reviewed branch.
+The deployed site may lag the repository branch. The original healthcare worker is merged; the CMS policy mapping requires deployment of its reviewed change.
 
 ## What is implemented
 
 | Capability | Inspectable evidence |
 |---|---|
-| Authorization evidence worker | Ten cited fictional-policy checks, full-document specialist reviews, missing-evidence intervention, linked corrections and mandatory human decision. |
+| CMS CPAP coverage worker | Published-policy mapping, source-derived AHI and threshold checks, complete evidence packet, three specialist reviews, missing-evidence intervention and mandatory human decision. |
 | Document intake | Synthetic text and text-layer PDF intake, reviewed extraction, exact line/page citations and correction provenance. PDF originals remain on the operator's device. |
 | Policy checks | Deterministic gates and frozen, versioned keyword policy passages with quotes/hashes. Missing required sources block approval. |
 | Original agent execution | Seven pre-approval nodes plus the final decision node; saved outputs, tool records and a graph fingerprint attached to the proof run. |
@@ -138,14 +140,14 @@ E2E_BASE_URL=http://localhost:20962 pnpm --filter @workspace/agentops run test:e
 
 Database-dependent and browser suites require an isolated, seeded PostgreSQL database. Browser setup writes fixtures; do not target production. GitHub Actions provisions PostgreSQL 16/pgvector for these checks.
 
-- Authorization-worker revision `3ca26dd` passed **166 API tests** and **19 browser tests** (16 existing + 3 new worker scenarios), with no failed or skipped tests. Type checks, production builds and Python checks also passed. See [CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898082) and [browser checks](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898193). Worker browser tests use a labelled HTTP provider fixture; a real deployed-provider run remains a separate release check.
+- Prior worker revision `3ca26dd` passed **166 API tests** and **19 browser tests** (16 existing + 3 new worker scenarios), with no failed or skipped tests. Type checks, production builds and Python checks also passed. See [CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898082) and [browser checks](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898193). Worker browser tests use a labelled HTTP provider fixture; a real deployed-provider run remains a separate release check.
 - The deterministic evaluation harness has four golden scenarios and **152 behavioral assertions**; those are assertions within the test suite, not 152 additional API tests.
 - Provider transports are mocked in live-graph integration tests. These tests do not establish live model quality, production restart recovery or payer/EHR delivery.
 - The presentation pass adds browser coverage for the guided graph/approval/receipt path, rejection, restored progress and mobile navigation. Current results are recorded in the PR checks and [walkthrough guide](docs/healthcare-guided-demo.md).
 
 ## Implementation guides
 
-- [Authorization evidence worker and deployment](docs/authorization-worker.md)
+- [CMS CPAP coverage worker and deployment](docs/authorization-worker.md)
 
 - [Original graph, human approval and receipt](docs/original-graph-proof.md)
 - [Healthcare walkthrough and presentation notes](docs/healthcare-guided-demo.md)

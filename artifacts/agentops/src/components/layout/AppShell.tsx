@@ -47,7 +47,7 @@ const NAV: NavItem[] = [
   },
   {
     href: "/workers/authorization",
-    label: "Authorization Worker",
+    label: "Coverage Worker",
     icon: FileCheck2,
     testId: "nav-authorization-worker",
   },

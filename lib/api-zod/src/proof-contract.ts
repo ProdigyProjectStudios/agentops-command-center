@@ -54,7 +54,9 @@ export const proofInputSchema = z
     recoveryDemo: z.boolean().optional(),
     analysisMode: z.enum(["rules", "live-ai"]).optional(),
     connectedReview: z.boolean().optional(),
-    healthcarePolicy: z.literal("authorization-evidence-v1").optional(),
+    healthcarePolicy: z
+      .enum(["authorization-evidence-v1", "cms-cpap-initial-v1"])
+      .optional(),
     liveCostAcknowledged: z.boolean().optional(),
     supersedesRunId: z.string().uuid().optional(),
     policyQuery: z.string().trim().min(1).max(240).optional(),
@@ -87,6 +89,7 @@ export type ProofCitation = {
   value: string;
 };
 export type ProofFinding = {
+  status?: "met" | "missing" | "not-met" | "manual-review";
   id: string;
   label: string;
   passed: boolean;

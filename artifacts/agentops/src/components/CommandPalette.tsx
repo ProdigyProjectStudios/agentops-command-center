@@ -30,7 +30,7 @@ type NavTarget = {
 const PAGES: NavTarget[] = [
   {
     href: "/workers/authorization",
-    label: "Authorization Worker",
+    label: "Coverage Worker",
     hint: "Live evidence reviews · human approval",
     icon: ShieldCheck,
   },

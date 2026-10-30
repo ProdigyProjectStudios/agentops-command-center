@@ -58,7 +58,7 @@ jobs:
       - name: Seed reference data
         run: pnpm --filter @workspace/api-server run seed
 
-      - name: API server — unit tests (94 tests)
+      - name: API server — unit and database tests
         run: pnpm --filter @workspace/api-server test
 
       - name: Frontend — production build
