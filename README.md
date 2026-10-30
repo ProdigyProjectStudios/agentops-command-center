@@ -52,8 +52,8 @@ Confidence values are uncalibrated. A valid output schema does not prove factual
 
 ## Screenshots
 
-![Guided healthcare walkthrough](docs/screenshots/healthcare-guided-demo.jpg)
-*Healthcare walkthrough. Earlier capture; current code adds a dedicated original-agent execution stage before review.*
+![Guided original-agent execution](docs/screenshots/guided-agent-execution.jpg)
+*Current walkthrough in browser CI: all seven original nodes are saved before human review. Preset outputs and simulated tools are labelled.*
 
 ![Saved evidence in Proof Lab](docs/screenshots/proof-lab-v2.jpg)
 *Document evidence and saved proof records.*
@@ -131,7 +131,7 @@ E2E_BASE_URL=http://localhost:20962 pnpm --filter @workspace/agentops run test:e
 
 Database-dependent and browser suites require an isolated, seeded PostgreSQL database. Browser setup writes fixtures; do not target production. GitHub Actions provisions PostgreSQL 16/pgvector for these checks.
 
-- The original-graph implementation passed **150 API tests** and **13 existing browser tests** in native CI before this presentation pass. See [CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40981462625) and [browser checks](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40981462612).
+- The presentation pass passed **150 API tests** and **16 browser tests** in native CI, including both guided healthcare outcomes and mobile/navigation coverage. See [CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40985029529) and [browser checks](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40985029535).
 - The deterministic evaluation harness has four golden scenarios and **152 behavioral assertions**; those are assertions within the test suite, not 152 additional API tests.
 - Provider transports are mocked in live-graph integration tests. These tests do not establish live model quality, production restart recovery or payer/EHR delivery.
 - The presentation pass adds browser coverage for the guided graph/approval/receipt path, rejection, restored progress and mobile navigation. Current results are recorded in the PR checks and [walkthrough guide](docs/healthcare-guided-demo.md).

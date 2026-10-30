@@ -2,7 +2,7 @@
 
 Route: `/demo/healthcare`, available from **Guided Demo** in the sidebar from Overview, command search and the Proof Lab. This is a guided presentation of existing saved proof workflows, not a separate simulated backend. The page is lazy-loaded to keep its presentation code out of the initial app bundle.
 
-![Healthcare guided demo overview](screenshots/healthcare-guided-demo.jpg)
+![Guided original-agent execution](screenshots/guided-agent-execution.jpg)
 
 ## Meeting flow
 
@@ -40,4 +40,6 @@ No prospect names, private correspondence, meeting details or personal data are 
 
 The presentation pass adds `healthcare-demo.spec.ts`: real backend browser scenarios for authorization approval with seven graph nodes and receipt verification, revenue-cycle rejection without delivery, reload restoration, mobile navigation and overview/command-search entry points. These tests use synthetic data and require the seeded test database. Results are tracked in PR checks.
 
-Previous original-graph CI passed 150 API tests and all 13 existing browser tests on PostgreSQL 16/pgvector. See `original-graph-proof.md` for integration coverage and its limits. The guided demo does not establish live model quality, production restart durability, external healthcare integration or voice behavior.
+Presentation commit `b5f9ae6` passed all 150 API tests and all 16 browser tests on PostgreSQL 16/pgvector, including the three new guided-demo scenarios. [API CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40985029529) · [Browser CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40985029535). See `original-graph-proof.md` for integration coverage and its limits. The guided demo does not establish live model quality, production restart durability, external healthcare integration or voice behavior.
+
+Desktop execution and mobile stage-layout screenshots were captured by browser CI on commit `444f457` and visually reviewed. Both CI checks passed again on that commit. Manual cloud-preview navigation was blocked by access policy; these are isolated CI screenshots, not production captures.
