@@ -51,6 +51,7 @@ import { FINALIZE_NODE, PIPELINE } from "./edges";
 import { synthesisNode } from "./nodes/synthesis-node";
 import { fingerprintRequest, synthesisDemo } from "./demo-outputs";
 import type { NodeContext, NodeDefinition, NodeResult } from "./types";
+import { labelGraphToolEvidence } from "./execution-evidence";
 
 const LIVE_INTER_STEP_DELAY_MS = Number(
   process.env["LIVE_INTER_STEP_DELAY_MS"] ?? "500",
@@ -245,6 +246,7 @@ async function executeNode(
   let result: NodeResult;
   try {
     result = await node.run(ctx);
+    result.toolCalls = result.toolCalls?.map(labelGraphToolEvidence);
   } catch (err) {
     logger.error({ err, stepIndex, agentSlug: node.agentSlug }, "Node failed");
     await db
@@ -301,7 +303,10 @@ async function executeNode(
 }
 
 export class WorkflowEngine {
-  async run(workflowRunId: number): Promise<void> {
+  async run(
+    workflowRunId: number,
+    proofMode?: "demo" | "live-ai",
+  ): Promise<void> {
     const loaded = await loadContext(workflowRunId);
     if (!loaded) throw new Error(`Workflow run ${workflowRunId} not found`);
     let { workflowRun, request, portfolioCompany } = loaded;
@@ -346,9 +351,7 @@ export class WorkflowEngine {
         await db
           .delete(toolCallsTable)
           .where(eq(toolCallsTable.agentStepId, s.id));
-        await db
-          .delete(agentStepsTable)
-          .where(eq(agentStepsTable.id, s.id));
+        await db.delete(agentStepsTable).where(eq(agentStepsTable.id, s.id));
       }
     }
     // Approval requests are reset on re-run — they get re-created at the
@@ -373,9 +376,9 @@ export class WorkflowEngine {
       "approval_pending",
     ];
     const resumeStage = isResume
-      ? (STAGE_ORDER.indexOf(priorStage) >= STAGE_ORDER.indexOf("triaged")
-          ? priorStage
-          : "triaged")
+      ? STAGE_ORDER.indexOf(priorStage) >= STAGE_ORDER.indexOf("triaged")
+        ? priorStage
+        : "triaged"
       : "triaged";
     [workflowRun] = await db
       .update(workflowRunsTable)
@@ -426,7 +429,7 @@ export class WorkflowEngine {
       toolCallResults: [...hydratedToolCalls],
       riskFlags: [],
       finalNextActions: [],
-      metadata: { startedAt },
+      metadata: { startedAt, proofMode },
     };
     // Replay risks / tool-call summaries from any hydrated outputs so the
     // synthesis node sees a consistent picture even on a fresh resume.
@@ -435,7 +438,9 @@ export class WorkflowEngine {
     }
 
     let synthesisResult: NodeResult | undefined;
-    const liveMode = getLlmMode() === "live";
+    const liveMode = proofMode
+      ? proofMode === "live-ai"
+      : getLlmMode() === "live";
     try {
       for (let i = 0; i < PIPELINE.length; i++) {
         const node = PIPELINE[i]!;
@@ -494,7 +499,10 @@ export class WorkflowEngine {
           .returning();
       }
     } catch (err) {
-      logger.error({ err, workflowRunId }, "Pipeline failed; marking run failed");
+      logger.error(
+        { err, workflowRunId },
+        "Pipeline failed; marking run failed",
+      );
       await db
         .update(workflowRunsTable)
         .set({
@@ -628,7 +636,9 @@ export class WorkflowEngine {
       workflowRun,
       request,
     };
-    await executeNode(FINALIZE_NODE, ctx, stepIndex);
+    // A crash after saving the final node must not duplicate it on retry.
+    if (!agentOutputs[FINALIZE_NODE.key])
+      await executeNode(FINALIZE_NODE, ctx, stepIndex);
 
     const terminalStatus =
       workflowRun.status === "approved" ? "finalized" : "rejected";

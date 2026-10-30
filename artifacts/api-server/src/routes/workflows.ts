@@ -21,6 +21,7 @@ import {
   serializeWorkflowSummary,
 } from "../lib/serializers";
 import { parseIdParam } from "../lib/route-helpers";
+import { isProofWorkflow } from "../lib/proof-graph-guard";
 
 const router: IRouter = Router();
 
@@ -38,7 +39,10 @@ async function loadDetail(workflowRunId: number) {
     )
     .leftJoin(
       portfolioCompaniesTable,
-      eq(operationalRequestsTable.portfolioCompanyId, portfolioCompaniesTable.id),
+      eq(
+        operationalRequestsTable.portfolioCompanyId,
+        portfolioCompaniesTable.id,
+      ),
     )
     .where(eq(workflowRunsTable.id, workflowRunId));
   if (!row) return null;
@@ -109,7 +113,10 @@ router.get("/workflows", async (_req, res): Promise<void> => {
     )
     .leftJoin(
       portfolioCompaniesTable,
-      eq(operationalRequestsTable.portfolioCompanyId, portfolioCompaniesTable.id),
+      eq(
+        operationalRequestsTable.portfolioCompanyId,
+        portfolioCompaniesTable.id,
+      ),
     )
     .orderBy(desc(workflowRunsTable.createdAt));
   res.json(
@@ -145,6 +152,15 @@ router.post("/workflows/:id/run", async (req, res): Promise<void> => {
     .where(eq(workflowRunsTable.id, id));
   if (!existing) {
     res.status(404).json({ error: "Workflow not found" });
+    return;
+  }
+  if (await isProofWorkflow(id)) {
+    res
+      .status(409)
+      .json({
+        error:
+          "This workflow belongs to Proof Lab. Run and review it from its owned proof run.",
+      });
     return;
   }
   await engine.run(id);

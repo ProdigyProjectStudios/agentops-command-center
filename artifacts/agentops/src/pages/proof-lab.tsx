@@ -1,0 +1,955 @@
+import { OriginalGraphActions } from "@/components/proof/OriginalGraph";
+import { ProofPack } from "@/components/proof/ProofPack";
+import { GithubHandoff } from "@/components/proof/GithubHandoff";
+import { useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link, useLocation, useParams } from "wouter";
+import {
+  ArrowRight,
+  Upload,
+  Plus,
+  Trash2,
+  FlaskConical,
+  History,
+  FileJson,
+  Link2,
+  RotateCcw,
+} from "lucide-react";
+import {
+  proofTemplates,
+  proofInputSchema,
+  editablePdfCopy,
+  type ProofInput,
+  type ProofRun,
+  type ProofShare,
+  type ProofReceipt,
+} from "@workspace/api-zod";
+import {
+  ProofEvidence,
+  proofPanel as panel,
+  proofButton as button,
+  proofDate,
+} from "@/components/proof/ProofEvidence";
+import { proofApi, downloadProof } from "@/lib/proof-api";
+
+const field =
+  "w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50";
+export default function ProofLabPage() {
+  const { id } = useParams<{ id?: string }>();
+  const [, navigate] = useLocation();
+  const cache = useQueryClient();
+  const [draft, setDraft] = useState<ProofInput>(() => ({
+    ...structuredClone(proofTemplates[0].input),
+    connectedReview: true,
+  }));
+  const [confirmed, setConfirmed] = useState(false);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState("");
+  const [error, setError] = useState("");
+  const [shareConfirmed, setShareConfirmed] = useState(false);
+  const [shareUrl, setShareUrl] = useState("");
+  const [notice, setNotice] = useState("");
+  const [history, setHistory] = useState(false);
+  const runQuery = useQuery({
+    queryKey: ["proof-run", id],
+    queryFn: () => proofApi<ProofRun>(`/runs/${id}`),
+    enabled: !!id,
+    refetchInterval: (q) =>
+      q.state.data?.status === "delivering" ||
+      q.state.data?.graph?.state === "running"
+        ? 3000
+        : false,
+  });
+  const runsQuery = useQuery({
+    queryKey: ["proof-runs"],
+    queryFn: () => proofApi<ProofRun[]>("/runs"),
+  });
+  const sharesQuery = useQuery({
+    queryKey: ["proof-shares", id],
+    queryFn: () => proofApi<ProofShare[]>(`/runs/${id}/shares`),
+    enabled: !!id && !!runQuery.data,
+  });
+  const run = runQuery.data;
+  async function action(label: string, fn: () => Promise<void>) {
+    setBusy(label);
+    setError("");
+    setNotice("");
+    try {
+      await fn();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Request failed.");
+    } finally {
+      setBusy("");
+    }
+  }
+  function selectRun(runId: string) {
+    setShareUrl("");
+    setShareConfirmed(false);
+    setNote("");
+    setError("");
+    setNotice("");
+    navigate(`/proof-lab/${runId}`);
+  }
+  async function saveRun(result: ProofRun) {
+    cache.setQueryData(["proof-run", result.id], result);
+    await cache.invalidateQueries({ queryKey: ["proof-runs"] });
+    selectRun(result.id);
+  }
+  function editNew() {
+    if (run) setDraft(structuredClone(run.input));
+    setConfirmed(false);
+    setShareUrl("");
+    setError("");
+    setNotice("");
+    navigate("/proof-lab");
+  }
+  async function readFiles(files: FileList | null) {
+    if (!files?.length) return;
+    await action("Reading documents…", async () => {
+      const existing = draft.documents.filter((d) => d.text.trim());
+      if (existing.length + files.length > 4)
+        throw new Error(
+          "At most four documents per run. Remove a sample before adding more.",
+        );
+      const docs: ProofInput["documents"] = [];
+      for (const file of Array.from(files)) {
+        if (file.name.length > 100)
+          throw new Error("Document filenames must be at most 100 characters.");
+        if (/\.pdf$/i.test(file.name)) {
+          if (file.size > 5 * 1024 * 1024)
+            throw new Error("PDFs must be 5 MB or smaller.");
+          const { readProofPdf } = await import("@/lib/proof-pdf-intake");
+          docs.push(await readProofPdf(file));
+          continue;
+        }
+        if (!/\.(txt|md)$/i.test(file.name) || file.size > 16000)
+          throw new Error(
+            "Use .txt/.md up to 16 KB, or text-based .pdf up to 5 MB and 20 pages. OCR is not available.",
+          );
+        docs.push({ name: file.name, text: await file.text() });
+      }
+      setDraft({ ...draft, documents: [...existing, ...docs] });
+      setConfirmed(false);
+    });
+  }
+  return (
+    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+      <div className="flex flex-wrap justify-between items-start gap-4">
+        <div>
+          <p className="flex items-center gap-2 text-primary text-xs uppercase tracking-[0.18em]">
+            <FlaskConical size={15} /> Proof Lab / saved execution
+          </p>
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight mt-3">
+            Show the work. Prove the outcome.
+          </h1>
+          <p className="text-muted-foreground text-sm mt-3 max-w-2xl">
+            Documents, cited checks, a human decision and a verified sandbox
+            receipt. Every step stays with the run.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link className={button} href="/demo/healthcare">
+            Guided healthcare demo <ArrowRight size={16} />
+          </Link>
+          <button className={button} onClick={() => setHistory(!history)}>
+            <History size={16} /> Saved runs
+          </button>
+          {id && (
+            <button className={`${button} text-primary`} onClick={editNew}>
+              <Plus size={16} /> New from this run
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="rounded-xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
+        Use synthetic documents only. The sandbox records real HTTP submissions
+        inside Agent Ops; it does not contact an EHR, payer or bank. Rules mode
+        uses no AI. Optional live AI provides cited advisory notes, never
+        approval.
+      </div>
+      {history && (
+        <section className={panel}>
+          <h2 className="font-semibold mb-3">
+            Saved in this browser workspace
+          </h2>
+          <p className="text-xs text-muted-foreground mb-4">
+            Records live in the database. Access uses a key saved in this
+            browser; clearing browser storage loses that access. This is not
+            account authentication.
+          </p>
+          {runsQuery.isPending && <p role="status">Loading saved runs…</p>}
+          {runsQuery.isError && (
+            <p role="alert">
+              Saved runs could not load.{" "}
+              <button className="underline" onClick={() => runsQuery.refetch()}>
+                Retry
+              </button>
+            </p>
+          )}
+          {!runsQuery.isPending &&
+            !runsQuery.isError &&
+            !runsQuery.data?.length && (
+              <p className="text-sm text-muted-foreground">
+                No runs yet. Start with a sample below.
+              </p>
+            )}
+          <div className="space-y-2">
+            {runsQuery.data?.map((r) => (
+              <button
+                key={r.id}
+                onClick={() => selectRun(r.id)}
+                className="flex flex-wrap justify-between gap-2 w-full p-3 rounded-lg border border-border text-left hover:bg-secondary"
+              >
+                <span className="text-sm">
+                  {r.input.title}
+                  <span className="block text-xs text-muted-foreground mt-1">
+                    {proofDate(r.createdAt)}
+                  </span>
+                </span>
+                <span className="text-xs text-primary">
+                  {r.status.replaceAll("-", " ")}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+      {busy && (
+        <p role="status" className="text-sm text-primary animate-pulse">
+          {busy}
+        </p>
+      )}
+      {error && (
+        <p
+          role="alert"
+          className="rounded-lg border border-destructive/40 p-4 text-sm text-destructive"
+        >
+          {error}
+        </p>
+      )}
+      {notice && (
+        <p role="status" className="text-sm text-emerald-400">
+          {notice}
+        </p>
+      )}
+      {!id ? (
+        <>
+          <section
+            className={`${panel} flex flex-wrap justify-between items-center gap-4`}
+          >
+            <div>
+              <h2 className="font-semibold">
+                One packet. Four inspectable stages.
+              </h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Source checks → optional agent execution → human decision →
+                receiver receipt.
+              </p>
+            </div>
+            <Link href="/demo/healthcare" className={`${button} text-primary`}>
+              Start guided walkthrough <ArrowRight size={16} />
+            </Link>
+          </section>
+          <details className={`${panel} space-y-3`}>
+            <summary className="font-semibold cursor-pointer">
+              Advanced demo: recovery under failure
+            </summary>
+            <p className="text-sm text-muted-foreground">
+              The sandbox will accept the first approved packet, then
+              deliberately discard its response. Retry the same run and verify
+              that the receiver still has one receipt. This is an explicitly
+              injected demonstration fault.
+            </p>
+            <button
+              className={button}
+              disabled={!!busy}
+              onClick={() => {
+                setDraft({
+                  ...structuredClone(proofTemplates[0].input),
+                  title: "Response-loss recovery demonstration",
+                  recoveryDemo: true,
+                });
+                setConfirmed(false);
+              }}
+            >
+              Prepare recovery walkthrough
+            </button>
+          </details>
+          {draft.recoveryDemo && (
+            <p role="status" className="text-sm text-amber-400">
+              Recovery mode selected: a deliberate response-loss fault will
+              occur after the first sandbox acceptance.
+            </p>
+          )}
+          <div className="grid md:grid-cols-3 gap-3">
+            {proofTemplates.map((t) => (
+              <button
+                key={t.id}
+                disabled={!!busy}
+                className={`${panel} text-left hover:border-primary transition-colors`}
+                onClick={() => {
+                  setDraft(structuredClone(t.input));
+                  setConfirmed(false);
+                }}
+              >
+                <p className="font-semibold flex justify-between items-center">
+                  {t.title}
+                  <ArrowRight size={16} className="text-primary" />
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  {t.description}
+                </p>
+              </button>
+            ))}
+          </div>
+          <section className={`${panel} space-y-5`}>
+            <div>
+              <h2 className="font-semibold text-lg">Prepare the evidence</h2>
+              <p className="text-sm text-muted-foreground mt-1">
+                Upload text or a text-based PDF, then review the extracted
+                evidence. Checks still require Field: value lines. PDF intake
+                reads the text layer; it does not infer fields from prose or
+                perform OCR.
+              </p>
+            </div>
+            <div className="grid md:grid-cols-2 gap-4">
+              <label className="text-sm space-y-2">
+                <span>Run title</span>
+                <input
+                  className={field}
+                  maxLength={120}
+                  value={draft.title}
+                  onChange={(e) =>
+                    setDraft({ ...draft, title: e.target.value })
+                  }
+                />
+              </label>
+              <label className="text-sm space-y-2">
+                <span>Workflow</span>
+                <select
+                  className={field}
+                  value={draft.workflow}
+                  onChange={(e) =>
+                    setDraft({
+                      ...draft,
+                      workflow: e.target.value as ProofInput["workflow"],
+                    })
+                  }
+                >
+                  <option value="vendor-payment">Vendor invoice</option>
+                  <option value="authorization">Authorization packet</option>
+                  <option value="revenue-cycle">Revenue-cycle packet</option>
+                </select>
+              </label>
+            </div>
+            <fieldset disabled={!!busy} className="space-y-5 min-w-0">
+              {draft.documents.map((doc, i) => (
+                <div key={i} className="space-y-2">
+                  <div className="flex gap-2 items-center">
+                    <label className="flex-1">
+                      <span className="sr-only">Document {i + 1} filename</span>
+                      <input
+                        className={`${field} font-mono`}
+                        maxLength={100}
+                        readOnly={!!doc.pdf}
+                        value={doc.name}
+                        onChange={(e) =>
+                          setDraft({
+                            ...draft,
+                            documents: draft.documents.map((d, j) =>
+                              j === i ? { ...d, name: e.target.value } : d,
+                            ),
+                          })
+                        }
+                      />
+                    </label>
+                    <button
+                      title={`Remove document ${i + 1}`}
+                      aria-label={`Remove document ${i + 1}`}
+                      className={button}
+                      disabled={draft.documents.length === 1}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          documents: draft.documents.filter((_, j) => j !== i),
+                        })
+                      }
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <textarea
+                    aria-label={`Document ${i + 1} content`}
+                    rows={8}
+                    className={`${field} font-mono leading-relaxed`}
+                    maxLength={16000}
+                    readOnly={!!doc.pdf}
+                    value={doc.text}
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        documents: draft.documents.map((d, j) =>
+                          j === i ? { ...d, text: e.target.value } : d,
+                        ),
+                      })
+                    }
+                  />
+                  {doc.pdf && (
+                    <div className="rounded-lg border border-primary/30 p-4 space-y-3 text-sm">
+                      <p className="font-medium">
+                        PDF text layer · {doc.pdf.pageStarts.length} pages ·{" "}
+                        {doc.pdf.reviewed
+                          ? "review recorded"
+                          : "review required"}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Compare every page below with your original PDF,
+                        especially tables and image content. Reading order and
+                        missing image text cannot be guaranteed. Only reviewed
+                        text and a file fingerprint are saved; the original PDF
+                        stays on your device.
+                      </p>
+                      <div className="space-y-2">
+                        {doc.pdf.pageStarts.map((start, page) => (
+                          <details key={page}>
+                            <summary className="cursor-pointer text-primary">
+                              Page {page + 1} · extracted lines {start}–
+                              {(doc.pdf!.pageStarts[page + 1] ??
+                                doc.text.split("\n").length + 1) - 1}
+                            </summary>
+                            <pre className="whitespace-pre-wrap break-words font-mono text-xs mt-2 p-3 bg-secondary/40 rounded-lg">
+                              {doc.text
+                                .split("\n")
+                                .slice(
+                                  start - 1,
+                                  doc.pdf!.pageStarts[page + 1]
+                                    ? doc.pdf!.pageStarts[page + 1] - 1
+                                    : undefined,
+                                )
+                                .join("\n")}
+                            </pre>
+                          </details>
+                        ))}
+                      </div>
+                      <label className="flex items-start gap-2">
+                        <input
+                          type="checkbox"
+                          checked={doc.pdf.reviewed}
+                          onChange={(e) =>
+                            setDraft({
+                              ...draft,
+                              documents: draft.documents.map((d, j) =>
+                                j === i && d.pdf
+                                  ? {
+                                      ...d,
+                                      pdf: {
+                                        ...d.pdf,
+                                        reviewed: e.target.checked,
+                                      },
+                                    }
+                                  : d,
+                              ),
+                            })
+                          }
+                        />
+                        <span>
+                          I compared all extracted pages in {doc.name} with the
+                          original PDF.
+                        </span>
+                      </label>
+                      <button
+                        type="button"
+                        className={button}
+                        onClick={() => {
+                          setDraft({
+                            ...draft,
+                            documents: draft.documents.map((d, j) =>
+                              j === i ? editablePdfCopy(d) : d,
+                            ),
+                          });
+                          setConfirmed(false);
+                        }}
+                      >
+                        Convert to editable text
+                      </button>
+                      <p className="text-xs text-muted-foreground">
+                        Corrections remove PDF page references and are labelled
+                        as edited evidence. To retain original page references,
+                        fix the PDF and upload it again.
+                      </p>
+                    </div>
+                  )}
+                  {doc.editedFromPdf && (
+                    <p className="text-xs text-amber-400">
+                      Edited evidence derived from {doc.editedFromPdf.name}.
+                      Citations refer to this text, not original PDF pages.
+                    </p>
+                  )}
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-3">
+                <label className={`${button} cursor-pointer`}>
+                  <Upload size={16} /> Upload .txt / .md / .pdf
+                  <input
+                    className="sr-only"
+                    type="file"
+                    aria-label="Upload evidence documents"
+                    accept=".txt,.md,.pdf,text/plain,text/markdown,application/pdf"
+                    multiple
+                    disabled={!!busy}
+                    onChange={(e) => {
+                      void readFiles(e.target.files);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                <button
+                  className={button}
+                  disabled={draft.documents.length >= 4 || !!busy}
+                  onClick={() =>
+                    setDraft({
+                      ...draft,
+                      documents: [
+                        ...draft.documents,
+                        {
+                          name: `evidence-${draft.documents.length + 1}.txt`,
+                          text: "",
+                        },
+                      ],
+                    })
+                  }
+                >
+                  <Plus size={16} /> Add document
+                </button>
+              </div>
+            </fieldset>
+            <label className="text-sm block max-w-md space-y-2">
+              <span className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!draft.connectedReview}
+                  disabled={!!busy}
+                  onChange={(e) =>
+                    setDraft({ ...draft, connectedReview: e.target.checked })
+                  }
+                />
+                Connect policy retrieval and specialist review
+              </span>
+            </label>
+            {draft.connectedReview && (
+              <div className="rounded-lg border border-primary/30 p-4 space-y-3 text-sm">
+                <label className="block space-y-2">
+                  <span>Policy search query (optional)</span>
+                  <input
+                    className={field}
+                    maxLength={240}
+                    value={draft.policyQuery ?? ""}
+                    disabled={!!busy}
+                    placeholder="Uses the workflow's policy terms when empty"
+                    onChange={(e) =>
+                      setDraft({
+                        ...draft,
+                        policyQuery: e.target.value || undefined,
+                      })
+                    }
+                  />
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Searches a versioned fictional policy catalog. Missing rule
+                  sources block approval. Rules mode makes no model calls; live
+                  mode adds three cited specialist reviews using the configured
+                  Ops, Legal and Finance models.
+                </p>
+              </div>
+            )}
+            <label className="text-sm block max-w-md space-y-2">
+              <span>Analysis mode</span>
+              <select
+                className={field}
+                value={draft.analysisMode ?? "rules"}
+                onChange={(e) =>
+                  setDraft({
+                    ...draft,
+                    analysisMode: e.target.value as "rules" | "live-ai",
+                  })
+                }
+              >
+                <option value="rules">Rules + exact source extraction</option>
+                <option value="live-ai">Rules + live AI advisory review</option>
+              </select>
+              <span className="block text-xs text-muted-foreground">
+                Live AI sends extracted evidence to the configured provider and
+                records model usage. Missing credentials or invalid citations
+                fail explicitly.
+              </span>
+            </label>
+            <label className="flex items-start gap-3 text-sm">
+              <input
+                type="checkbox"
+                checked={confirmed}
+                onChange={(e) => setConfirmed(e.target.checked)}
+                className="mt-1"
+              />
+              <span>
+                These documents contain only synthetic demonstration data, with
+                no real patient or confidential business information.
+              </span>
+            </label>
+            <button
+              className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
+              disabled={
+                !confirmed ||
+                !!busy ||
+                draft.documents.some((d) => d.pdf && !d.pdf.reviewed)
+              }
+              onClick={() =>
+                action("Extracting evidence and saving the run…", async () => {
+                  const parsed = proofInputSchema.safeParse(draft);
+                  if (!parsed.success)
+                    throw new Error(
+                      "Give the run a title and complete 1–4 non-empty documents.",
+                    );
+                  await saveRun(
+                    await proofApi<ProofRun>("/runs", "POST", parsed.data),
+                  );
+                })
+              }
+            >
+              Evaluate & save run <ArrowRight size={16} />
+            </button>
+          </section>
+        </>
+      ) : runQuery.isPending ? (
+        <p role="status">Loading saved evidence…</p>
+      ) : runQuery.isError ? (
+        <div role="alert" className={panel}>
+          {runQuery.error.message}{" "}
+          <button className="underline" onClick={() => runQuery.refetch()}>
+            Retry
+          </button>{" "}
+          <Link className="text-primary ml-3" href="/proof-lab">
+            New run
+          </Link>
+        </div>
+      ) : run ? (
+        <>
+          <section
+            className={`${panel} flex flex-wrap justify-between items-center gap-4`}
+          >
+            <div>
+              <p className="text-xs uppercase tracking-wider text-primary">
+                {run.status.replaceAll("-", " ")}
+              </p>
+              <h2 className="text-xl font-semibold mt-2">{run.input.title}</h2>
+              <p className="text-xs text-muted-foreground mt-2">
+                Saved {proofDate(run.createdAt)}
+              </p>
+            </div>
+            <button
+              className={button}
+              disabled={!!busy}
+              onClick={() =>
+                action("Preparing export…", async () =>
+                  downloadProof(
+                    await proofApi(`/runs/${run.id}/export`),
+                    `agentops-proof-${run.id}.json`,
+                  ),
+                )
+              }
+            >
+              <FileJson size={16} /> Export evidence
+            </button>
+          </section>
+          {run.input.recoveryDemo && (
+            <section className={`${panel} space-y-2`}>
+              <h2 className="font-semibold">
+                Recovery walkthrough · injected response loss
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                1. Review and approve. 2. Inspect the deliberately lost
+                response. 3. Retry the same run. 4. Verify the original receiver
+                receipt.
+              </p>
+              <p role="status" className="text-sm text-primary">
+                {run.status === "completed"
+                  ? `Recovered in ${run.delivery.attempts} attempts; receiver receipt ${run.receipt?.id}.`
+                  : run.status === "delivery-failed"
+                    ? run.events.some(
+                        (e) => e.action === "Demonstration fault injected",
+                      )
+                      ? "First response deliberately discarded after acceptance. Use Retry delivery below."
+                      : "Delivery failed before the demonstration fault could be confirmed. Inspect the recorded error before retrying."
+                    : "Fault applies once, on the first approved submission."}
+              </p>
+            </section>
+          )}
+          <ProofPack run={run} />
+          <ProofEvidence key={`evidence-${run.id}`} run={run} />
+          <OriginalGraphActions
+            key={`graph-${run.id}`}
+            run={run}
+            busy={!!busy}
+            action={action}
+            save={saveRun}
+          />
+          {run.status === "blocked" && (
+            <section className={`${panel} border-amber-500/30`}>
+              <h2 className="font-semibold text-amber-400">
+                Correct the evidence before approval
+              </h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                {run.analysis.summary} This run remains unchanged for
+                inspection.
+              </p>
+              <button className={`${button} mt-4`} onClick={editNew}>
+                Correct inputs in a new run
+              </button>
+            </section>
+          )}
+          {run.status === "awaiting-review" && (
+            <section className={`${panel} space-y-4`}>
+              <h2 className="font-semibold">
+                Your decision controls delivery.
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Inspect the source lines above. Approval submits this exact
+                packet to the Agent Ops sandbox over HTTP. If you attached a
+                graph, inspect its saved outputs too; approval binds both
+                fingerprints.
+              </p>
+              <label className="block text-sm space-y-2">
+                <span>Review note</span>
+                <textarea
+                  className={field}
+                  rows={2}
+                  maxLength={500}
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Explain what you checked and why you approve or reject."
+                />
+              </label>
+              <div className="flex gap-3 flex-wrap">
+                {(["approve", "reject"] as const).map((decision) => (
+                  <button
+                    key={decision}
+                    disabled={
+                      !!busy ||
+                      note.trim().length < 3 ||
+                      (!!run.graph && run.graph.state !== "ready")
+                    }
+                    className={`${button} ${decision === "approve" ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
+                    onClick={() =>
+                      action(
+                        decision === "approve"
+                          ? "Recording approval, submitting and verifying receipt…"
+                          : "Recording rejection…",
+                        async () =>
+                          saveRun(
+                            await proofApi<ProofRun>(
+                              `/runs/${run.id}/review`,
+                              "POST",
+                              {
+                                decision,
+                                note,
+                                fingerprint: run.analysis.fingerprint,
+                                graphFingerprint: run.graph?.fingerprint,
+                              },
+                            ),
+                          ),
+                      )
+                    }
+                  >
+                    {decision === "approve"
+                      ? "Approve & deliver to sandbox"
+                      : "Reject packet"}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+          {(run.status === "delivery-failed" ||
+            run.status === "delivering") && (
+            <section className={panel}>
+              <p className="text-sm mb-3">
+                {run.status === "delivering"
+                  ? "Delivery is in progress. If interrupted, retry becomes available after 30 seconds."
+                  : (run.delivery.error ??
+                    "Approved. Delivery is waiting to be resumed.")}
+              </p>
+              <button
+                className={button}
+                disabled={
+                  !!busy ||
+                  (run.status === "delivering" &&
+                    Date.now() -
+                      Date.parse(run.delivery.lastAttemptAt ?? run.updatedAt) <
+                      30000)
+                }
+                onClick={() =>
+                  action("Retrying the same approved packet…", async () =>
+                    saveRun(
+                      await proofApi<ProofRun>(`/runs/${run.id}/retry`, "POST"),
+                    ),
+                  )
+                }
+              >
+                <RotateCcw size={16} /> Retry delivery
+              </button>
+            </section>
+          )}
+          {run.receipt && (
+            <button
+              className={button}
+              disabled={!!busy}
+              onClick={() =>
+                action("Checking receiver ledger…", async () => {
+                  const receipt = await proofApi<ProofReceipt>(
+                    `/runs/${run.id}/receipt`,
+                  );
+                  if (
+                    receipt.id !== run.receipt?.id ||
+                    receipt.fingerprint !== run.analysis.fingerprint
+                  )
+                    throw new Error("Ledger receipt differs from this run.");
+                  setNotice(`Receiver ledger confirms ${receipt.id}.`);
+                })
+              }
+            >
+              Verify receipt in receiver ledger
+            </button>
+          )}
+          {run.status === "completed" && (
+            <GithubHandoff
+              key={`github-${run.id}`}
+              run={run}
+              onUpdate={saveRun}
+            />
+          )}
+          {["completed", "blocked", "rejected"].includes(run.status) && (
+            <section className={`${panel} space-y-4`}>
+              <h2 className="font-semibold flex items-center gap-2">
+                <Link2 size={17} className="text-primary" /> Share inspectable
+                proof
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                Create a read-only snapshot that expires in seven days. It
+                includes extracted fields, cited source lines, graph outputs and
+                retrieved knowledge (when attached), review notes and the
+                receipt. Original source files and your browser workspace key
+                are excluded; graph outputs may quote uploaded text.
+              </p>
+              <label className="flex gap-3 items-start text-sm">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={shareConfirmed}
+                  onChange={(e) => setShareConfirmed(e.target.checked)}
+                />
+                <span>
+                  I have reviewed these contents and want anyone holding the
+                  link to be able to inspect this snapshot.
+                </span>
+              </label>
+              <button
+                className={button}
+                disabled={!shareConfirmed || !!busy}
+                onClick={() =>
+                  action("Creating proof link…", async () => {
+                    const result = await proofApi<{
+                      token: string;
+                      expiresAt: string;
+                    }>(`/runs/${run.id}/shares`, "POST", {
+                      confirmDisclosure: true,
+                    });
+                    const base = import.meta.env.BASE_URL.replace(/\/$/, "");
+                    setShareUrl(
+                      `${location.origin}${base}/proof/shared#${result.token}`,
+                    );
+                    await sharesQuery.refetch();
+                  })
+                }
+              >
+                Create read-only link
+              </button>
+              {shareUrl && (
+                <div className="space-y-2">
+                  <label className="text-sm">
+                    New proof link
+                    <input
+                      readOnly
+                      aria-label="Read-only proof link"
+                      className={`${field} mt-2`}
+                      value={shareUrl}
+                      onFocus={(e) => e.target.select()}
+                    />
+                  </label>
+                  <a
+                    href={shareUrl}
+                    className="inline-block text-sm text-primary"
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Preview shared proof ↗
+                  </a>
+                </div>
+              )}
+              {sharesQuery.isError && (
+                <p role="alert" className="text-sm">
+                  Could not load existing shares.{" "}
+                  <button
+                    className="underline"
+                    onClick={() => sharesQuery.refetch()}
+                  >
+                    Retry
+                  </button>
+                </p>
+              )}
+              <div className="space-y-2">
+                {sharesQuery.data?.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3"
+                  >
+                    <p className="text-xs text-muted-foreground">
+                      Created {proofDate(s.createdAt)} ·{" "}
+                      {s.revokedAt
+                        ? "Revoked"
+                        : new Date(s.expiresAt).getTime() <= Date.now()
+                          ? "Expired"
+                          : `Expires ${proofDate(s.expiresAt)}`}
+                    </p>
+                    {!s.revokedAt && (
+                      <button
+                        className={`${button} py-1.5`}
+                        disabled={!!busy}
+                        onClick={() =>
+                          action("Revoking link…", async () => {
+                            await proofApi(
+                              `/runs/${run.id}/shares/${s.id}`,
+                              "DELETE",
+                            );
+                            setShareUrl("");
+                            await sharesQuery.refetch();
+                          })
+                        }
+                      >
+                        Revoke
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      ) : null}
+      <div className="flex flex-wrap gap-5 text-sm text-primary">
+        <Link href="/requests/new">Existing multi-agent workflows →</Link>
+        <Link href="/proof-lab/fixtures">
+          Original healthcare rule fixtures →
+        </Link>
+        <Link href="/architecture">System architecture →</Link>
+      </div>
+    </div>
+  );
+}

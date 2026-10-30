@@ -43,7 +43,7 @@ delete process.env["OPENAI_API_KEY"];
 delete process.env["AI_INTEGRATIONS_OPENAI_API_KEY"];
 delete process.env["AI_INTEGRATIONS_OPENAI_BASE_URL"];
 
-import { test, mock } from "node:test";
+import { test, mock, before, after } from "node:test";
 import assert from "node:assert/strict";
 import type { OperationalRequest, WorkflowRun } from "@workspace/db";
 
@@ -91,6 +91,28 @@ const { financeReviewNode } = await import(
 const { synthesisNode } = await import(
   "../orchestration/nodes/synthesis-node.js"
 );
+
+const { getModelSettings, getModelForAgent, invalidateModelCache } =
+  await import("../lib/model-config.js");
+const { pool } = await import("@workspace/db");
+
+// getModelForAgent deliberately falls back on DB errors in production. A
+// boundary test must not silently pass via that fallback when its DB is absent.
+before(async () => {
+  invalidateModelCache();
+  const settings = await getModelSettings(); // uncaught connection/schema errors fail the suite
+  for (const slug of ["ops-conductor", "legal-counsel", "finance-analyst"]) {
+    const agent = settings.overrides.find((a) => a.agentSlug === slug);
+    assert.ok(agent, `Seeded database is missing required agent: ${slug}`);
+    assert.equal(
+      await getModelForAgent(slug),
+      agent.modelOverride || settings.defaultModel,
+    );
+  }
+});
+after(async () => {
+  await pool.end();
+});
 
 // ─── Stubs ────────────────────────────────────────────────────────────────────
 

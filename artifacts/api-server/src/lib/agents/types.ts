@@ -16,6 +16,7 @@ export const fallbackInfoSchema = z.object({
   mode: z.enum(["demo", "live"]),
   reason: z.enum([
     "no_credentials",
+    "demo_requested",
     "empty_content",
     "non_object",
     "invalid_json",
@@ -35,6 +36,15 @@ export const agentOutputSchema = z.object({
   toolCallsRequested: z.array(toolCallRequestSchema),
   confidence: z.number().min(0).max(1),
   details: z.record(z.unknown()),
+  execution: z
+    .object({
+      kind: z.enum(["live-ai", "demo"]),
+      model: z.string().nullable(),
+      inputTokens: z.number().nullable(),
+      outputTokens: z.number().nullable(),
+      durationMs: z.number(),
+    })
+    .optional(),
   /**
    * Set when the agent's `details` came from the deterministic demo fallback
    * instead of a successful live model response. `mode === "demo"` means no
@@ -99,6 +109,7 @@ export interface WorkflowState {
   /** Final next-actions list surfaced to operators. */
   finalNextActions: string[];
   metadata: {
+    proofMode?: "demo" | "live-ai";
     startedAt: Date;
     estimatedCostCents?: number;
     riskLevel?: RiskLevel;

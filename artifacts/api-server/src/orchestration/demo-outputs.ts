@@ -11,13 +11,29 @@ export interface ScenarioFingerprint {
 
 const KEYWORD_RISK: Array<{ words: string[]; risk: RiskLevel; cost: number }> =
   [
-    { words: ["lay off", "layoff", "termination", "firing"], risk: "critical", cost: 0 },
+    {
+      words: ["lay off", "layoff", "termination", "firing"],
+      risk: "critical",
+      cost: 0,
+    },
     { words: ["acquisition", "merger", "m&a"], risk: "high", cost: 25_000_00 },
     { words: ["legal", "lawsuit", "lawyer"], risk: "high", cost: 18_000_00 },
-    { words: ["roofing", "contractor", "facilities", "repair"], risk: "low", cost: 48_000_00 },
-    { words: ["marketing", "campaign", "ad spend"], risk: "medium", cost: 35_000_00 },
+    {
+      words: ["roofing", "contractor", "facilities", "repair"],
+      risk: "low",
+      cost: 48_000_00,
+    },
+    {
+      words: ["marketing", "campaign", "ad spend"],
+      risk: "medium",
+      cost: 35_000_00,
+    },
     { words: ["hire", "hiring", "recruit"], risk: "medium", cost: 12_000_00 },
-    { words: ["software", "saas", "tool", "license"], risk: "low", cost: 8_400_00 },
+    {
+      words: ["software", "saas", "tool", "license"],
+      risk: "low",
+      cost: 8_400_00,
+    },
   ];
 
 export function fingerprintRequest(
@@ -25,13 +41,32 @@ export function fingerprintRequest(
 ): ScenarioFingerprint {
   const text = `${request.title} ${request.description}`.toLowerCase();
   const match = KEYWORD_RISK.find((k) => k.words.some((w) => text.includes(w)));
-  const priorityBoost: Record<string, number> = {
-    low: 0,
-    medium: 0,
-    high: 5_000_00,
-    urgent: 12_000_00,
-  };
-  const cost = (match?.cost ?? 9_500_00) + (priorityBoost[request.priority] ?? 0);
+  // Priority changes urgency, never the monetary amount supplied by the operator.
+  const amountPattern = /\$\s*(\d[\d,]*(?:\.\d+)?)\s*(k|m)?\b/gi;
+  const amounts = (value: string) =>
+    [...value.matchAll(amountPattern)]
+      .map((m) =>
+        Math.round(
+          Number(m[1].replaceAll(",", "")) *
+            (m[2]?.toLowerCase() === "k"
+              ? 1000
+              : m[2]?.toLowerCase() === "m"
+                ? 1000000
+                : 1) *
+            100,
+        ),
+      )
+      .filter((n) => Number.isSafeInteger(n) && n >= 0);
+  // The request title identifies the requested spend; descriptions can also quote policy thresholds.
+  const explicit = [...new Set(amounts(request.title))];
+  const descriptionAmounts = [...new Set(amounts(request.description))];
+  const supplied =
+    explicit.length === 1
+      ? explicit[0]
+      : explicit.length === 0 && descriptionAmounts.length === 1
+        ? descriptionAmounts[0]
+        : undefined;
+  const cost = supplied ?? match?.cost ?? 9_500_00;
   const risk = match?.risk ?? "medium";
   const routedAgents =
     risk === "critical" || risk === "high"
@@ -43,7 +78,7 @@ export function fingerprintRequest(
     routedAgents,
     category: match?.words[0] ?? "general-ops",
     rationale: match
-      ? `Matched scenario keyword "${match.words[0]}" — applying ${risk} risk profile.`
+      ? `Matched scenario keyword "${match.words[0]}" — applying ${risk} risk profile. ${supplied !== undefined ? "Spend copied from the request." : "Spend is a scenario estimate; confirm it with the operator."}`
       : "No scenario keyword matched — applying default medium-risk operational profile.",
   };
 }
@@ -105,9 +140,15 @@ export function legalReviewDemo(
   return {
     complianceChecks: [
       { name: "Vendor license verification", status: "pass" },
-      { name: "Certificate of Insurance on file", status: isHighRisk ? "review" : "pass" },
+      {
+        name: "Certificate of Insurance on file",
+        status: isHighRisk ? "review" : "pass",
+      },
       { name: "Sanctions / OFAC screen", status: "pass" },
-      { name: "Indemnification clause review", status: isHighRisk ? "flag" : "pass" },
+      {
+        name: "Indemnification clause review",
+        status: isHighRisk ? "flag" : "pass",
+      },
     ],
     flaggedClauses: isHighRisk
       ? [
@@ -147,7 +188,8 @@ export function financeReviewDemo(
             request.department
           } quarterly budget.`
         : "Defer. Spend would push the department past 85% budget utilization for the quarter.",
-    cashflowImpact: "Neutral within current quarter; absorbed via existing OpEx line.",
+    cashflowImpact:
+      "Neutral within current quarter; absorbed via existing OpEx line.",
     confidence: "0.88",
   };
 }

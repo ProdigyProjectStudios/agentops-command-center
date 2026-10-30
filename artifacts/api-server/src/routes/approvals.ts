@@ -17,7 +17,28 @@ import { serializeApproval } from "../lib/serializers";
 import { parseIdParam } from "../lib/route-helpers";
 import { composeAuditEntry } from "../lib/audit";
 
+import { isProofWorkflow } from "../lib/proof-graph-guard";
+
 const router: IRouter = Router();
+router.post("/approvals/:id/{*action}", async (req, res, next) => {
+  const id = parseIdParam(req);
+  if (id != null) {
+    const [approval] = await db
+      .select()
+      .from(approvalRequestsTable)
+      .where(eq(approvalRequestsTable.id, id));
+    if (approval && (await isProofWorkflow(approval.workflowRunId))) {
+      res
+        .status(409)
+        .json({
+          error:
+            "This workflow belongs to Proof Lab. Review the source and graph fingerprints there before deciding.",
+        });
+      return;
+    }
+  }
+  next();
+});
 
 async function loadCard(id: number) {
   const [row] = await db
@@ -37,11 +58,18 @@ async function loadCard(id: number) {
     )
     .leftJoin(
       portfolioCompaniesTable,
-      eq(operationalRequestsTable.portfolioCompanyId, portfolioCompaniesTable.id),
+      eq(
+        operationalRequestsTable.portfolioCompanyId,
+        portfolioCompaniesTable.id,
+      ),
     )
     .where(eq(approvalRequestsTable.id, id));
   if (!row) return null;
-  return serializeApproval(row.approval, row.request.title, row.companyName ?? "");
+  return serializeApproval(
+    row.approval,
+    row.request.title,
+    row.companyName ?? "",
+  );
 }
 
 router.get("/approvals", async (req, res): Promise<void> => {
@@ -67,7 +95,10 @@ router.get("/approvals", async (req, res): Promise<void> => {
     )
     .leftJoin(
       portfolioCompaniesTable,
-      eq(operationalRequestsTable.portfolioCompanyId, portfolioCompaniesTable.id),
+      eq(
+        operationalRequestsTable.portfolioCompanyId,
+        portfolioCompaniesTable.id,
+      ),
     );
   const rows = parsed.data.status
     ? await baseQuery
@@ -150,7 +181,13 @@ router.post("/approvals/:id/approve", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const updated = await decide(id, "approved", "approved", parsed.data, "approved");
+  const updated = await decide(
+    id,
+    "approved",
+    "approved",
+    parsed.data,
+    "approved",
+  );
   if (!updated) {
     res.status(404).json({ error: "Approval not found" });
     return;
@@ -170,7 +207,13 @@ router.post("/approvals/:id/reject", async (req, res): Promise<void> => {
     res.status(400).json({ error: parsed.error.message });
     return;
   }
-  const updated = await decide(id, "rejected", "rejected", parsed.data, "rejected");
+  const updated = await decide(
+    id,
+    "rejected",
+    "rejected",
+    parsed.data,
+    "rejected",
+  );
   if (!updated) {
     res.status(404).json({ error: "Approval not found" });
     return;
