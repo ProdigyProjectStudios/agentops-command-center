@@ -81,7 +81,7 @@ test("authorization worker: exception, live-provider contract, persisted review,
   const publicPage = await context.newPage();
   await publicPage.goto(href!);
   await expect(
-    publicPage.getByText(done.receipt.id, { exact: true }),
+    publicPage.getByText(done.receipt.id, { exact: true }).first(),
   ).toBeVisible();
   await page
     .getByRole("heading", {
@@ -89,6 +89,9 @@ test("authorization worker: exception, live-provider contract, persisted review,
       exact: true,
     })
     .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath("authorization-worker-desktop-viewport.png"),
+  });
   await page.screenshot({
     path: test.info().outputPath("authorization-worker-desktop.png"),
     fullPage: true,
@@ -118,6 +121,15 @@ test("authorization worker: mobile rejection records the decision without delive
       () => document.documentElement.scrollWidth <= window.innerWidth,
     ),
   ).toBe(true);
+  await page
+    .getByRole("heading", {
+      name: "Authorization evidence worker",
+      exact: true,
+    })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: test.info().outputPath("authorization-worker-mobile-viewport.png"),
+  });
   await page.screenshot({
     path: test.info().outputPath("authorization-worker-mobile.png"),
     fullPage: true,
