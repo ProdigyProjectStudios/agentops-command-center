@@ -35,3 +35,9 @@ Before recording the final video, deploy this revision, run the complete case ag
 `authorization-worker.spec.ts` drives the real browser and backend for approval, mobile rejection, reload, receipt recheck, export/share, and provider failure. CI runs an explicitly labelled local HTTP provider fixture after the existing E2E suite. This exercises the actual provider adapter and source prompts, but does not measure model quality or prove a real-provider run. QA recordings are labelled accordingly and must not be presented as live-AI sales footage.
 
 The browser stores only the last saved run ID. Unsaved edits, consent, review acknowledgement and freshly created share links are not restored. Database reopen tests do not establish restart behavior of the deployed hosting environment. Model-review failure is retried as a new full analysis, not resumed from saved partial specialist outputs.
+
+## Verified revision
+
+On 2026-10-30, revision `3ca26dd` passed all **166 API tests** and **19 browser tests** (16 existing, 3 new worker scenarios). Type checks, both production builds and Python checks passed. Desktop and mobile browser screenshots were visually inspected; the mobile test confirmed no horizontal overflow. [API/build CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898082) · [Browser CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40992898193). The subsequent commit only updates this validation record and the README.
+
+The browser/provider integration evidence is from the explicitly labelled CI provider fixture. This revision has not been verified against the deployed real provider and does not establish production restart durability.
