@@ -92,10 +92,16 @@ export const healthcareDemoSteps = [
       "Show the failed check and its source—or missing source. Do not skip the blocked state. Explicitly supply or reconcile the evidence, creating a new run instead of overwriting the old one.",
   },
   {
+    title: "Run the agents",
+    question: "What executes automatically?",
+    notes:
+      "Run the original graph in demo mode. Open a saved node and the tool record. The engine and keyword lookup execute now; narratives are preset and other tools are simulations. Show all seven saved nodes before moving to approval.",
+  },
+  {
     title: "Review the decision",
     question: "Who controls the action?",
     notes:
-      "Inspect the exact source line before approving. The operator supplies a note. Explain that rules mode is deterministic; optional live AI exists separately in the Proof Lab and needs provider verification.",
+      "Inspect the exact source line before approving. The operator supplies a note. Show that approval binds the source packet and saved graph outputs. Live AI is a separate Proof Lab option; this walkthrough makes no model calls.",
   },
   {
     title: "Verify the outcome",

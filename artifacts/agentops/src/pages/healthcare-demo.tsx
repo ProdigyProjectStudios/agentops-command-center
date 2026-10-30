@@ -28,22 +28,23 @@ import {
   proofPanel as panel,
   proofButton as button,
 } from "@/components/proof/ProofEvidence";
+import { OriginalGraphEvidence } from "@/components/proof/OriginalGraph";
 import { proofApi, downloadProof } from "@/lib/proof-api";
 
 const sessionSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     workflow: z.enum(["authorization", "revenue-cycle"]),
-    step: z.number().int().min(0).max(5),
+    step: z.number().int().min(0).max(6),
     blockedId: z.string().uuid().optional(),
     readyId: z.string().uuid().optional(),
     verifiedId: z.string().uuid().optional(),
   })
   .strict();
 type Session = z.infer<typeof sessionSchema>;
-const storageKey = "agentops-healthcare-walkthrough-v1";
+const storageKey = "agentops-healthcare-walkthrough-v2";
 const fresh = (workflow: HealthcareDemo = "authorization"): Session => ({
-  version: 1,
+  version: 2,
   workflow,
   step: 0,
 });
@@ -94,7 +95,10 @@ export default function HealthcareDemoPage() {
     enabled: !!session.readyId,
     retry: false,
     refetchInterval: (q) =>
-      q.state.data?.status === "delivering" ? 3000 : false,
+      q.state.data?.status === "delivering" ||
+      q.state.data?.graph?.state === "running"
+        ? 3000
+        : false,
   });
   const health = useQuery({
     queryKey: ["proof-demo-ready"],
@@ -111,13 +115,18 @@ export default function HealthcareDemoPage() {
   }, [ready?.id, ready?.review?.note]);
   const verified =
     ready?.status === "completed" && session.verifiedId === ready.id;
-  const finished = verified || ready?.status === "rejected";
+  const finished =
+    verified ||
+    (ready?.status === "rejected" &&
+      (!ready.graph || ready.graph.finalization?.state === "completed"));
   const maxStep = finished
-    ? 5
+    ? 6
     : ready
       ? ready.status === "awaiting-review"
-        ? 3
-        : 4
+        ? ready.graph?.state === "ready"
+          ? 4
+          : 3
+        : 5
       : blocked?.status === "blocked"
         ? 2
         : 1;
@@ -191,9 +200,10 @@ export default function HealthcareDemoPage() {
       decision,
       note: reviewNote,
       fingerprint: ready.analysis.fingerprint,
+      graphFingerprint: ready.graph?.fingerprint,
     });
     remember(run);
-    setSession((s) => ({ ...s, step: 4, verifiedId: undefined }));
+    setSession((s) => ({ ...s, step: 5, verifiedId: undefined }));
   }
   async function verifyReceipt() {
     if (!ready?.receipt) return;
@@ -201,7 +211,10 @@ export default function HealthcareDemoPage() {
     if (
       receipt.id !== ready.receipt.id ||
       receipt.runId !== ready.id ||
-      receipt.fingerprint !== ready.analysis.fingerprint
+      receipt.fingerprint !== ready.analysis.fingerprint ||
+      (!!ready.graph &&
+        (receipt.graph?.fingerprint !== ready.graph.fingerprint ||
+          receipt.graph?.workflowRunId !== ready.graph.workflowRunId))
     )
       throw new Error(
         "The receiver record did not match this run. Stop and inspect it in the Proof Lab.",
@@ -212,9 +225,32 @@ export default function HealthcareDemoPage() {
     );
   }
   const current = step === 2 ? blocked : ready;
+  const responsibility = [
+    "Choose the scenario",
+    "Automatic source checks",
+    "Human correction",
+    "Automatic agent execution",
+    "Human approval",
+    "Receiver verification",
+    "Partnership discussion",
+  ][step];
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
-      <header className="flex flex-wrap justify-between items-start gap-5">
+    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6 min-w-0">
+      <div className="flex flex-wrap items-center justify-between gap-3 text-sm">
+        <Link
+          href="/overview"
+          className="text-muted-foreground hover:text-primary inline-flex items-center gap-2"
+        >
+          <ArrowLeft size={14} /> Product overview
+        </Link>
+        <Link
+          href="/proof-lab"
+          className="text-muted-foreground hover:text-primary"
+        >
+          Explore Proof Lab ↗
+        </Link>
+      </div>
+      <header className="surface-hero p-6 md:p-8 flex flex-wrap justify-between items-start gap-5">
         <div>
           <p className="text-primary text-xs uppercase tracking-[0.18em] flex gap-2 items-center">
             <Presentation size={16} /> Healthcare partner walkthrough
@@ -223,8 +259,9 @@ export default function HealthcareDemoPage() {
             From an exception to an accountable action.
           </h1>
           <p className="text-muted-foreground text-sm mt-3 max-w-2xl">
-            A guided demonstration of working administrative controls, human
-            intervention and inspectable execution evidence.
+            Follow one synthetic case from source documents through agent
+            execution, a human decision and a receipt you can independently
+            check.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -242,7 +279,7 @@ export default function HealthcareDemoPage() {
       </header>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
         <span className="text-primary">
-          Synthetic cases · rules mode · first-party sandbox
+          Synthetic cases · demo graph · zero model calls · first-party sandbox
         </span>
         <span>
           {health.isSuccess
@@ -262,7 +299,7 @@ export default function HealthcareDemoPage() {
       )}
       <nav
         aria-label="Demo steps"
-        className="grid grid-cols-2 lg:grid-cols-6 gap-2"
+        className="grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-7 gap-2"
       >
         {healthcareDemoSteps.map((s, i) => (
           <button
@@ -330,7 +367,7 @@ export default function HealthcareDemoPage() {
         <>
           <div>
             <p className="text-primary text-xs uppercase tracking-wider">
-              Step {step + 1} of 6 · {config.title}
+              Step {step + 1} of {healthcareDemoSteps.length} · {responsibility}
             </p>
             <h2
               ref={heading}
@@ -376,7 +413,7 @@ export default function HealthcareDemoPage() {
                 {[
                   [
                     "Working now",
-                    "Text intake, exact source citations, policy gates, recorded review, HTTP sandbox delivery and shareable run evidence.",
+                    "Source citations, a real seven-node demo graph, recorded review, HTTP sandbox delivery and shareable evidence.",
                   ],
                   [
                     "Human responsibility",
@@ -394,11 +431,11 @@ export default function HealthcareDemoPage() {
                 ))}
               </div>
               <p className="text-sm text-muted-foreground">
-                This walkthrough runs deterministic administrative rules. It
-                does not demonstrate clinical eligibility, live payer delivery
-                or a deployed healthcare AI worker. Optional live AI review is
-                available separately in the Proof Lab and requires configured
-                credentials.
+                This walkthrough executes administrative rules and the original
+                agent graph with preset demo outputs. It makes no model calls.
+                Live AI can be tested separately in Proof Lab with configured
+                credentials. The receiver is our sandbox; no payer or EHR is
+                contacted.
               </p>
               <button
                 className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
@@ -526,6 +563,69 @@ export default function HealthcareDemoPage() {
           )}
           {step === 3 && ready && (
             <>
+              <section className={`${panel} space-y-4`}>
+                <p className="text-xs uppercase tracking-wider text-primary">
+                  Automatic · inspectable · no model charges
+                </p>
+                <h3 className="font-semibold">
+                  Run the agents on the corrected packet
+                </h3>
+                <p className="text-sm text-muted-foreground">
+                  The original engine runs triage, knowledge lookup, legal,
+                  finance, communications, synthesis and the approval gate. It
+                  saves each node’s output before handing control back to you.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Demo narratives are preset illustrations; the source checks
+                  govern this packet. Knowledge lookup is real keyword
+                  retrieval. Other recorded graph tools are simulations.
+                </p>
+                {ready.graph?.state !== "ready" &&
+                  ready.status === "awaiting-review" && (
+                    <button
+                      className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
+                      disabled={!!busy}
+                      onClick={() =>
+                        act(
+                          "Executing the seven-node demo graph and saving its outputs…",
+                          async () => {
+                            const result = await proofApi<ProofRun>(
+                              `/runs/${ready.id}/graph`,
+                              "POST",
+                              { mode: "demo" },
+                            );
+                            remember(result);
+                            if (result.graph?.state === "ready")
+                              setNotice(
+                                "Seven agent nodes saved. Inspect their outputs, then continue to human review.",
+                              );
+                          },
+                        )
+                      }
+                    >
+                      {ready.graph
+                        ? "Resume demo agent execution"
+                        : "Run demo agent execution"}{" "}
+                      <ArrowRight size={16} />
+                    </button>
+                  )}
+                <p className="text-xs text-muted-foreground">
+                  An interrupted run resumes from saved nodes. Approval stays
+                  locked until execution completes.
+                </p>
+              </section>
+              <OriginalGraphEvidence run={ready} />
+              <button
+                className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
+                disabled={!!busy || ready.graph?.state !== "ready"}
+                onClick={() => go(4)}
+              >
+                Continue to human review <ArrowRight size={16} />
+              </button>
+            </>
+          )}
+          {step === 4 && ready && (
+            <>
               <div
                 className={`${panel} flex flex-wrap items-center justify-between gap-4`}
               >
@@ -556,9 +656,10 @@ export default function HealthcareDemoPage() {
                 <section className={`${panel} space-y-4`}>
                   <h3 className="font-semibold">Make the human decision</h3>
                   <p className="text-sm text-muted-foreground">
-                    Review the suggested note before choosing. Approval submits
-                    this exact packet to the first-party sandbox; rejection
-                    records the decision without delivery.
+                    Inspect the saved agent outputs and source lines, then
+                    review the note. Your decision binds this packet and its
+                    graph fingerprint. Approval submits to the first-party
+                    sandbox; rejection records the decision without delivery.
                   </p>
                   <label className="block text-sm space-y-2">
                     <span>Operator review note</span>
@@ -573,7 +674,11 @@ export default function HealthcareDemoPage() {
                   <div className="flex flex-wrap gap-3">
                     <button
                       className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
-                      disabled={!!busy || reviewNote.trim().length < 3}
+                      disabled={
+                        !!busy ||
+                        reviewNote.trim().length < 3 ||
+                        ready.graph?.state !== "ready"
+                      }
                       onClick={() =>
                         act(
                           "Recording approval and verifying sandbox delivery…",
@@ -585,7 +690,11 @@ export default function HealthcareDemoPage() {
                     </button>
                     <button
                       className={button}
-                      disabled={!!busy || reviewNote.trim().length < 3}
+                      disabled={
+                        !!busy ||
+                        reviewNote.trim().length < 3 ||
+                        ready.graph?.state !== "ready"
+                      }
                       onClick={() =>
                         act("Recording rejection without delivery…", () =>
                           review("reject"),
@@ -597,13 +706,13 @@ export default function HealthcareDemoPage() {
                   </div>
                 </section>
               ) : (
-                <button className={button} onClick={() => go(4)}>
+                <button className={button} onClick={() => go(5)}>
                   View the recorded outcome <ArrowRight size={16} />
                 </button>
               )}
             </>
           )}
-          {step === 4 && ready && (
+          {step === 5 && ready && (
             <>
               <ProofEvidence
                 key={ready.id}
@@ -655,6 +764,25 @@ export default function HealthcareDemoPage() {
                     The decision is saved and no receipt was created. Start a
                     fresh walkthrough to demonstrate an approved path.
                   </p>
+                  {ready.graph &&
+                    ready.graph.finalization?.state !== "completed" && (
+                      <button
+                        className={`${button} mt-3`}
+                        disabled={!!busy}
+                        onClick={() =>
+                          act("Finalizing the saved rejection…", async () =>
+                            remember(
+                              await proofApi<ProofRun>(
+                                `/runs/${ready.id}/graph/finalize`,
+                                "POST",
+                              ),
+                            ),
+                          )
+                        }
+                      >
+                        Retry graph finalization
+                      </button>
+                    )}
                 </section>
               ) : (
                 <section className={`${panel} space-y-3`}>
@@ -784,24 +912,30 @@ export default function HealthcareDemoPage() {
               <button
                 className={`${button} bg-primary text-primary-foreground hover:bg-primary/90`}
                 disabled={!finished || !!busy}
-                onClick={() => go(5)}
+                onClick={() => go(6)}
               >
                 Discuss the partnership <ArrowRight size={16} />
               </button>
             </>
           )}
-          {step === 5 && ready && (
+          {step === 6 && ready && (
             <>
               <section className={panel}>
                 <h3 className="font-semibold">
                   What this session demonstrated
                 </h3>
-                <div className="grid md:grid-cols-3 gap-4 mt-4">
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
                   {[
                     [
                       "Exception retained",
                       blocked?.status === "blocked"
                         ? "Original blocked run saved"
+                        : "Not demonstrated",
+                    ],
+                    [
+                      "Agent execution",
+                      ready.graph?.state === "ready"
+                        ? "Seven original nodes saved; demo outputs labelled"
                         : "Not demonstrated",
                     ],
                     [

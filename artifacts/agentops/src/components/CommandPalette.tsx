@@ -27,16 +27,74 @@ type NavTarget = {
 };
 
 const PAGES: NavTarget[] = [
-  { href: "/", label: "Dashboard", hint: "Overview & KPIs", icon: LayoutDashboard },
-  { href: "/requests/new", label: "New Request", hint: "File a new run", icon: PlusCircle },
-  { href: "/workflows", label: "Workflows", hint: "All runs", icon: ListChecks },
-  { href: "/approvals", label: "Approvals", hint: "Pending human gates", icon: CheckCircle2 },
+  {
+    href: "/demo/healthcare",
+    label: "Guided Demo",
+    hint: "Healthcare · input to receipt",
+    icon: Network,
+  },
+  {
+    href: "/proof-lab",
+    label: "Proof Lab",
+    hint: "Saved evidence & execution",
+    icon: ListChecks,
+  },
+  {
+    href: "/evaluations",
+    label: "Evaluations",
+    hint: "Compare benchmark results",
+    icon: CheckCircle2,
+  },
+  {
+    href: "/",
+    label: "Dashboard",
+    hint: "Overview & KPIs",
+    icon: LayoutDashboard,
+  },
+  {
+    href: "/requests/new",
+    label: "New Request",
+    hint: "File a new run",
+    icon: PlusCircle,
+  },
+  {
+    href: "/workflows",
+    label: "Workflows",
+    hint: "All runs",
+    icon: ListChecks,
+  },
+  {
+    href: "/approvals",
+    label: "Approvals",
+    hint: "Pending human gates",
+    icon: CheckCircle2,
+  },
   { href: "/agents", label: "Agents", hint: "Agent directory", icon: Bot },
-  { href: "/knowledge", label: "Knowledge", hint: "Shared memory", icon: BookOpen },
-  { href: "/tool-calls", label: "Tool Calls", hint: "Execution log", icon: Wrench },
+  {
+    href: "/knowledge",
+    label: "Knowledge",
+    hint: "Shared memory",
+    icon: BookOpen,
+  },
+  {
+    href: "/tool-calls",
+    label: "Tool Calls",
+    hint: "Execution log",
+    icon: Wrench,
+  },
   { href: "/settings", label: "Settings", hint: "Mode & keys", icon: Settings },
-  { href: "/overview", label: "Why AgentOps", hint: "Marketing overview", icon: Sparkles },
-  { href: "/architecture", label: "Architecture", hint: "System diagram", icon: Network },
+  {
+    href: "/overview",
+    label: "Overview",
+    hint: "Capabilities & proof path",
+    icon: Sparkles,
+  },
+  {
+    href: "/architecture",
+    label: "Architecture",
+    hint: "System diagram",
+    icon: Network,
+  },
 ];
 
 export function CommandPalette({
@@ -132,7 +190,9 @@ export function CommandPalette({
                   <Icon className="size-3.5 text-primary" />
                   <span className="flex-1">{p.label}</span>
                   {p.hint && (
-                    <span className="text-[11px] text-muted-foreground">{p.hint}</span>
+                    <span className="text-[11px] text-muted-foreground">
+                      {p.hint}
+                    </span>
                   )}
                 </Command.Item>
               );

@@ -234,8 +234,26 @@ export default function ProofLabPage() {
       )}
       {!id ? (
         <>
-          <section className={`${panel} space-y-3`}>
-            <h2 className="font-semibold">Show recovery under failure</h2>
+          <section
+            className={`${panel} flex flex-wrap justify-between items-center gap-4`}
+          >
+            <div>
+              <h2 className="font-semibold">
+                One packet. Four inspectable stages.
+              </h2>
+              <p className="text-sm text-muted-foreground mt-2">
+                Source checks → optional agent execution → human decision →
+                receiver receipt.
+              </p>
+            </div>
+            <Link href="/demo/healthcare" className={`${button} text-primary`}>
+              Start guided walkthrough <ArrowRight size={16} />
+            </Link>
+          </section>
+          <details className={`${panel} space-y-3`}>
+            <summary className="font-semibold cursor-pointer">
+              Advanced demo: recovery under failure
+            </summary>
             <p className="text-sm text-muted-foreground">
               The sandbox will accept the first approved packet, then
               deliberately discard its response. Retry the same run and verify
@@ -256,7 +274,7 @@ export default function ProofLabPage() {
             >
               Prepare recovery walkthrough
             </button>
-          </section>
+          </details>
           {draft.recoveryDemo && (
             <p role="status" className="text-sm text-amber-400">
               Recovery mode selected: a deliberate response-loss fault will
