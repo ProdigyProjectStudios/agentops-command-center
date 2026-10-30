@@ -68,6 +68,10 @@ async function correctedCase(
   await expect(
     page.getByText("Demo · zero model calls", { exact: true }),
   ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath(`${workflow}-graph.png`),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "Continue to human review" }).click();
   await expect(
     page.getByRole("heading", { name: "Who controls the action?" }),
@@ -169,6 +173,9 @@ test("overview and command search lead to the demo; mobile navigation and stage 
       name: "Agent workflows with evidence you can inspect.",
     }),
   ).toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("overview-desktop.png"),
+  });
   await page.getByTestId("overview-cta-demo").click();
   await expect(page).toHaveURL(/\/demo\/healthcare$/);
   await page.getByTestId("button-open-command-palette").click();
@@ -183,6 +190,10 @@ test("overview and command search lead to the demo; mobile navigation and stage 
     page.getByRole("heading", { name: "What is working today?" }),
   ).toBeVisible();
   await expect(page.getByTestId("mobile-nav-guided-demo")).not.toBeVisible();
+  await page.screenshot({
+    path: test.info().outputPath("guided-demo-mobile.png"),
+    fullPage: true,
+  });
   const dimensions = await page.evaluate(() => ({
     content: document.documentElement.scrollWidth,
     viewport: window.innerWidth,
