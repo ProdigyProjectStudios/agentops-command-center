@@ -33,3 +33,9 @@ After deployment, run steps 1–6 against the actual provider. Confirm the CMS t
 `authorization-worker.spec.ts` exercises the CMS flow in browser CI: exception → correction → provider adapter → persisted human decision → receipt → export/share; mobile rejection/overflow and provider failure. CI's HTTP provider fixture is explicitly labelled and is not actual AI. The ordinary CI job also runs the existing PostgreSQL-dependent suites. CI recordings must not be presented as live-AI sales footage.
 
 Browser persistence restores the last saved run; unsaved edits and consent are not restored. Database close/reopen tests do not prove deployed-host restart behavior. No credentials are stored in the browser. The synthetic portfolio environment retains capability-key workspaces and legacy unauthenticated operational routes; never introduce real patient data.
+
+## Verified revision
+
+On 2026-10-30 application/test revision `900a277` passed **206/206 API tests** and **19/19 browser tests**, with no skipped tests. TypeScript checks, both production builds and Python checks passed. Desktop and mobile screenshots were visually inspected and the mobile overflow check passed. [API/build CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40996428505) · [browser CI](https://github.com/ProdigyProjectStudios/agentops-command-center/actions/runs/40996428451). The following commit updates documentation only.
+
+A direct browser check of the live site still showed the earlier fictional policy on 2026-10-30. The CMS version requires merge/deployment and an actual-provider end-to-end check before recording. The CI fixture footage is not the sales demo.
