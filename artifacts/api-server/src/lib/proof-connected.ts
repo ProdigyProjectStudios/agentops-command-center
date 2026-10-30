@@ -3,7 +3,7 @@ import { assessProof } from "./proof-assessment";
 import { ProofError } from "./proof-store";
 import { validateProofAi } from "./proof-ai-contract";
 
-export const proofPromptVersion = "grounded-specialists-v1";
+export const proofPromptVersion = "grounded-specialists-v2";
 export type ProofReviewer = (
   input: ProofInput,
   analysis: ProofAnalysis,
@@ -34,10 +34,14 @@ export async function analyzeProof(
   // Do not spend tokens reviewing packets that already fail deterministic evidence checks.
   if (analysis.blockers.length) return analysis;
   const specialists: NonNullable<ProofAnalysis["specialists"]> = [];
-  for (const role of specialistRoles) {
+  const started = Date.now();
+  const runSpecialist = async (
+    role: (typeof specialistRoles)[number],
+    prior: NonNullable<ProofAnalysis["specialists"]>,
+  ) => {
     const review = await reviewer(
       input,
-      { ...analysis, specialists: [...specialists] },
+      { ...analysis, specialists: [...prior] },
       role,
     );
     review.notes = validateProofAi({ notes: review.notes }, analysis);
@@ -50,7 +54,19 @@ export async function analyzeProof(
         502,
         `${role} omitted required finding reviews. No approval was created.`,
       );
-    specialists.push({ role, review });
+    return { role, review };
+  };
+  if (input.healthcarePolicy === "cms-cpap-initial-v1") {
+    // Intake and policy mapping are independent; packet review consumes both.
+    specialists.push(...await Promise.all([
+      runSpecialist("ops-conductor", []),
+      runSpecialist("legal-counsel", []),
+    ]));
+    specialists.push(await runSpecialist("finance-analyst", specialists));
+  } else {
+    for (const role of specialistRoles) {
+      specialists.push(await runSpecialist(role, specialists));
+    }
   }
   const sum = (key: "inputTokens" | "outputTokens" | "estimatedCostMicros") =>
     specialists.some((s) => s.review[key] === null)
@@ -63,7 +79,7 @@ export async function analyzeProof(
     inputTokens: sum("inputTokens"),
     outputTokens: sum("outputTokens"),
     estimatedCostMicros: sum("estimatedCostMicros"),
-    durationMs: specialists.reduce((n, s) => n + s.review.durationMs, 0),
+    durationMs: Date.now() - started,
   };
   return analysis;
 }

@@ -10,11 +10,14 @@ let nextResponse: { content: string | null } | (() => never) = {
   content: "{}",
 };
 
+let lastRequest: Record<string, unknown>;
+
 class FakeOpenAI {
   constructor(_opts: unknown) {}
   chat = {
     completions: {
       create: async (_req: unknown, _opts?: unknown) => {
+        lastRequest = _req as Record<string, unknown>;
         if (typeof nextResponse === "function") {
           (nextResponse as () => never)();
         }
@@ -132,4 +135,16 @@ test("falls back to demo when content is not valid JSON", async () => {
   assert.deepEqual(out.details, demoFallback);
   assert.equal(out.fallback?.mode, "live");
   assert.equal(out.fallback?.reason, "invalid_json");
+});
+
+
+test("Luna uses non-reasoning JSON review without changing legacy requests", async () => {
+  nextResponse = { content: JSON.stringify(demoFallback) };
+  const result = await generateAgentOutput({ ...baseInvocation, model: "gpt-6-luna", strict: true });
+  assert.equal(result.fallback, undefined);
+  assert.equal(lastRequest.model, "gpt-6-luna");
+  assert.equal(lastRequest.reasoning_effort, "none");
+  assert.deepEqual(lastRequest.response_format, { type: "json_object" });
+  await generateAgentOutput({ ...baseInvocation, model: "gpt-4.1-mini" });
+  assert.equal(lastRequest.reasoning_effort, undefined);
 });

@@ -163,6 +163,7 @@ ${schemaHint}`;
     const completion = await openai.chat.completions.create(
       {
         model: model,
+        ...(model === "gpt-6-luna" ? { reasoning_effort: "none" as const } : {}),
         max_completion_tokens: MAX_TOKENS,
         response_format: { type: "json_object" },
         messages: [
