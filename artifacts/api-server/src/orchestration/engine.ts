@@ -303,7 +303,10 @@ async function executeNode(
 }
 
 export class WorkflowEngine {
-  async run(workflowRunId: number): Promise<void> {
+  async run(
+    workflowRunId: number,
+    proofMode?: "demo" | "live-ai",
+  ): Promise<void> {
     const loaded = await loadContext(workflowRunId);
     if (!loaded) throw new Error(`Workflow run ${workflowRunId} not found`);
     let { workflowRun, request, portfolioCompany } = loaded;
@@ -426,7 +429,7 @@ export class WorkflowEngine {
       toolCallResults: [...hydratedToolCalls],
       riskFlags: [],
       finalNextActions: [],
-      metadata: { startedAt },
+      metadata: { startedAt, proofMode },
     };
     // Replay risks / tool-call summaries from any hydrated outputs so the
     // synthesis node sees a consistent picture even on a fresh resume.
@@ -435,7 +438,9 @@ export class WorkflowEngine {
     }
 
     let synthesisResult: NodeResult | undefined;
-    const liveMode = getLlmMode() === "live";
+    const liveMode = proofMode
+      ? proofMode === "live-ai"
+      : getLlmMode() === "live";
     try {
       for (let i = 0; i < PIPELINE.length; i++) {
         const node = PIPELINE[i]!;
@@ -631,7 +636,9 @@ export class WorkflowEngine {
       workflowRun,
       request,
     };
-    await executeNode(FINALIZE_NODE, ctx, stepIndex);
+    // A crash after saving the final node must not duplicate it on retry.
+    if (!agentOutputs[FINALIZE_NODE.key])
+      await executeNode(FINALIZE_NODE, ctx, stepIndex);
 
     const terminalStatus =
       workflowRun.status === "approved" ? "finalized" : "rejected";

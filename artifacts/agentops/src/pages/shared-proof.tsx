@@ -87,10 +87,11 @@ export default function SharedProofPage() {
               </div>
             </details>
             <p className="text-xs text-muted-foreground">
-              This link grants viewing only. Source document bodies and
-              workspace credentials are excluded. The owner can revoke access;
-              already downloaded copies cannot be recalled. No external
-              healthcare or financial action is demonstrated.
+              This link grants viewing only. Original source files and workspace
+              credentials are excluded; saved graph outputs may quote uploaded
+              text. The owner can revoke access; already downloaded copies
+              cannot be recalled. No external healthcare or financial action is
+              demonstrated.
             </p>
           </>
         ) : null}

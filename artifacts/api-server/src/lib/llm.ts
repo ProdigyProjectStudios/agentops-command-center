@@ -95,6 +95,8 @@ export interface AgentOutputResult {
 }
 
 export interface AgentInvocation {
+  /** Proof-linked graph runs require a complete validated response, without demo-field merging. */
+  strict?: boolean;
   agentSlug: string;
   agentName: string;
   systemPrompt: string;
@@ -222,7 +224,9 @@ ${schemaHint}`;
       );
     }
     if (invocation.schema) {
-      const partial = toDeepPartial(invocation.schema);
+      const partial = invocation.strict
+        ? invocation.schema
+        : toDeepPartial(invocation.schema);
       const result = partial.safeParse(parsed);
       if (!result.success) {
         logger.warn(
@@ -250,10 +254,12 @@ ${schemaHint}`;
         "LLM live call succeeded",
       );
       return {
-        details: deepMerge(
-          invocation.demoFallback,
-          result.data as Record<string, unknown>,
-        ),
+        details: invocation.strict
+          ? (result.data as Record<string, unknown>)
+          : deepMerge(
+              invocation.demoFallback,
+              result.data as Record<string, unknown>,
+            ),
         usage,
       };
     }

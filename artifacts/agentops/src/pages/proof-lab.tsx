@@ -1,3 +1,4 @@
+import { OriginalGraphActions } from "@/components/proof/OriginalGraph";
 import { ProofPack } from "@/components/proof/ProofPack";
 import { GithubHandoff } from "@/components/proof/GithubHandoff";
 import { useState } from "react";
@@ -54,7 +55,10 @@ export default function ProofLabPage() {
     queryFn: () => proofApi<ProofRun>(`/runs/${id}`),
     enabled: !!id,
     refetchInterval: (q) =>
-      q.state.data?.status === "delivering" ? 3000 : false,
+      q.state.data?.status === "delivering" ||
+      q.state.data?.graph?.state === "running"
+        ? 3000
+        : false,
   });
   const runsQuery = useQuery({
     queryKey: ["proof-runs"],
@@ -663,6 +667,13 @@ export default function ProofLabPage() {
           )}
           <ProofPack run={run} />
           <ProofEvidence key={`evidence-${run.id}`} run={run} />
+          <OriginalGraphActions
+            key={`graph-${run.id}`}
+            run={run}
+            busy={!!busy}
+            action={action}
+            save={saveRun}
+          />
           {run.status === "blocked" && (
             <section className={`${panel} border-amber-500/30`}>
               <h2 className="font-semibold text-amber-400">
@@ -684,7 +695,9 @@ export default function ProofLabPage() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 Inspect the source lines above. Approval submits this exact
-                packet to the Agent Ops sandbox over HTTP.
+                packet to the Agent Ops sandbox over HTTP. If you attached a
+                graph, inspect its saved outputs too; approval binds both
+                fingerprints.
               </p>
               <label className="block text-sm space-y-2">
                 <span>Review note</span>
@@ -701,7 +714,11 @@ export default function ProofLabPage() {
                 {(["approve", "reject"] as const).map((decision) => (
                   <button
                     key={decision}
-                    disabled={!!busy || note.trim().length < 3}
+                    disabled={
+                      !!busy ||
+                      note.trim().length < 3 ||
+                      (!!run.graph && run.graph.state !== "ready")
+                    }
                     className={`${button} ${decision === "approve" ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
                     onClick={() =>
                       action(
@@ -717,6 +734,7 @@ export default function ProofLabPage() {
                                 decision,
                                 note,
                                 fingerprint: run.analysis.fingerprint,
+                                graphFingerprint: run.graph?.fingerprint,
                               },
                             ),
                           ),
@@ -797,9 +815,10 @@ export default function ProofLabPage() {
               </h2>
               <p className="text-sm text-muted-foreground">
                 Create a read-only snapshot that expires in seven days. It
-                includes extracted fields, cited source lines, review notes and
-                the receipt. Full document text and your browser workspace key
-                are excluded.
+                includes extracted fields, cited source lines, graph outputs and
+                retrieved knowledge (when attached), review notes and the
+                receipt. Original source files and your browser workspace key
+                are excluded; graph outputs may quote uploaded text.
               </p>
               <label className="flex gap-3 items-start text-sm">
                 <input

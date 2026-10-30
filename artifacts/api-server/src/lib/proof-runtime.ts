@@ -5,6 +5,7 @@ import { ProofStore } from "./proof-store";
 import { ProofService, httpProofDelivery } from "./proof-service";
 import { proofRunsRouter } from "../routes/proof-runs";
 import { reviewProofAi } from "./proof-ai";
+import { originalProofGraph } from "./proof-graph-runtime";
 
 // First-party sandbox only: no caller-controlled URL and no external recipients.
 // Per-process secret works across the loopback HTTP calls, never sent to a browser.
@@ -17,6 +18,7 @@ export const proofService = new ProofService(
     secret,
   ),
   reviewProofAi,
+  originalProofGraph,
 );
 const integration =
   process.env.PROOF_GITHUB_REPOSITORY &&

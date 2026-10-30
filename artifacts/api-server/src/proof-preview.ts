@@ -13,26 +13,38 @@ const port = Number(
   process.env.PORT ||
     (portArgument >= 0 ? process.argv[portArgument + 1] : 8080),
 );
-const database = await proofTestDatabase(
-  process.env.PROOF_PREVIEW_DATA_DIR || "/tmp/agentops-proof-preview",
-);
+const graphPreview = process.env.PROOF_PREVIEW_GRAPH === "1";
+// Explicit opt-in only. Use an isolated QA database; never point preview at production.
+const productionDb = graphPreview ? await import("@workspace/db") : null;
+const database = productionDb
+  ? { pool: productionDb.pool, close: () => productionDb.pool.end() }
+  : await proofTestDatabase(
+      process.env.PROOF_PREVIEW_DATA_DIR || "/tmp/agentops-proof-preview",
+    );
+const graphAdapter = graphPreview
+  ? (await import("./lib/proof-graph-runtime")).originalProofGraph
+  : undefined;
 await migrateProof(database.pool);
 const secret = randomBytes(32).toString("hex");
 const service = new ProofService(
   new ProofStore(database.pool),
   httpProofDelivery(() => `http://127.0.0.1:${port}/api/proof/sandbox`, secret),
+  undefined,
+  graphAdapter,
 );
 const app = express();
 app.use(express.json());
 app.use("/api", proofRunsRouter(service, secret));
 app.use("/api", fixtures);
+if (graphPreview) {
+  app.use("/api", (await import("./routes/workflows")).default);
+  app.use("/api", (await import("./routes/approvals")).default);
+}
 app.use("/api", (_req, res) =>
-  res
-    .status(503)
-    .json({
-      error:
-        "Standalone proof preview. The broader application requires its PostgreSQL/Python services.",
-    }),
+  res.status(503).json({
+    error:
+      "Standalone proof preview. The broader application requires its PostgreSQL/Python services.",
+  }),
 );
 const directory = fileURLToPath(
   new URL("../../agentops/dist/public/", import.meta.url),

@@ -1,3 +1,4 @@
+import { OriginalGraphEvidence } from "./OriginalGraph";
 import { useState } from "react";
 import { ConnectedProof } from "./ConnectedProof";
 import {
@@ -37,6 +38,7 @@ export function ProofEvidence({
   return (
     <div className="space-y-5">
       <ConnectedProof analysis={run.analysis} />
+      <OriginalGraphEvidence run={run} />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {[
           ["01 / Intake", `${run.input.documents.length} documents saved`],
@@ -243,8 +245,9 @@ export function ProofEvidence({
               </div>
             ) : (
               <p className="text-xs text-muted-foreground border-t border-border pt-4">
-                Execution: exact text extraction + deterministic rules. No live
-                AI call was used for this run.
+                {run.graph?.mode === "live-ai"
+                  ? "Execution: deterministic source checks plus an original live AI graph request. Inspect saved nodes above for completed model calls."
+                  : "Execution: exact text extraction + deterministic rules. No live AI call was used for this run."}
               </p>
             )}
             <details>

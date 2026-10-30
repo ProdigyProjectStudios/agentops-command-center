@@ -1,4 +1,11 @@
-import { pgTable, text, jsonb, timestamp, index } from "drizzle-orm/pg-core";
+import {
+  pgTable,
+  text,
+  jsonb,
+  timestamp,
+  index,
+  integer,
+} from "drizzle-orm/pg-core";
 
 export const proofEvaluationsTable = pgTable(
   "proof_evaluations",
@@ -30,6 +37,12 @@ export const proofReceiptsTable = pgTable("proof_receipts", {
     .primaryKey()
     .references(() => proofRunsTable.id),
   snapshot: jsonb("snapshot").notNull(),
+});
+export const proofGraphLinksTable = pgTable("proof_graph_links", {
+  runId: text("run_id")
+    .primaryKey()
+    .references(() => proofRunsTable.id),
+  workflowRunId: integer("workflow_run_id").notNull().unique(),
 });
 export const proofSharesTable = pgTable("proof_shares", {
   id: text("id").primaryKey(),

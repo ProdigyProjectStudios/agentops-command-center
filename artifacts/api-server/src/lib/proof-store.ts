@@ -7,6 +7,7 @@ import type {
   ProofEvaluation,
 } from "@workspace/api-zod";
 import { hashProof } from "./proof-assessment";
+import { assertGraphReviewed } from "./proof-graph";
 
 export interface SqlClient {
   query(sql: string, params?: any[]): Promise<{ rows: any[] }>;
@@ -31,6 +32,7 @@ CREATE TABLE IF NOT EXISTS proof_receipts (run_id text PRIMARY KEY REFERENCES pr
 CREATE TABLE IF NOT EXISTS proof_shares (id text PRIMARY KEY, run_id text NOT NULL REFERENCES proof_runs(id), token_hash text NOT NULL UNIQUE, snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now(), expires_at timestamptz NOT NULL, revoked_at timestamptz);
 CREATE TABLE IF NOT EXISTS proof_evaluations (id text PRIMARY KEY, owner_hash text NOT NULL, snapshot jsonb NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
 CREATE INDEX IF NOT EXISTS proof_evaluations_owner_idx ON proof_evaluations(owner_hash);
+CREATE TABLE IF NOT EXISTS proof_graph_links (run_id text PRIMARY KEY REFERENCES proof_runs(id), workflow_run_id integer NOT NULL UNIQUE);
 `;
 export async function migrateProof(pool: SqlClient) {
   await pool.query(proofMigration);
@@ -120,6 +122,12 @@ export class ProofStore {
   async receive(id: string, fingerprint: string): Promise<ProofReceipt> {
     let receipt!: ProofReceipt;
     await this.mutate(id, null, async (run, client) => {
+      assertGraphReviewed(run);
+      if (run.graph && run.graph.finalization?.state !== "completed")
+        throw new ProofError(
+          409,
+          "Graph finalization is required before delivery.",
+        );
       if (
         run.analysis.fingerprint !== fingerprint ||
         run.review?.decision !== "approve" ||
@@ -141,6 +149,14 @@ export class ProofStore {
         destination: "AgentOps sandbox ledger",
         externalDelivery: false,
         packet: run.analysis.fields,
+        ...(run.graph
+          ? {
+              graph: {
+                workflowRunId: run.graph.workflowRunId,
+                fingerprint: run.graph.fingerprint!,
+              },
+            }
+          : {}),
       };
       await client.query(
         "INSERT INTO proof_receipts (run_id,snapshot) VALUES ($1,$2)",

@@ -61,6 +61,10 @@ export const proofInputSchema = z
 export const proofReviewSchema = z
   .object({
     fingerprint: z.string().regex(/^[a-f0-9]{64}$/),
+    graphFingerprint: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
     decision: z.enum(["approve", "reject"]),
     note: z.string().trim().min(3).max(500),
   })
@@ -154,6 +158,7 @@ export type ProofEvaluation = {
   estimatedCostMicros: number | null;
 };
 export type ProofReceipt = {
+  graph?: { workflowRunId: number; fingerprint: string };
   id: string;
   runId: string;
   fingerprint: string;
@@ -163,7 +168,41 @@ export type ProofReceipt = {
   packet: Record<string, string>;
 };
 export type ProofEvent = { at: string; action: string; detail: string };
+export type ProofGraphNode = {
+  index: number;
+  name: string;
+  agent: string;
+  output: Record<string, unknown>;
+};
+export type ProofGraphSnapshot = {
+  nodes: ProofGraphNode[];
+  tools: {
+    name: string;
+    status: string;
+    output: unknown;
+    summary: string;
+    durationMs: number;
+  }[];
+  summary: string;
+};
+export type ProofGraph = {
+  workflowRunId: number;
+  mode: "demo" | "live-ai";
+  state: "running" | "failed" | "ready";
+  startedAt: string;
+  completedAt?: string;
+  error?: string;
+  snapshot?: ProofGraphSnapshot;
+  fingerprint?: string;
+  finalization?: {
+    state: "completed" | "failed";
+    error?: string;
+    at: string;
+    node?: ProofGraphNode;
+  };
+};
 export type ProofRun = {
+  graph?: ProofGraph;
   githubHandoff?: {
     status: "sending" | "unverified" | "verified";
     repository: string;

@@ -39,8 +39,9 @@ export function ProofPack({ run }: { run: ProofRun | ProofPublicRun }) {
       )}
       <p className="text-xs text-muted-foreground">
         Synthetic evidence. Sandbox delivery is first-party. Cited quotes and
-        timeline review notes appear in the downloadable pack; full source
-        bodies and workspace credentials are excluded. Review before sharing.
+        timeline review notes appear in the downloadable pack. Saved graph
+        outputs may quote uploaded text. Original files and workspace
+        credentials are excluded. Review before sharing.
       </p>
       <button
         className="rounded-lg bg-primary px-4 py-2 text-primary-foreground text-sm"

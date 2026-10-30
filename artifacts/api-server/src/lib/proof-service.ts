@@ -10,6 +10,11 @@ import { assessProof, canonicalJson } from "./proof-assessment";
 import { ProofStore, ProofError } from "./proof-store";
 import { analyzeProof, type ProofReviewer } from "./proof-connected";
 import { evaluateProof } from "./proof-evaluations";
+import {
+  graphFingerprint,
+  assertGraphReviewed,
+  type ProofGraphAdapter,
+} from "./proof-graph";
 
 export interface ProofDelivery {
   submit(run: ProofRun): Promise<ProofReceipt>;
@@ -23,7 +28,120 @@ export class ProofService {
     public store: ProofStore,
     private delivery: ProofDelivery,
     private aiReview?: ProofReviewer,
+    private graph?: ProofGraphAdapter,
   ) {}
+  async runGraph(owner: string, id: string, mode: "demo" | "live-ai") {
+    if (!this.graph)
+      throw new ProofError(
+        503,
+        "The original graph is not available in this environment.",
+      );
+    await this.store.get(owner, id);
+    return this.graph.withLock(id, async () => {
+      const run = await this.store.mutate(
+        id,
+        owner,
+        async (current, client) => {
+          if (current.status !== "awaiting-review" || current.review)
+            throw new ProofError(
+              409,
+              "Start the graph before human review, on a packet that passed its rule checks.",
+            );
+          if (current.graph && current.graph.mode !== mode)
+            throw new ProofError(
+              409,
+              "The graph mode is immutable. Create a new proof run to change it.",
+            );
+          if (current.graph?.state === "ready") return;
+          current.graph = {
+            workflowRunId:
+              current.graph?.workflowRunId ??
+              (await this.graph!.prepare(current, client)),
+            mode,
+            state: "running",
+            startedAt: current.graph?.startedAt ?? new Date().toISOString(),
+          };
+          event(
+            current,
+            "Original graph started or resumed",
+            `Workflow ${current.graph.workflowRunId}; ${mode}. Approval remains locked until every node completes.`,
+          );
+        },
+      );
+      if (run.graph!.state === "ready") return run;
+      try {
+        const snapshot = await this.graph!.execute(
+          run.graph!.workflowRunId,
+          mode,
+        );
+        return await this.store.mutate(id, owner, (current) => {
+          current.graph = {
+            ...current.graph!,
+            state: "ready",
+            snapshot,
+            fingerprint: graphFingerprint(current, snapshot),
+            completedAt: new Date().toISOString(),
+          };
+          event(
+            current,
+            "Original graph ready for human review",
+            `${snapshot.nodes.length} saved nodes; output fingerprint ${current.graph.fingerprint}. Model advice does not replace source checks.`,
+          );
+        });
+      } catch {
+        return this.store.mutate(id, owner, (current) => {
+          current.graph!.state = "failed";
+          current.graph!.error =
+            "The original graph did not complete. Inspect its workflow steps and model configuration, then resume this same graph. Completed nodes are retained; approval and delivery remain blocked.";
+          event(
+            current,
+            "Original graph needs attention",
+            current.graph!.error,
+          );
+        });
+      }
+    });
+  }
+  async finalizeGraph(owner: string, id: string) {
+    if (!this.graph)
+      throw new ProofError(
+        503,
+        "The original graph is not available in this environment.",
+      );
+    await this.store.get(owner, id);
+    return this.graph.withLock(id, async () => {
+      const run = await this.store.get(owner, id);
+      if (!run.graph || !run.review)
+        throw new ProofError(409, "A graph and human decision are required.");
+      assertGraphReviewed(run);
+      if (run.graph.finalization?.state === "completed") return run;
+      try {
+        const finalization = await this.graph!.finalize(run);
+        return await this.store.mutate(id, owner, (current) => {
+          current.graph!.finalization = finalization;
+          event(
+            current,
+            "Original graph decision finalized",
+            `Workflow ${current.graph!.workflowRunId}: ${current.review!.decision}. This records follow-up preparation; only the separately verified receipt proves delivery.`,
+          );
+        });
+      } catch {
+        return this.store.mutate(id, owner, (current) => {
+          current.graph!.finalization = {
+            state: "failed",
+            at: new Date().toISOString(),
+            error:
+              "Graph finalization could not be confirmed. Retry uses the same saved human decision.",
+          };
+          event(
+            current,
+            "Graph finalization needs retry",
+            current.graph!.finalization.error!,
+          );
+        });
+      }
+    });
+  }
   async evaluate(owner: string, mode: "rules" | "live-ai", label: string) {
     if (this.evaluationsInProgress.has(owner))
       throw new ProofError(
@@ -130,6 +248,7 @@ export class ProofService {
         at: new Date().toISOString(),
         actor: "browser operator",
       };
+      assertGraphReviewed(current);
       current.status =
         review.decision === "reject" ? "rejected" : "delivery-failed";
       event(
@@ -138,10 +257,14 @@ export class ProofService {
         review.note,
       );
     });
-    return review.decision === "approve" ? this.deliver(owner, id) : run;
+    return review.decision === "approve"
+      ? this.deliver(owner, id)
+      : run.graph
+        ? this.finalizeGraph(owner, id)
+        : run;
   }
   async deliver(owner: string, id: string) {
-    const run = await this.store.mutate(id, owner, (current) => {
+    let run = await this.store.mutate(id, owner, (current) => {
       const stale =
         current.status === "delivering" &&
         Date.now() - Date.parse(current.delivery.lastAttemptAt!) > 30_000;
@@ -152,6 +275,7 @@ export class ProofService {
         );
       if (current.review?.decision !== "approve")
         throw new ProofError(409, "Approval is required.");
+      assertGraphReviewed(current);
       current.status = "delivering";
       current.delivery.attempts++;
       current.delivery.lastAttemptAt = new Date().toISOString();
@@ -163,6 +287,11 @@ export class ProofService {
       );
     });
     try {
+      if (run.graph) {
+        run = await this.finalizeGraph(owner, id);
+        if (run.graph!.finalization?.state !== "completed")
+          throw new Error("Graph finalization incomplete");
+      }
       const receipt = await this.delivery.submit(run);
       if (run.input.recoveryDemo && run.delivery.attempts === 1) {
         await this.store.mutate(id, owner, (current) => {
@@ -181,7 +310,16 @@ export class ProofService {
         receipt.id !== verified.id ||
         verified.runId !== id ||
         verified.fingerprint !== run.analysis.fingerprint ||
-        canonicalJson(verified.packet) !== canonicalJson(run.analysis.fields)
+        canonicalJson(verified.packet) !== canonicalJson(run.analysis.fields) ||
+        canonicalJson(verified.graph ?? null) !==
+          canonicalJson(
+            run.graph
+              ? {
+                  workflowRunId: run.graph.workflowRunId,
+                  fingerprint: run.graph.fingerprint,
+                }
+              : null,
+          )
       )
         throw new Error("Receipt verification mismatch");
       return await this.store.mutate(id, owner, (current) => {
@@ -208,7 +346,9 @@ export class ProofService {
           return;
         current.status = "delivery-failed";
         current.delivery.error =
-          "The sandbox response could not be verified. Retry uses the same run ID to prevent duplicate ledger entries.";
+          current.graph && current.graph.finalization?.state !== "completed"
+            ? "Graph finalization is incomplete. Retry finalizes the saved decision before any sandbox delivery."
+            : "The sandbox response could not be verified. Retry uses the same run ID to prevent duplicate ledger entries.";
         event(current, "Delivery needs retry", current.delivery.error);
       });
     }

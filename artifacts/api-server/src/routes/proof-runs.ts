@@ -126,6 +126,47 @@ export function proofRunsRouter(
     ),
   );
   router.post(
+    "/proof/runs/:id/graph",
+    endpoint(async (req, res) => {
+      const key = owner(req);
+      const parsed = z
+        .object({
+          mode: z.enum(["demo", "live-ai"]),
+          liveCostAcknowledged: z.boolean().optional(),
+        })
+        .strict()
+        .safeParse(req.body);
+      if (!parsed.success)
+        throw new ProofError(400, "Choose a graph execution mode.");
+      if (parsed.data.mode === "live-ai") {
+        if (!parsed.data.liveCostAcknowledged)
+          throw new ProofError(
+            400,
+            "Confirm that six graph model calls and retries may incur provider charges.",
+          );
+        if (!evaluationKey || evaluationKey.length < 32)
+          throw new ProofError(
+            503,
+            "Live graph execution requires a configured integration operator key.",
+          );
+        if (
+          !integrationAuthorized(
+            req.header("x-proof-integration-key") ?? "",
+            evaluationKey,
+          )
+        )
+          throw new ProofError(403, "An integration operator key is required.");
+      }
+      return res.json(await service.runGraph(key, id(req), parsed.data.mode));
+    }),
+  );
+  router.post(
+    "/proof/runs/:id/graph/finalize",
+    endpoint(async (req, res) =>
+      res.json(await service.finalizeGraph(owner(req), id(req))),
+    ),
+  );
+  router.post(
     "/proof/runs/:id/review",
     endpoint(async (req, res) => {
       const parsed = proofReviewSchema.safeParse(req.body);
@@ -195,7 +236,7 @@ export function proofRunsRouter(
       if (req.body?.confirmDisclosure !== true)
         throw new ProofError(
           400,
-          "Confirm sharing the extracted values, source quotes and review note.",
+          "Confirm sharing the extracted values, source quotes, graph outputs and retrieved knowledge (if attached), and review note.",
         );
       return res
         .status(201)
