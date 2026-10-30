@@ -8,6 +8,9 @@ const BASE_URL = process.env.E2E_BASE_URL ?? "http://localhost:80";
 
 export default defineConfig({
   testDir: "./tests/e2e",
+  testIgnore: process.env.E2E_HEALTHCARE_PROVIDER_FIXTURE
+    ? undefined
+    : "**/authorization-worker.spec.ts",
   globalSetup: "./tests/e2e/global-setup.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
@@ -23,7 +26,5 @@ export default defineConfig({
     actionTimeout: 10_000,
     navigationTimeout: 20_000,
   },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-  ],
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
 });

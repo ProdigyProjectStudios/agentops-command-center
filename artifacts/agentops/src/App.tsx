@@ -20,6 +20,9 @@ import ArchitecturePage from "@/pages/architecture";
 import NotFound from "@/pages/not-found";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { useState, lazy, Suspense } from "react";
+const AuthorizationWorkerPage = lazy(
+  () => import("@/pages/authorization-worker"),
+);
 const HealthcareDemoPage = lazy(() => import("@/pages/healthcare-demo"));
 const ProofEvaluationsPage = lazy(() => import("@/pages/proof-evaluations"));
 import {
@@ -40,6 +43,17 @@ function Router() {
   return (
     <Switch>
       <Route path="/" component={DashboardPage} />
+      <Route path="/workers/authorization">
+        <Suspense
+          fallback={
+            <p className="p-8" role="status">
+              Loading authorization worker…
+            </p>
+          }
+        >
+          <AuthorizationWorkerPage />
+        </Suspense>
+      </Route>
       <Route path="/demo/healthcare">
         <Suspense
           fallback={
@@ -52,7 +66,17 @@ function Router() {
         </Suspense>
       </Route>
       <Route path="/proof-lab" component={ProofLabPage} />
-      <Route path="/evaluations"><Suspense fallback={<p className="p-8" role="status">Loading evaluation lab…</p>}><ProofEvaluationsPage /></Suspense></Route>
+      <Route path="/evaluations">
+        <Suspense
+          fallback={
+            <p className="p-8" role="status">
+              Loading evaluation lab…
+            </p>
+          }
+        >
+          <ProofEvaluationsPage />
+        </Suspense>
+      </Route>
       <Route path="/proof-lab/fixtures" component={ProofFixturesPage} />
       <Route path="/proof-lab/:id" component={ProofLabPage} />
       <Route path="/requests/new" component={NewRequestPage} />

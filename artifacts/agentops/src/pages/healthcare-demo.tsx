@@ -250,6 +250,18 @@ export default function HealthcareDemoPage() {
           Explore Proof Lab ↗
         </Link>
       </div>
+      <div className="rounded-xl border border-primary/30 p-4 text-sm">
+        <Link
+          href="/workers/authorization"
+          className="text-primary font-medium"
+        >
+          Open the live authorization evidence worker →
+        </Link>
+        <p className="mt-1 text-muted-foreground">
+          Use the worker for substantive source evidence and real specialist
+          reviews. The walkthrough below remains a preset graph rehearsal.
+        </p>
+      </div>
       <header className="surface-hero p-6 md:p-8 flex flex-wrap justify-between items-start gap-5">
         <div>
           <p className="text-primary text-xs uppercase tracking-[0.18em] flex gap-2 items-center">

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Command } from "cmdk";
 import {
+  ShieldCheck,
   LayoutDashboard,
   PlusCircle,
   ListChecks,
@@ -27,6 +28,12 @@ type NavTarget = {
 };
 
 const PAGES: NavTarget[] = [
+  {
+    href: "/workers/authorization",
+    label: "Authorization Worker",
+    hint: "Live evidence reviews · human approval",
+    icon: ShieldCheck,
+  },
   {
     href: "/demo/healthcare",
     label: "Guided Demo",

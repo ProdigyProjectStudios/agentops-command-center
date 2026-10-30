@@ -54,6 +54,9 @@ export const proofInputSchema = z
     recoveryDemo: z.boolean().optional(),
     analysisMode: z.enum(["rules", "live-ai"]).optional(),
     connectedReview: z.boolean().optional(),
+    healthcarePolicy: z.literal("authorization-evidence-v1").optional(),
+    liveCostAcknowledged: z.boolean().optional(),
+    supersedesRunId: z.string().uuid().optional(),
     policyQuery: z.string().trim().min(1).max(240).optional(),
     documents: z.array(proofDocumentSchema).min(1).max(4),
   })
@@ -114,7 +117,7 @@ export type ProofAnalysis = {
   };
 };
 export type ProofRetrieval = {
-  method: "keyword";
+  method: "keyword" | "exact-policy-id";
   catalogVersion: string;
   query: string;
   requiredFields: string[];

@@ -116,6 +116,15 @@ export function proofRunsRouter(
           400,
           "Supply 1–4 documents (at most 16,000 extracted characters each), a title, workflow and synthetic-data confirmation. PDF text requires reviewed, ordered page references.",
         );
+      if (
+        parsed.data.healthcarePolicy &&
+        parsed.data.analysisMode === "live-ai" &&
+        parsed.data.liveCostAcknowledged !== true
+      )
+        throw new ProofError(
+          400,
+          "Confirm three live specialist calls may incur provider charges before running the authorization worker.",
+        );
       return res.status(201).json(await service.create(key, parsed.data));
     }),
   );
